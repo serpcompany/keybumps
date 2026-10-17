@@ -211,7 +211,7 @@ final class ScreencastDrawingWindow: NSPanel {
         super.init(contentRect: display.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         configureAsOverlay(level: ScreencastDrawingLayer.level)
         identifier = Self.identifier
-        setAccessibilityLabel("Screencast drawing")
+        setAccessibilityLabel("Drawing while recording")
         canvas.frame = CGRect(origin: .zero, size: display.frame.size)
         canvas.autoresizingMask = [.width, .height]
         contentView = canvas

@@ -30,7 +30,7 @@ final class ScreencastReviewModel {
     private(set) var guess: ScreencastRepositoryGuess?
     /// The display shown, for a recording of every display.
     var selectedDisplay = 0
-    /// Discard asked "Discard this capture?" and waits for Discard or Keep.
+    /// Discard asked "Discard this recording?" and waits for Discard or Keep.
     private(set) var isConfirmingDiscard = false
     /// Save or Copy is writing files.
     private(set) var isWorking = false
@@ -164,7 +164,7 @@ final class ScreencastReviewModel {
         finish(.saved(input))
     }
 
-    /// Discard asks first, in the window: "Discard this capture?" with Discard and Keep.
+    /// Discard asks first, in the window: "Discard this recording?" with Discard and Keep.
     func askToDiscard() {
         guard acceptsActions else { return }
         failure = nil
@@ -176,7 +176,7 @@ final class ScreencastReviewModel {
         isConfirmingDiscard = false
     }
 
-    /// Discard, answering "Discard this capture?": deletes the capture's folder.
+    /// Discard, answering "Discard this recording?": deletes the recording's folder.
     func confirmDiscard() {
         guard isConfirmingDiscard else { return }
         isConfirmingDiscard = false

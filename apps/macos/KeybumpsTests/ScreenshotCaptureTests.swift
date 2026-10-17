@@ -79,6 +79,38 @@ struct ScreenshotCaptureTests {
         #expect(changes == 2)
     }
 
+    @Test("Record Screen's ⇧⌘5 turns off macOS's screenshot toolbar (184), then gives it back (#490)")
+    func recordScreenTakesOverTheToolbar() {
+        let store = FakeSymbolicHotKeys(hotKeys: [:])
+        var owned: Set<String> = []
+        let takeover = SystemScreenshotShortcutTakeover(preferences: store, takenOver: { owned }, setTakenOver: { owned = $0 })
+
+        takeover.apply(bindings: [DefaultShortcut.recordScreen], isEnabled: true)
+        #expect(store.isEnabled("184") == false)
+        #expect(store.isEnabled("28") == nil && store.isEnabled("30") == nil, "Untouched")
+        #expect(owned == ["184"])
+
+        takeover.apply(bindings: [], isEnabled: true)
+        #expect(store.isEnabled("184") == true, "Record Screen moved off ⇧⌘5")
+        #expect(owned.isEmpty)
+    }
+
+    @Test("Screengrabs takes over ⇧⌘3, ⇧⌘4, and ⇧⌘5 with its keys on macOS 15, and leaves ⇧⌘5 to macOS 14 (#490)")
+    func takeoverBindingsFollowSupportsRecording() {
+        let current = AppPreferences(defaults: InMemoryDefaults(), compatibility: PluginCompatibility(macOSMajorVersion: 15))
+        #expect(ScreenshotToolsModule.takeoverBindings(current) == [
+            DefaultShortcut.screenshotScreen, DefaultShortcut.screenshotScreenAndEdit, DefaultShortcut.screenshotArea, DefaultShortcut.recordScreen,
+        ])
+        let old = AppPreferences(defaults: InMemoryDefaults(), compatibility: PluginCompatibility(macOSMajorVersion: 14))
+        #expect(ScreenshotToolsModule.takeoverBindings(old) == [
+            DefaultShortcut.screenshotScreen, DefaultShortcut.screenshotScreenAndEdit, DefaultShortcut.screenshotArea,
+        ])
+        #expect(SystemScreenshotShortcutTakeover.managed.map(\.id) == ["28", "30", "184"])
+
+        current.setCapabilityShortcut(nil, for: .screencast)
+        #expect(!ScreenshotToolsModule.takeoverBindings(current).contains(DefaultShortcut.recordScreen))
+    }
+
     @Test("Moving a hotkey off macOS's keys gives only that shortcut back")
     func movingOneHotkeyRestoresOnlyIt() {
         let store = FakeSymbolicHotKeys(hotKeys: [:])

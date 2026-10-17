@@ -5,66 +5,65 @@ import SwiftUI
 import Testing
 @testable import Keybumps
 
-/// Screencast's plugin shell (#445, ADR 0009): its manifest, its preferences and their defaults,
-/// the macOS 15 gate, and Start Screencast, which opens the picker (#447). Nothing here records,
-/// reads the screen, asks for a permission, or opens Settings or Finder.
+/// Screengrabs' recording (ADR 0009, ADR 0010), which was the Screencast plugin (#445): its part of
+/// Screengrabs' manifest, its preferences and where they're stored, the macOS 15 gate
+/// (`PluginCompatibility.supportsRecording`), and Record Screen, which opens the picker (#447) and
+/// has ⇧⌘5. Nothing here records, reads the screen, asks for a permission, or opens Settings or
+/// Finder.
 @MainActor
-@Suite("Screencast: the plugin shell")
+@Suite("Screengrabs: recording")
 struct ScreencastTests {
     static let macOS14 = PluginCompatibility(macOSMajorVersion: 14)
     static let macOS15 = PluginCompatibility(macOSMajorVersion: 15)
 
-    static let startScreencast = ShortcutBinding(
+    static let recordScreen = ShortcutBinding(
         keyCode: UInt32(kVK_ANSI_R),
         modifiers: UInt32(controlKey | optionKey | shiftKey),
         displayName: "⌃⌥⇧R"
     )
 
-    @Test("Its manifest: an added media plugin that ships off, needs macOS 15, and has a page but no tab")
+    @Test("Recording is part of Screengrabs, which ships on with no minimum macOS: its shortcuts, its action, and its page")
     func manifest() throws {
-        let descriptor = CapabilityDescriptor.screencast
-        #expect(descriptor.title == "Screencast")
+        let descriptor = CapabilityDescriptor.screenshotTools
+        #expect(descriptor.title == "Screengrabs")
         #expect(descriptor.category == .media)
-        #expect(!descriptor.isOnByDefault)
-        #expect(descriptor.minimumMacOS == 15)
-        #expect(descriptor.paletteTab == nil, "⌘1–⌘9 are taken (ADR 0009)")
-        #expect(descriptor.dependencies.isEmpty)
-        #expect(descriptor.criticalOperations.isEmpty)
-        #expect(descriptor.settingsPage?.section == .screencast)
-        #expect(!CapabilityCatalog.defaultCapabilities.contains(.screencast), "An added capability")
-        #expect(descriptor.shortcuts == [.screencast, .screencastPause, .screencastStop, .screencastDiscard, .screencastDraw])
-        #expect(PluginSettingsPage<EmptyView, EmptyView>.byline(descriptor) == "Official plugin by Keybumps · Media")
+        #expect(descriptor.isOnByDefault)
+        #expect(descriptor.minimumMacOS == nil, "Recording needs macOS 15 inside the plugin (supportsRecording)")
+        #expect(descriptor.dependencies == [.clipboardHistory], "for screenshots")
+        #expect(descriptor.settingsPage?.section == .screenshotTools)
+        #expect(CapabilityCatalog.defaultCapabilities.contains(.screenshotTools))
+        #expect(Capability(rawValue: "screencast") == nil, "Retired (ADR 0010)")
+        #expect(descriptor.shortcuts == [
+            .screenshotScreen, .screenshotScreenAndEdit, .screenshotArea,
+            .screencast, .screencastPause, .screencastStop, .screencastDiscard, .screencastDraw,
+        ])
+        #expect(descriptor.actions == [.startScreencast])
+        #expect(PluginSettingsPage<EmptyView, EmptyView, EmptyView>.byline(descriptor) == "Official plugin by Keybumps · Media")
     }
 
-    @Test("Its icon is a real symbol no other plugin uses")
-    func icon() {
-        let descriptor = CapabilityDescriptor.screencast
-        #expect(NSImage(systemSymbolName: descriptor.systemImage, accessibilityDescription: nil) != nil)
-        let others = CapabilityCatalog.descriptors.filter { $0.capability != .screencast }
-        #expect(!others.map(\.systemImage).contains(descriptor.systemImage))
-        #expect(!others.compactMap(\.paletteTab?.systemImage).contains(descriptor.systemImage))
-        #expect(SettingsSection.screencast.icon == descriptor.systemImage)
-    }
-
-    @Test("It needs Screen Recording, which says so, and can use the Microphone, with its own reason")
+    @Test("It needs Screen Recording, and can use Accessibility, the Microphone, and Input Monitoring, each with its own reason; Screen Recording and the Microphone name it on the Permissions page")
     func permissions() throws {
-        let descriptor = CapabilityDescriptor.screencast
+        let descriptor = CapabilityDescriptor.screenshotTools
         #expect(descriptor.requiredPermissions == [.screenRecording])
-        #expect(MacPermission.screenRecording.explanation.contains("Screencast"))
-        let microphone = try #require(descriptor.optionalPermissions.first)
-        #expect(descriptor.optionalPermissions.map(\.permission) == [.microphone])
-        #expect(microphone.reason.contains("voice"))
-        #expect(!MacPermission.microphone.explanation.contains("Screencast"), "Optional: its reason is its own")
-        #expect(PermissionSetupPlan.requiredPermissions(for: [.screencast]) == [.screenRecording])
+        #expect(MacPermission.screenRecording.explanation.contains("Screengrabs"))
+        #expect(descriptor.optionalPermissions.map(\.permission) == [.accessibility, .microphone, .inputMonitoring])
+        let reasons = descriptor.optionalPermissions.map(\.reason)
+        #expect(reasons[1].contains("voice") && reasons[2].contains("shortcuts"))
+        #expect(MacPermission.microphone.explanation.contains("Screengrabs"), "Settings › Permissions names it (#490)")
+        #expect(!MacPermission.inputMonitoring.explanation.contains("Screengrabs"), "Optional: its reason is its own")
+        #expect(PermissionSetupPlan.requiredPermissions(for: [.screenshotTools]) == [.screenRecording])
     }
 
-    @Test("Quick Search finds its command, which opens its page whether it's on or off")
+    @Test("Quick Search finds Screengrabs by both plugins' words, and Record Screen by Screencast's")
     func command() {
-        let command = QuickSearchCommand.capability(.screencast)
-        #expect(command.match("screencast") == .name)
-        #expect(command.match("screen recording") == .keyword)
-        #expect(command.destination(enabledCapabilities: [.screencast]) == .settings(.screencast))
-        #expect(command.destination(enabledCapabilities: []) == .settings(.screencast))
+        let command = QuickSearchCommand.capability(.screenshotTools)
+        #expect(command.match("screengrabs") == .name)
+        for word in ["screenshot", "screen recording", "record", "screencast"] {
+            #expect(command.match(word) == .keyword, "\(word)")
+        }
+        #expect(PluginAction.startScreencast.id == "startScreencast", "It keys learned usage")
+        #expect(PluginAction.startScreencast.title == "Record Screen")
+        #expect(PluginAction.startScreencast.keywords.contains("screencast"))
     }
 
     // MARK: Preferences
@@ -82,13 +81,12 @@ struct ScreencastTests {
         ))
     }
 
-    @Test("Its page lists them in groups: Sound, then Recording, then its captures folder")
+    @Test("Screengrabs' page lists them in one Recordings group")
     func groups() {
-        let descriptor = CapabilityDescriptor.screencast
-        #expect(descriptor.preferenceGroups.map(\.title) == ["Sound", "Recording"])
+        let descriptor = CapabilityDescriptor.screenshotTools
+        #expect(descriptor.preferenceGroups.map(\.title) == ["Recordings"])
         #expect(descriptor.preferenceGroups.map { $0.preferences.map(\.key) } == [
-            ["recordsMicrophone", "recordsSystemAudio"],
-            ["countdown", "showsShortcuts", "highlightsClicks"],
+            ["recordsMicrophone", "recordsSystemAudio", "countdown", "showsShortcuts", "highlightsClicks"],
         ])
         guard case .choice(let options, _) = PluginPreference.screencastCountdown.kind else {
             Issue.record("The countdown is a menu")
@@ -98,21 +96,25 @@ struct ScreencastTests {
         #expect(options.map(\.title) == ["None", "3 seconds", "5 seconds", "10 seconds"])
     }
 
-    @Test("A change is stored under the plugin's name, read back after a relaunch, and in the typed value")
+    @Test("Screengrabs reads and writes them at Screencast's keys, plugin.screencast.<key>, read back after a relaunch, and in the typed value")
     func storage() {
         let defaults = InMemoryDefaults()
         let preferences = AppPreferences(defaults: defaults)
-        preferences.set(.bool(false), of: .screencastRecordsMicrophone, for: .screencast)
-        preferences.set(.bool(false), of: .screencastRecordsSystemAudio, for: .screencast)
-        preferences.set(.bool(false), of: .screencastShowsShortcuts, for: .screencast)
-        preferences.set(.bool(true), of: .screencastHighlightsClicks, for: .screencast)
-        preferences.set(.choice("0"), of: .screencastCountdown, for: .screencast)
+        for preference in CapabilityDescriptor.screenshotTools.preferences {
+            #expect(preference.storageKey(for: .screenshotTools) == "plugin.screencast.\(preference.key)")
+        }
+        preferences.set(.bool(false), of: .screencastRecordsMicrophone, for: .screenshotTools)
+        preferences.set(.bool(false), of: .screencastRecordsSystemAudio, for: .screenshotTools)
+        preferences.set(.bool(false), of: .screencastShowsShortcuts, for: .screenshotTools)
+        preferences.set(.bool(true), of: .screencastHighlightsClicks, for: .screenshotTools)
+        preferences.set(.choice("0"), of: .screencastCountdown, for: .screenshotTools)
 
         #expect(defaults.object(forKey: "plugin.screencast.recordsMicrophone") as? Bool == false)
         #expect(defaults.object(forKey: "plugin.screencast.recordsSystemAudio") as? Bool == false)
         #expect(defaults.object(forKey: "plugin.screencast.showsShortcuts") as? Bool == false)
         #expect(defaults.object(forKey: "plugin.screencast.highlightsClicks") as? Bool == true)
         #expect(defaults.object(forKey: "plugin.screencast.countdown") as? String == "0")
+        #expect(defaults.dictionaryRepresentation().keys.filter { $0.hasPrefix("plugin.screenshotTools.") }.isEmpty)
 
         let relaunched = AppPreferences(defaults: defaults).screencast
         #expect(!relaunched.recordsMicrophone)
@@ -121,10 +123,26 @@ struct ScreencastTests {
         #expect(relaunched.highlightsClicks)
         #expect(relaunched.countdownSeconds == 0)
 
-        preferences.set(.choice("10"), of: .screencastCountdown, for: .screencast)
+        preferences.set(.choice("10"), of: .screencastCountdown, for: .screenshotTools)
         #expect(preferences.screencast.countdownSeconds == 10)
-        preferences.set(.choice("4"), of: .screencastCountdown, for: .screencast)
+        preferences.set(.choice("4"), of: .screencastCountdown, for: .screenshotTools)
         #expect(preferences.screencast.countdownSeconds == 10, "Only one of its options")
+    }
+
+    @Test("What Screencast saved before the merge is read by Screengrabs, and the picker's switches land on the same keys")
+    func readsWhatScreencastSaved() {
+        let defaults = InMemoryDefaults()
+        defaults.set(false, forKey: "plugin.screencast.recordsSystemAudio")
+        defaults.set("5", forKey: "plugin.screencast.countdown")
+        let preferences = AppPreferences(defaults: defaults)
+        #expect(!preferences.bool(.screencastRecordsSystemAudio, for: .screenshotTools))
+        #expect(preferences.screencast.countdownSeconds == 5)
+
+        var switches = preferences.screencast.switches
+        switches.highlightsClicks = true
+        preferences.setScreencastSwitches(switches)
+        #expect(defaults.object(forKey: "plugin.screencast.highlightsClicks") as? Bool == true)
+        #expect(defaults.object(forKey: "plugin.screenshotTools.highlightsClicks") == nil)
     }
 
     @Test("The review panel's retired \"Also add to Screenshots\" switch is removed on load, and the rest kept")
@@ -140,7 +158,7 @@ struct ScreencastTests {
         #expect(!preferences.screencast.recordsMicrophone)
     }
 
-    @Test("Captures go in Documents › Keybumps › captures, shown as Go to Folder takes it")
+    @Test("Recordings go in Documents › Keybumps › captures, shown as Go to Folder takes it")
     func capturesFolder() {
         let paths = ProductPaths.make(productDirectoryName: "Keybumps", fileManager: .default, sandboxRoot: nil, unitTestRoot: nil)
         #expect(paths.captures == paths.recordings.deletingLastPathComponent().appendingPathComponent("captures", isDirectory: true))
@@ -152,50 +170,103 @@ struct ScreencastTests {
 
     // MARK: The macOS 15 gate
 
-    @Test("On macOS 14 it can't be turned on, and says it requires macOS 15")
-    func refusedOnMacOS14() {
-        let preferences = AppPreferences(defaults: InMemoryDefaults(), compatibility: Self.macOS14)
-        #expect(!preferences.compatibility.supports(.screencast))
-        #expect(preferences.compatibility.requirement(for: .screencast) == "Requires macOS 15")
-        preferences.setCapability(.screencast, enabled: true)
-        #expect(!preferences.enabledCapabilities.contains(.screencast))
-    }
-
-    @Test("On macOS 15 and later it ships off, then turns on like any plugin", arguments: [15, 26, 27])
-    func allowedOnMacOS15(_ version: Int) {
+    @Test("Recording needs macOS 15; Screengrabs itself turns on everywhere", arguments: [14, 15, 26])
+    func supportsRecording(_ version: Int) {
         let preferences = AppPreferences(defaults: InMemoryDefaults(), compatibility: PluginCompatibility(macOSMajorVersion: version))
-        #expect(preferences.compatibility.requirement(for: .screencast) == nil)
-        #expect(!preferences.enabledCapabilities.contains(.screencast), "It ships off")
-        preferences.setCapability(.screencast, enabled: true)
-        #expect(preferences.enabledCapabilities.contains(.screencast))
+        #expect(preferences.compatibility.supportsRecording == (version >= 15))
+        #expect(preferences.compatibility.supports(.screenshotTools))
+        #expect(preferences.compatibility.requirement(for: .screenshotTools) == nil)
+        #expect(preferences.enabledCapabilities.contains(.screenshotTools), "It ships on")
+        #expect(PluginCompatibility.recordingRequirement == "Recording needs macOS 15")
     }
 
-    @Test("An update that adds it leaves it off, as it ships off")
-    func updateLeavesItOff() {
-        let known = Capability.allCases.filter { $0 != .screencast }.map(\.rawValue)
-        let saved = InMemoryDefaults()
-        saved.set(["quickSearch", "timer"], forKey: "enabledCapabilities")
-        saved.set(known, forKey: "knownCapabilities")
-        #expect(AppPreferences(defaults: saved, compatibility: Self.macOS15).enabledCapabilities == [.quickSearch, .timer])
+    @Test("On macOS 14, Quick Search doesn't offer Record Screen, and its shortcut rows say why")
+    func macOS14HidesTheActionAndSaysWhy() {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsRecording14-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let old = WiringHarness(enabled: [.screenshotTools], missing: nil, root: root, compatibility: Self.macOS14)
+        old.model.start()
+        #expect(!old.model.quickSearchActions.contains { $0.action == .startScreencast })
+        let current = WiringHarness(enabled: [.screenshotTools], missing: nil, root: root, compatibility: Self.macOS15)
+        current.model.start()
+        #expect(current.model.quickSearchActions.contains { $0.action == .startScreencast })
+
+        for shortcut in CapabilityDescriptor.screenshotTools.shortcuts {
+            let old = shortcut.detail(on: Self.macOS14)
+            let current = shortcut.detail(on: Self.macOS15)
+            #expect(current == shortcut.detail, "\(shortcut)")
+            #expect(old == (shortcut.needsRecording ? "Recording needs macOS 15" : shortcut.detail), "\(shortcut)")
+        }
+        #expect(CapabilityShortcut.allCases.filter(\.needsRecording) == [.screencast, .screencastPause, .screencastStop, .screencastDiscard, .screencastDraw])
     }
 
-    // MARK: Start Screencast
+    // MARK: Record Screen
 
-    @Test("Start Screencast starts unassigned, on new installs and upgrades")
-    func shortcutStartsUnassigned() {
-        #expect(CapabilityShortcut.screencast.title == "Start Screencast")
-        #expect(CapabilityShortcut.screencast.capability == .screencast)
-        #expect(CapabilityShortcut.screencast.defaultBinding == nil)
+    @Test("Record Screen is Screengrabs', with ⇧⌘5 on new installs and on updates that didn't know it")
+    func recordScreenShortcut() {
+        #expect(CapabilityShortcut.screencast.rawValue == "screencast", "Stored bindings keep the raw value")
+        #expect(CapabilityShortcut.screencast.title == "Record Screen")
+        #expect(CapabilityShortcut.screencast.capability == .screenshotTools)
+        #expect(CapabilityShortcut.screencast.defaultBinding == DefaultShortcut.recordScreen)
+        #expect(DefaultShortcut.recordScreen.keyCode == UInt32(kVK_ANSI_5) && DefaultShortcut.recordScreen.modifiers == UInt32(cmdKey | shiftKey))
         #expect(CapabilityShortcut.screencast.worksEverywhere)
         #expect(!CapabilityShortcut.originalShortcuts.contains(.screencast))
-        #expect(AppPreferences(defaults: InMemoryDefaults()).capabilityShortcut(for: .screencast) == nil)
+        #expect(AppPreferences(defaults: InMemoryDefaults()).capabilityShortcut(for: .screencast) == DefaultShortcut.recordScreen)
 
+        // beta.25 and earlier saved shortcuts without knowing Record Screen.
         let upgraded = InMemoryDefaults()
         upgraded.set(try? JSONEncoder().encode([String: ShortcutBinding]()), forKey: "capabilityShortcuts")
-        #expect(AppPreferences(defaults: upgraded).capabilityShortcut(for: .screencast) == nil)
+        upgraded.set(["quickSearch", "clipboardHistory", "dictation"], forKey: "knownCapabilityShortcuts")
+        #expect(AppPreferences(defaults: upgraded).capabilityShortcut(for: .screencast) == DefaultShortcut.recordScreen)
+        for shortcut in [CapabilityShortcut.screencastPause, .screencastStop, .screencastDiscard, .screencastDraw] {
+            #expect(shortcut.capability == .screenshotTools)
+            #expect(shortcut.detail?.hasPrefix("Only while recording") == true, "\(shortcut)")
+            #expect(shortcut.defaultBinding == nil)
+        }
     }
 
-    @Test("Start Screencast, once assigned, registers only while Screencast is on, on macOS 15")
+    /// Saved shortcuts as a development or QA build since #458 left them: Record Screen known, with
+    /// no binding of its own.
+    private static func knownWithoutRecordScreen(_ shortcuts: [String: ShortcutBinding], window: [String: ShortcutBinding]? = nil) -> InMemoryDefaults {
+        let defaults = InMemoryDefaults()
+        defaults.set(try? JSONEncoder().encode(shortcuts), forKey: "capabilityShortcuts")
+        defaults.set(CapabilityShortcut.allCases.map(\.rawValue), forKey: "knownCapabilityShortcuts")
+        if let window { defaults.set(try? JSONEncoder().encode(window), forKey: "windowShortcuts") }
+        return defaults
+    }
+
+    @Test("Once, at launch, an install that knows Record Screen with no shortcut gets ⇧⌘5, and a shortcut cleared later stays clear")
+    func oneTimeStepAssigns() {
+        let defaults = Self.knownWithoutRecordScreen([:])
+        let preferences = AppPreferences(defaults: defaults)
+        #expect(preferences.capabilityShortcut(for: .screencast) == DefaultShortcut.recordScreen)
+        #expect(defaults.bool(forKey: "didOfferRecordScreenShortcut"))
+        #expect(AppPreferences(defaults: defaults).capabilityShortcut(for: .screencast) == DefaultShortcut.recordScreen, "Saved")
+
+        preferences.setCapabilityShortcut(nil, for: .screencast)
+        #expect(AppPreferences(defaults: defaults).capabilityShortcut(for: .screencast) == nil, "It never runs twice")
+    }
+
+    @Test("The step leaves Record Screen alone when ⇧⌘5 is another shortcut's, or Record Screen has its own")
+    func oneTimeStepLeavesAlone() throws {
+        let taken = ShortcutBinding(keyCode: UInt32(kVK_ANSI_5), modifiers: UInt32(cmdKey | shiftKey), displayName: "⇧⌘5")
+        let byAPlugin = Self.knownWithoutRecordScreen(["timer": taken])
+        let first = AppPreferences(defaults: byAPlugin)
+        #expect(first.capabilityShortcut(for: .screencast) == nil)
+        #expect(first.capabilityShortcut(for: .timer) == taken)
+
+        let byAWindow = Self.knownWithoutRecordScreen([:], window: [WindowAction.allCases[0].rawValue: taken])
+        #expect(AppPreferences(defaults: byAWindow).capabilityShortcut(for: .screencast) == nil)
+
+        let own = Self.knownWithoutRecordScreen(["screencast": Self.recordScreen])
+        #expect(AppPreferences(defaults: own).capabilityShortcut(for: .screencast) == Self.recordScreen)
+
+        for defaults in [byAPlugin, byAWindow, own] {
+            #expect(defaults.bool(forKey: "didOfferRecordScreenShortcut"), "It ran, and won't run again")
+        }
+    }
+
+    @Test("Record Screen registers only while Screengrabs is on, where it can record")
     func shortcutRegistersWhileOn() {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsScreencast-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
@@ -203,24 +274,25 @@ struct ScreencastTests {
 
         func harness(enabled: Set<Capability>, on compatibility: PluginCompatibility) -> WiringHarness {
             let harness = WiringHarness(enabled: enabled, missing: nil, root: root, compatibility: compatibility)
-            harness.model.preferences.setCapabilityShortcut(Self.startScreencast, for: .screencast)
+            harness.model.preferences.setCapabilityShortcut(Self.recordScreen, for: .screencast)
             harness.model.start()
             return harness
         }
 
-        let on = harness(enabled: [.screencast], on: Self.macOS15)
+        let on = harness(enabled: [.screenshotTools], on: Self.macOS15)
         #expect(on.shortcuts()[owner] != nil)
-        on.model.setCapability(.screencast, enabled: false)
+        on.model.setCapability(.screenshotTools, enabled: false)
         #expect(on.shortcuts()[owner] == nil)
 
         let off = harness(enabled: [], on: Self.macOS15)
         #expect(off.shortcuts()[owner] == nil)
 
-        let old = harness(enabled: [.screencast], on: Self.macOS14)
-        #expect(old.shortcuts()[owner] == nil, "It's never on before macOS 15")
+        let old = harness(enabled: [.screenshotTools], on: Self.macOS14)
+        #expect(old.shortcuts()[owner] == nil, "Never before macOS 15, so macOS keeps ⇧⌘5")
+        #expect(old.shortcuts()[CapabilityShortcut.screenshotArea.ownerID] != nil, "Screenshots work as today")
     }
 
-    @Test("Start Screencast opens Screencast's page while it's off")
+    @Test("Record Screen opens Screengrabs' page while it's off")
     func startWhileOffOpensItsPage() {
         var opened: [SettingsSection] = []
         let module = ScreencastModule(
@@ -229,21 +301,21 @@ struct ScreencastTests {
             openSettings: { opened.append($0) }
         )
         module.start()
-        #expect(opened == [.screencast])
+        #expect(opened == [.screenshotTools])
     }
 
     @available(macOS 15, *)
-    @Test("Start Screencast opens the picker with Screen Recording, and never reads the screen without it")
+    @Test("Record Screen opens the picker with Screen Recording, and never reads the screen without it")
     func startOpensThePicker() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsScreencastStart-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let missing = WiringHarness(enabled: [.screencast], missing: .screenRecording, root: root)
+        let missing = WiringHarness(enabled: [.screenshotTools], missing: .screenRecording, root: root)
         missing.model.start()
         missing.model.startScreencast()
         #expect(Self.module(of: missing).controller == nil, "No picker, so macOS never asks")
 
-        let granted = WiringHarness(enabled: [.screencast], missing: nil, root: root)
+        let granted = WiringHarness(enabled: [.screenshotTools], missing: nil, root: root)
         granted.model.start()
         granted.model.startScreencast()
         let controller = try #require(Self.module(of: granted).controller)
@@ -251,7 +323,7 @@ struct ScreencastTests {
         #expect(controller.picker?.microphoneAvailable == true)
         controller.cancel()
 
-        let noMicrophone = WiringHarness(enabled: [.screencast], missing: .microphone, root: root)
+        let noMicrophone = WiringHarness(enabled: [.screenshotTools], missing: .microphone, root: root)
         noMicrophone.model.start()
         noMicrophone.model.startScreencast()
         let picker = try #require(Self.module(of: noMicrophone).controller?.picker)
@@ -259,28 +331,28 @@ struct ScreencastTests {
     }
 
     @available(macOS 15, *)
-    @Test("Turning Screencast off closes the picker")
+    @Test("Turning Screengrabs off closes the picker")
     func turningOffCancels() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsScreencastOff-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
-        let harness = WiringHarness(enabled: [.screencast], missing: nil, root: root)
+        let harness = WiringHarness(enabled: [.screenshotTools], missing: nil, root: root)
         harness.model.start()
         harness.model.startScreencast()
         let controller = try #require(Self.module(of: harness).controller)
         #expect(controller.phase == .picking)
-        harness.model.setCapability(.screencast, enabled: false)
+        harness.model.setCapability(.screenshotTools, enabled: false)
         #expect(await ScreencastWait.until { controller.phase == .idle })
         #expect(controller.picker == nil)
         harness.model.startScreencast()
-        #expect(controller.phase == .idle, "Off, Start Screencast opens its page instead")
+        #expect(controller.phase == .idle, "Off, Record Screen opens its page instead")
     }
 
     @available(macOS 15, *)
-    @Test("A saved capture opens the review panel, off screen here; turning Screencast off closes it, which saves")
+    @Test("A saved recording opens the recording window, off screen here; turning Screengrabs off closes it, which saves")
     func savedCaptureOpensTheReviewPanel() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsScreencastReview-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
-        let harness = WiringHarness(enabled: [.screencast], missing: nil, root: root)
+        let harness = WiringHarness(enabled: [.screenshotTools], missing: nil, root: root)
         harness.model.start()
         let module = Self.module(of: harness)
         let capture = try Self.recording(in: root.appendingPathComponent("captures/1791000000", isDirectory: true))
@@ -294,7 +366,7 @@ struct ScreencastTests {
         #expect(model.input == .video(capture))
         #expect(model.context == .none, "the unit-test host's reader reads nothing")
 
-        harness.model.setCapability(.screencast, enabled: false)
+        harness.model.setCapability(.screenshotTools, enabled: false)
         try await Self.waitUntil { !panel.isShown }
         #expect(ScreencastReview.read(from: capture.metadataURL) != nil, "closing saved it")
         #expect(FileManager.default.fileExists(atPath: capture.videos[0].file.path))
@@ -349,7 +421,7 @@ struct ScreencastTests {
     }
 
     @available(macOS 15, *)
-    @Test("Through the module, Start Screencast closes the review window before its picker, and the app in front before the window gets the front back once the picker is done, not while it's open")
+    @Test("Through the module, Record Screen closes the review window before its picker, and the app in front before the window gets the front back once the picker is done, not while it's open")
     func startingACaptureGivesTheFrontBackAfterThePicker() async throws {
         let fixture = ReviewFixture()
         defer { fixture.tearDown() }
@@ -383,7 +455,7 @@ struct ScreencastTests {
         writers: FakeWriterFactory = FakeWriterFactory(), review: ScreencastReviewServices
     ) -> ScreencastModule {
         let preferences = AppPreferences(defaults: InMemoryDefaults())
-        preferences.set(.choice("0"), of: .screencastCountdown, for: .screencast)
+        preferences.set(.choice("0"), of: .screencastCountdown, for: .screenshotTools)
         let module = ScreencastModule(
             preferences: preferences,
             permissions: PermissionCoordinator(screenRecordingAuthorized: { true }),
@@ -400,7 +472,7 @@ struct ScreencastTests {
             review: review
         )
         module.apply(CapabilityContext(
-            enabledCapabilities: [.screencast],
+            enabledCapabilities: [.screenshotTools],
             preferences: preferences,
             shortcuts: GlobalShortcutCoordinator(backend: DrawingHotKeyBackend()),
             permissions: PermissionCoordinator(screenRecordingAuthorized: { true }),
@@ -431,27 +503,48 @@ struct ScreencastTests {
     }
 
     private static func module(of harness: WiringHarness) -> ScreencastModule {
-        harness.model.capabilities.module(for: .screencast) as! ScreencastModule
+        harness.model.recording!
     }
 
     // MARK: Settings attention
 
-    @Test("Its page needs attention while it's on without Screen Recording, and only then")
+    @Test("Screengrabs' page needs attention while it's on without Screen Recording; the Microphone is optional")
     func attention() {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsScreencastAttention-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
+        let enabled: Set<Capability> = [.clipboardHistory, .screenshotTools]
 
-        let missing = WiringHarness(enabled: [.screencast], missing: .screenRecording, root: root)
+        let missing = WiringHarness(enabled: enabled, missing: .screenRecording, root: root)
         missing.model.start()
-        #expect(missing.model.settingsAttentionCount(for: .screencast) == 1)
-        #expect(missing.model.missingPermissions(for: .screencast) == [.screenRecording])
+        #expect(missing.model.settingsAttentionCount(for: .screenshotTools) == 1)
+        #expect(missing.model.missingPermissions(for: .screenshotTools) == [.screenRecording])
 
-        let noMicrophone = WiringHarness(enabled: [.screencast], missing: .microphone, root: root)
+        let noMicrophone = WiringHarness(enabled: enabled, missing: .microphone, root: root)
         noMicrophone.model.start()
-        #expect(noMicrophone.model.settingsAttentionCount(for: .screencast) == 0, "The Microphone is optional")
+        #expect(noMicrophone.model.settingsAttentionCount(for: .screenshotTools) == 0, "The Microphone is optional")
 
-        let off = WiringHarness(enabled: [], missing: .screenRecording, root: root)
+        let off = WiringHarness(enabled: [.clipboardHistory], missing: .screenRecording, root: root)
         off.model.start()
-        #expect(off.model.settingsAttentionCount(for: .screencast) == 0)
+        #expect(off.model.settingsAttentionCount(for: .screenshotTools) == 0)
+    }
+
+    @Test("With Clipboard History off, Requires Clipboard History needs attention only while a screenshot hotkey is assigned, so someone who only records gets no dot that never clears")
+    func attentionWithoutClipboardHistory() {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsScreengrabsAttention-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let harness = WiringHarness(enabled: [.screenshotTools], missing: nil, root: root)
+        harness.model.start()
+        #expect(harness.model.screenshotTools.status == .requiresClipboardHistory)
+        #expect(harness.model.settingsAttentionCount(for: .screenshotTools) == 1, "The screenshot hotkeys start assigned")
+
+        let screenshotShortcuts = ScreenshotToolsModule.captureShortcuts.map(\.shortcut)
+        for shortcut in screenshotShortcuts {
+            harness.model.preferences.setCapabilityShortcut(nil, for: shortcut)
+        }
+        #expect(harness.model.preferences.capabilityShortcut(for: .screencast) != nil, "Record Screen is still on ⇧⌘5")
+        #expect(harness.model.settingsAttentionCount(for: .screenshotTools) == 0, "Only recording")
+
+        harness.model.preferences.setCapabilityShortcut(DefaultShortcut.screenshotArea, for: .screenshotArea)
+        #expect(harness.model.settingsAttentionCount(for: .screenshotTools) == 1)
     }
 }

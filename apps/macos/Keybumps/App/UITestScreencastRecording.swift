@@ -40,11 +40,11 @@ private final class UITestScreencastStream: ScreencastStream {
 }
 
 extension AppModel {
-    /// `-KBUITestScreencastRecording`: records the first made-up screen, as Start Screencast and
+    /// `-KBUITestScreencastRecording`: records the first made-up screen, as Record Screen and
     /// Record would.
     func startScreencastRecordingForUITesting() {
         guard isLicensed else { return }
-        (capabilities.module(for: .screencast) as? ScreencastModule)?.recordForUITesting()
+        recording?.recordForUITesting()
     }
 }
 

@@ -84,8 +84,8 @@ enum ScreencastReviewFailure: String, Error, Equatable {
         case .recordingMissing: "Couldn’t save the recording: it was moved or deleted."
         case .diskFull: "Couldn’t save the recording: the disk is full."
         case .metadataFailed: "Couldn’t save the recording: its folder can’t be written to."
-        case .copyFailed: "Couldn’t copy the capture."
-        case .deleteFailed: "Couldn’t delete the capture."
+        case .copyFailed: "Couldn’t copy the recording."
+        case .deleteFailed: "Couldn’t delete the recording."
         }
     }
 

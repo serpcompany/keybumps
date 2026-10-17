@@ -86,7 +86,9 @@ struct SettingsHero: View {
     }
 }
 
-/// A heading outside a rounded card whose rows are separated by inset dividers.
+/// A heading outside a rounded card whose rows are separated by inset dividers. The heading's
+/// accessibility identifier is `settings.group.<title>`, so a UI test finds it whatever role macOS
+/// gives a header.
 struct SettingsGroup<Content: View>: View {
     private let title: String?
     private let subtitle: String?
@@ -107,6 +109,7 @@ struct SettingsGroup<Content: View>: View {
                             .font(.system(size: SettingsTheme.titleSize, weight: .medium))
                             .foregroundStyle(.primary.opacity(0.85))
                             .accessibilityAddTraits(.isHeader)
+                            .accessibilityIdentifier("settings.group.\(title)")
                     }
                     if let subtitle {
                         Text(subtitle)

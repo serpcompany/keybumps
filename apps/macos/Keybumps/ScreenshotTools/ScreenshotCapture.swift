@@ -2,7 +2,7 @@ import AppKit
 import Carbon.HIToolbox
 import Foundation
 
-/// What a Screenshot Tools hotkey captures.
+/// What a Screengrabs hotkey captures.
 enum ScreenshotCaptureMode: Equatable {
     /// Every display, one file each.
     case screens
@@ -50,7 +50,7 @@ struct ProcessScreenshotCaptureRunner: ScreenshotCaptureRunning {
 }
 
 /// Takes screenshots into the macOS screenshot folder and marks them as screen captures, so the
-/// Screenshot Tools watcher adds them to Clipboard History like screenshots macOS takes.
+/// Screengrabs' watcher adds them to Clipboard History like screenshots macOS takes.
 @MainActor
 final class ScreenshotCapturer {
     private let runner: any ScreenshotCaptureRunning
@@ -93,16 +93,18 @@ final class ScreenshotCapturer {
     }
 }
 
-/// Turns off macOS's own "save picture of screen" (⇧⌘3) and "save picture of selected area"
-/// (⇧⌘4) shortcuts while a Keybumps screenshot hotkey uses the same keys, and turns them back on
-/// when Screenshot Tools is off or the hotkey moves. Only shortcuts Keybumps turned off are
-/// restored.
+/// Turns off macOS's own "save picture of screen" (⇧⌘3), "save picture of selected area" (⇧⌘4),
+/// and "screenshot and recording options" (⇧⌘5) shortcuts while a Screengrabs shortcut uses the
+/// same keys, and turns them back on when Screengrabs is off or the shortcut moves. Only shortcuts
+/// Keybumps turned off are restored. `ScreenshotToolsModule` passes Record Screen's keys only where
+/// Screengrabs can record, so macOS 14 keeps its own ⇧⌘5 (ADR 0010).
 @MainActor
 final class SystemScreenshotShortcutTakeover {
     /// macOS symbolic hotkey IDs and their defaults: (ascii, keyCode, Cocoa modifiers).
     static let managed: [(id: String, defaults: [Int])] = [
         ("28", [51, kVK_ANSI_3, 1_179_648]),
-        ("30", [52, kVK_ANSI_4, 1_179_648])
+        ("30", [52, kVK_ANSI_4, 1_179_648]),
+        ("184", [53, kVK_ANSI_5, 1_179_648])
     ]
 
     /// Read by the unit-test isolation guard.

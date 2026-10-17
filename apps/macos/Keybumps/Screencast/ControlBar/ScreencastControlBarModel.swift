@@ -100,7 +100,7 @@ final class ScreencastControlBarModel {
     }()
 
     /// What VoiceOver says for the menu bar's time.
-    var spokenTime: String { "Screencast recording, \(timerAccessibilityValue)" }
+    var spokenTime: String { "Recording, \(timerAccessibilityValue)" }
 
     var pauseTitle: String { isPaused ? "Resume" : "Pause" }
     var pauseSystemImage: String { isPaused ? "play.fill" : "pause.fill" }

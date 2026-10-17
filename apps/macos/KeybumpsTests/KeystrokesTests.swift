@@ -9,7 +9,7 @@ import Testing
 @MainActor
 @Suite("Keystrokes")
 struct KeystrokesTests {
-    /// What a Screencast recording will hold the display as (#449).
+    /// What a Screengrabs recording will hold the display as (#449).
     static let recording = KeyDisplayOwner("screencast")
 
     // MARK: Naming
@@ -592,7 +592,7 @@ struct KeystrokesTests {
         #expect(harness.presenter.last?.entries.map(\.text) == ["h"], "The next other key ends it, and shows")
     }
 
-    @Test("Screenshot shortcuts: macOS's defaults when its settings can't be read, on any layout, and the bindings passed for Screenshot Tools")
+    @Test("Screenshot shortcuts: macOS's defaults when its settings can't be read, on any layout, and the bindings passed for Screengrabs")
     func screenshotShortcuts() throws {
         for code in [kVK_ANSI_3, kVK_ANSI_4, kVK_ANSI_6] {
             #expect(KeystrokeFilter.isScreenshotShortcut(press(code, [.shift, .command])))
@@ -632,7 +632,7 @@ struct KeystrokesTests {
         #expect(KeystrokeFilter.systemScreenshotKeys(symbolicHotKeys: nil).count == 7, "Every default when unreadable")
     }
 
-    @Test("The display reads macOS's screenshot shortcuts through its seam, and Screenshot Tools' only while they're registered")
+    @Test("The display reads macOS's screenshot shortcuts through its seam, and Screengrabs' only while they're registered")
     func displayScreenshotSources() throws {
         let harness = DisplayHarness()
         let display = harness.display
@@ -650,21 +650,21 @@ struct KeystrokesTests {
         #expect(!display.isPausedForScreenshot, "The person turned ⇧⌘3 off")
         #expect(harness.presenter.last?.entries.map(\.text) == ["⇧⌘3"])
         harness.keys.press(press(kVK_ANSI_2, [.shift, .command]))
-        #expect(!display.isPausedForScreenshot, "Screenshot Tools isn't registered")
+        #expect(!display.isPausedForScreenshot, "Screengrabs isn't registered")
 
         #expect(reads == 1)
 
         registered = [DefaultShortcut.screenshotScreen]
         harness.keys.press(press(kVK_ANSI_2, [.shift, .command]))
         #expect(display.isPausedForScreenshot)
-        #expect(reads == 2, "Read again once Screenshot Tools' hotkeys change")
+        #expect(reads == 2, "Read again once Screengrabs' hotkeys change")
 
         harness.clock.now += KeyDisplay.screenshotKeysLifetime
         harness.keys.press(press(kVK_ANSI_C, [.command]))
         #expect(reads == 3, "and once the last read is old")
     }
 
-    @Test("macOS's screenshot shortcuts are read again once Screenshot Tools' hotkeys change, or Keybumps writes macOS's, before the last read is old")
+    @Test("macOS's screenshot shortcuts are read again once Screengrabs' hotkeys change, or Keybumps writes macOS's, before the last read is old")
     func screenshotKeysFollowKeybumps() {
         let harness = DisplayHarness()
         let display = harness.display
@@ -677,7 +677,7 @@ struct KeystrokesTests {
         harness.keys.press(press(kVK_ANSI_C, [.command]))
         #expect(harness.presenter.last?.entries.map(\.text) == ["⌘C"])
 
-        // Screenshot Tools turns off: its hotkeys go, and macOS's ⇧⌘3 and ⇧⌘4 come back.
+        // Screengrabs turns off: its hotkeys go, and macOS's ⇧⌘3 and ⇧⌘4 come back.
         harness.clock.now += 4
         hotKeys = [:]
         registered = []
@@ -688,7 +688,7 @@ struct KeystrokesTests {
         harness.keys.press(press(kVK_ANSI_H, []))
         #expect(!display.isPausedForScreenshot)
 
-        // Screenshot Tools turns macOS's ⇧⌘4 off for a hotkey that didn't register, then gives it
+        // Screengrabs turns macOS's ⇧⌘4 off for a hotkey that didn't register, then gives it
         // back: its registered hotkeys stay the same (none), but Keybumps wrote macOS's.
         hotKeys = ["30": off]
         display.systemScreenshotShortcutsDidChange()
@@ -700,7 +700,7 @@ struct KeystrokesTests {
         #expect(display.isPausedForScreenshot, "macOS's ⇧⌘4 is back, and never shows")
     }
 
-    @Test("The app's key display reads macOS's screenshot shortcuts again once Screenshot Tools writes them")
+    @Test("The app's key display reads macOS's screenshot shortcuts again once Screengrabs writes them")
     func takeoverRereadsInTheApp() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("KeybumpsKeystrokesTakeover-\(UUID().uuidString)", isDirectory: true)
@@ -721,7 +721,7 @@ struct KeystrokesTests {
         #expect(reads == before + 1)
     }
 
-    @Test("Screenshot Tools' ⇧⌘2 clears the display only while Screenshot Tools is on; with it off, ⇧⌘2 shows")
+    @Test("Screengrabs' ⇧⌘2 clears the display only while Screengrabs is on; with it off, ⇧⌘2 shows")
     func screenshotToolsOffShows() {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("KeybumpsKeystrokesScreenshotOff-\(UUID().uuidString)", isDirectory: true)
@@ -741,7 +741,32 @@ struct KeystrokesTests {
         #expect(on.model.keyDisplay.timeline.entries.isEmpty)
     }
 
-    @Test("Screenshot Tools' hotkey clears the display before it captures, in case the tap never hears the hotkey")
+    @Test("Record Screen's ⇧⌘5 clears the display while it's registered, as macOS's ⇧⌘5 did before Screengrabs took it over (#490)")
+    func recordScreenClears() {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsKeystrokesRecordScreen-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let press = KeyPress(keyCode: UInt16(kVK_ANSI_5), modifiers: [.shift, .command])
+        // macOS's ⇧⌘5 as the takeover leaves it: turned off.
+        let takenOver: [String: Any] = ["184": ["enabled": NSNumber(value: false)] as [String: Any]]
+
+        let off = WiringHarness(enabled: [.keystrokes], missing: nil, root: root)
+        off.model.keyDisplay.symbolicHotKeys = { takenOver }
+        off.model.start()
+        off.model.keyDisplay.systemScreenshotShortcutsDidChange()
+        off.model.keyDisplay.receive(press)
+        #expect(!off.model.keyDisplay.isPausedForScreenshot, "Neither macOS's nor Record Screen's")
+
+        let on = WiringHarness(enabled: [.keystrokes, .screenshotTools], missing: nil, root: root)
+        on.model.keyDisplay.symbolicHotKeys = { takenOver }
+        on.model.start()
+        on.model.keyDisplay.systemScreenshotShortcutsDidChange()
+        on.model.keyDisplay.receive(press)
+        #expect(on.model.keyDisplay.isPausedForScreenshot)
+        #expect(on.model.keyDisplay.timeline.entries.isEmpty)
+    }
+
+    @Test("Screengrabs' hotkey clears the display before it captures, in case the tap never hears the hotkey")
     func screenshotToolsPausesTheDisplay() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("KeybumpsKeystrokesScreenshot-\(UUID().uuidString)", isDirectory: true)

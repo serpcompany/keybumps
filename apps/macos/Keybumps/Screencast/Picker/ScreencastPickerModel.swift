@@ -68,7 +68,7 @@ final class ScreencastPickerModel {
     private let microphoneSetting: Bool
 
     let layout: ScreencastScreenLayout
-    /// The screen the pointer was on at Start Screencast, or else the main one, read once: the bar
+    /// The screen the pointer was on at Record Screen, or else the main one, read once: the bar
     /// shows on it, and Screen mode starts with it chosen unless the choice last taken is there.
     let pointerScreen: ScreencastScreen?
     /// Screen mode's choice when the picker opened, kept when Record is pressed in another mode.

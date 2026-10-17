@@ -16,7 +16,7 @@ struct ScreencastPickerChoices: Equatable, Sendable {
 }
 
 /// Area, Window, or Screen, and the screen chosen, as Record last took them
-/// (`screencast.pickerChoices`). The switches are Settings › Screencast's
+/// (`screencast.pickerChoices`). The switches are Settings › Screengrabs'
 /// (`AppPreferences.setScreencastSwitches`), and the area has its own memory
 /// (`ScreencastAreaMemory`). A window is never remembered, since its ID doesn't outlast it. A name
 /// and a display's UUID, so it's no user content.

@@ -17,7 +17,6 @@ struct CapabilityCommandTests {
     private let emoji = QuickSearchCommand.capability(.emojiPicker)
     private let translation = QuickSearchCommand.capability(.translation)
     private let keystrokes = QuickSearchCommand.capability(.keystrokes)
-    private let screencast = QuickSearchCommand.capability(.screencast)
     private let allCapabilities = Set(Capability.allCases)
 
     // MARK: Names
@@ -26,7 +25,6 @@ struct CapabilityCommandTests {
     func commands() {
         #expect(QuickSearchCommand.allCases == [
             .keybumpsSettings, .plugins, clipboard, screenshots, dictation, windows, coach, snippets, timer, emoji, translation, keystrokes,
-            screencast,
         ])
     }
 
@@ -42,13 +40,13 @@ struct CapabilityCommandTests {
     @Test("Each command carries its capability's name, not its tab label, and the Command kind")
     func names() {
         #expect(QuickSearchCommand.allCases.map(\.title) == [
-            "Keybumps Settings", "Plugins", "Clipboard History", "Screenshot Tools", "Dictation", "Window Manager", "Shortcut Coach",
-            "Snippets", "Timer", "Emoji Picker", "Translation", "Keystrokes", "Screencast",
+            "Keybumps Settings", "Plugins", "Clipboard History", "Screengrabs", "Dictation", "Window Manager", "Shortcut Coach",
+            "Snippets", "Timer", "Emoji Picker", "Translation", "Keystrokes",
         ])
         #expect(QuickSearchCommand.allCases.allSatisfy { $0.kindLabel == "Command" })
         #expect(QuickSearchCommand.allCases.map(\.id) == [
             "keybumpsSettings", "plugins", "clipboardHistory", "screenshotTools", "dictation", "windowManagement", "keyboardShortcutter",
-            "snippets", "timer", "emojiPicker", "translation", "keystrokes", "screencast",
+            "snippets", "timer", "emojiPicker", "translation", "keystrokes",
         ])
     }
 
@@ -71,8 +69,8 @@ struct CapabilityCommandTests {
             ("clipboard", QuickSearchCommand.capability(.clipboardHistory)),
             ("Clipboard History", .capability(.clipboardHistory)),
             ("history", .capability(.clipboardHistory)),
-            ("screenshot", .capability(.screenshotTools)),
-            ("screenshot tools", .capability(.screenshotTools)),
+            ("screengrabs", .capability(.screenshotTools)),
+            ("Screengrabs", .capability(.screenshotTools)),
             ("DICTATION", .capability(.dictation)),
             ("window manager", .capability(.windowManagement)),
             ("window", .capability(.windowManagement)),
@@ -90,6 +88,8 @@ struct CapabilityCommandTests {
             ("copy", QuickSearchCommand.capability(.clipboardHistory)),
             ("paste", .capability(.clipboardHistory)),
             ("screenshots", .capability(.screenshotTools)),
+            ("screenshot", .capability(.screenshotTools)),
+            ("screencast", .capability(.screenshotTools)),
             ("screen", .capability(.screenshotTools)),
             ("capture", .capability(.screenshotTools)),
             ("dictate", .capability(.dictation)),
@@ -108,10 +108,11 @@ struct CapabilityCommandTests {
             ("languages", .capability(.translation)),
             ("keycastr", .capability(.keystrokes)),
             ("keys", .capability(.keystrokes)),
-            ("record", .capability(.screencast)),
-            ("video", .capability(.screencast)),
-            ("screen recording", .capability(.screencast)),
-            ("capture", .capability(.screencast)),
+            ("record", .capability(.screenshotTools)),
+            ("video", .capability(.screenshotTools)),
+            ("screen recording", .capability(.screenshotTools)),
+            ("recordings", .capability(.screenshotTools)),
+            ("capture", .capability(.screenshotTools)),
         ]
     )
     func keywordMatches(query: String, command: QuickSearchCommand) {
@@ -129,7 +130,7 @@ struct CapabilityCommandTests {
             ("hot", .capability(.keyboardShortcutter)),
             ("transl", .capability(.translation)),
             ("keystr", .capability(.keystrokes)),
-            ("screenc", .capability(.screencast)),
+            ("screenc", .capability(.screenshotTools)),
         ]
     )
     func prefixMatches(query: String, command: QuickSearchCommand) {
@@ -210,7 +211,7 @@ struct CapabilityCommandTests {
     @Test("The apps named by a keyword query come first in their own order")
     func keywordQueriesKeepAppsFirst() {
         #expect(rows("shortcuts") == [.result(shortcutsApp), .command(coach)])
-        #expect(rows("capture") == [.result(imageCapture), .command(screenshots), .command(screencast)])
+        #expect(rows("capture") == [.result(imageCapture), .command(screenshots)])
         #expect(rows("keyboard") == [.result(keyboardMaestro), .command(coach)])
         #expect(rows("paste") == [.result(pasteApp), .command(clipboard)])
         #expect(rows("windows") == [.result(windowsApp), .command(windows)])
@@ -225,7 +226,7 @@ struct CapabilityCommandTests {
             ("clipboard", .capability(.clipboardHistory)),
             ("window manager", .capability(.windowManagement)),
             ("shortcut coach", .capability(.keyboardShortcutter)),
-            ("screenshot tools", .capability(.screenshotTools)),
+            ("screengrabs", .capability(.screenshotTools)),
             ("settings", .keybumpsSettings),
         ]
     )
@@ -233,27 +234,22 @@ struct CapabilityCommandTests {
         #expect(rows(query).first == .command(command))
     }
 
-    @Test("With no history, a name word shared with an app lists the command first: screenshot, shortcut")
+    @Test("With no history, a name word shared with an app lists the command first: shortcut. Screenshot, now Screengrabs' keyword, lists the app first")
     func nameWordSharedWithAnApp() {
-        #expect(rows("screenshot") == [.command(screenshots), .result(screenshotApp)])
         #expect(rows("shortcut") == [.command(coach), .result(shortcutsApp)])
+        #expect(rows("screenshot") == [.result(screenshotApp), .command(screenshots)])
     }
 
     // MARK: Learned usage (owner decision on #186: history decides)
 
-    @Test("Screenshot.app picked once rises above Screenshot Tools; the command picked more rises back")
+    @Test("Screenshot.app, whose exact name is the query, stays above Screengrabs, which screenshot finds by keyword, until six picks of the command")
     func historyDecidesScreenshot() {
         let url = Self.temporaryUsageURL()
         defer { try? FileManager.default.removeItem(at: url) }
         let usage = Self.usageStore(at: url)
 
-        usage.record(screenshotApp)
+        for _ in 0..<5 { usage.record(screenshots) }
         #expect(rows("screenshot", usage: usage) == [.result(screenshotApp), .command(screenshots)])
-        usage.record(screenshots)
-        #expect(rows("screenshot", usage: usage) == [.command(screenshots), .result(screenshotApp)], "Picked as often: the name match wins")
-        usage.record(screenshotApp)
-        #expect(rows("screenshot", usage: usage).first == .result(screenshotApp))
-        usage.record(screenshots)
         usage.record(screenshots)
         #expect(rows("screenshot", usage: usage) == [.command(screenshots), .result(screenshotApp)])
     }
@@ -366,7 +362,6 @@ struct CapabilityCommandTests {
         #expect(translation.destination(enabledCapabilities: allCapabilities) == .paletteTab(.translate))
         #expect(windows.destination(enabledCapabilities: allCapabilities) == .settings(.windows))
         #expect(keystrokes.destination(enabledCapabilities: allCapabilities) == .settings(.keystrokes))
-        #expect(screencast.destination(enabledCapabilities: allCapabilities) == .settings(.screencast), "No tab, so its page")
         #expect(QuickSearchCommand.keybumpsSettings.destination(enabledCapabilities: allCapabilities) == .settings(nil))
     }
 
@@ -435,7 +430,6 @@ struct CapabilityCommandTests {
         #expect(coach.rowShortcut(enabledCapabilities: allCapabilities, visibleTabs: tabsWithHotkeys) == "⌘9")
         #expect(windows.rowShortcut(enabledCapabilities: allCapabilities, visibleTabs: tabs) == nil)
         #expect(keystrokes.rowShortcut(enabledCapabilities: allCapabilities, visibleTabs: tabs) == nil, "No tab")
-        #expect(screencast.rowShortcut(enabledCapabilities: allCapabilities, visibleTabs: tabs) == nil, "No tab")
         #expect(dictation.rowShortcut(enabledCapabilities: [], visibleTabs: tabs) == nil, "Off, it opens Settings instead")
     }
 
@@ -513,7 +507,7 @@ struct CapabilityCommandTests {
         #expect(usage.record(for: dictionaryApp.url)?.launchCount == 1)
     }
 
-    @Test("Quick Search ranks with what the palette learns: picking a command lifts it back above the app")
+    @Test("Quick Search ranks with what the palette learns: picking a command lifts it above the app, and opening the app lifts that back")
     func paletteLearnsFromPicks() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("KeybumpsCapabilityCommandLearning-\(UUID().uuidString)", isDirectory: true)
@@ -529,11 +523,11 @@ struct CapabilityCommandTests {
             return search.items.first
         }
 
+        #expect(firstRow() == .result(screenshotApp), "Screenshot is Screengrabs' keyword, so the app it names comes first")
+        for _ in 0..<6 { palette.choose(screenshots) }
         #expect(firstRow() == .command(screenshots))
         search.recordOpenResult(screenshotApp, succeeded: true)
         #expect(firstRow() == .result(screenshotApp))
-        palette.choose(screenshots)
-        #expect(firstRow() == .command(screenshots))
         #expect(search.recentItems.items.map(\.result) == [screenshotApp], "Only the app became a Recent Item")
     }
 

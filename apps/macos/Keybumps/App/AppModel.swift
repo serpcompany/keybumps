@@ -43,7 +43,7 @@ final class AppModel {
     /// Keyword auto-expansion, run by `SnippetsModule`; Settings reads whether it's listening.
     let keywordExpansion: KeywordExpansionController
     /// The on-screen key display (#443). The Keystrokes plugin holds it while it's on, and a
-    /// Screencast recording holds it for the recording, with the plugin on or off.
+    /// Screengrabs recording holds it for the recording, with Keystrokes on or off.
     let keyDisplay: KeyDisplay
     let screenshotTools: ScreenshotToolsService
     let dictationHistory: DictationHistoryService
@@ -312,6 +312,16 @@ final class AppModel {
         dictation.restoresClipboard = { preferences.bool(.dictationRestoresClipboard, for: .dictation) }
         // Unit tests must never rewrite the owner's macOS shortcuts.
         let symbolicHotKeys = symbolicHotKeyPreferences ?? Self.defaultSymbolicHotKeyPreferences
+        // Screengrabs' recording, which its module owns. Settings never opens under unit tests.
+        let recording = ScreencastModule(
+            preferences: preferences,
+            permissions: permissions,
+            openSettings: UnitTestHost.isActive ? { _ in } : { MainWindowRouter.shared.open($0) },
+            menuBar: CapabilityMenuBarStatus(status: menuBarStatus, capability: .screenshotTools),
+            keyDisplay: keyDisplay,
+            seams: injectedScreencast,
+            review: .app(clipboard: clipboard)
+        )
         let screenshotModule = ScreenshotToolsModule(
             service: screenshotTools,
             palette: commandPalette,
@@ -324,6 +334,7 @@ final class AppModel {
                 setTakenOver: { preferences.takenOverSystemShortcuts = $0 }
             ),
             permissions: permissions,
+            recording: recording,
             editorFallbackFolder: screenshotEditorFallbackFolder ?? { ScreenshotLocationResolver.system.resolve() },
             updateSafety: CapabilityUpdateSafety(policy: updateSafetyPolicy, updater: updater, descriptor: .screenshotTools)
         )
@@ -371,15 +382,6 @@ final class AppModel {
                 menuBar: CapabilityMenuBarStatus(status: menuBarStatus, capability: .keystrokes),
                 openSettings: UnitTestHost.isActive ? { _ in } : { MainWindowRouter.shared.open($0) }
             ),
-            ScreencastModule(
-                preferences: preferences,
-                permissions: permissions,
-                openSettings: UnitTestHost.isActive ? { _ in } : { MainWindowRouter.shared.open($0) },
-                menuBar: CapabilityMenuBarStatus(status: menuBarStatus, capability: .screencast),
-                keyDisplay: keyDisplay,
-                seams: injectedScreencast,
-                review: .app(clipboard: clipboard)
-            ),
         ])
         commandPalette.tabContents = capabilities.paletteContents
         // Quick Search lists the action commands of the plugins that are on, and they run through them.
@@ -396,11 +398,13 @@ final class AppModel {
             commandPalette.isKey ? KeystrokeActionNames.paletteNames(commandPalette.selectedTab.secondaryActions) : nil
         }
         // A screenshot shortcut the display knows clears it: macOS's as the person set them (read
-        // only), and Screenshot Tools' hotkeys while they're registered, which also clear it just
-        // before they capture.
+        // only), and Screengrabs' screenshot hotkeys while they're registered, which also clear it
+        // just before they capture. Record Screen counts too: it has macOS's ⇧⌘5, which cleared
+        // the display before Screengrabs took it over.
         keyDisplay.keybumpsScreenshotBindings = { [shortcuts] in
             let registered = shortcuts.registeredBindings
-            return ScreenshotToolsModule.captureShortcuts.compactMap { registered[$0.shortcut.ownerID] }
+            let owners = ScreenshotToolsModule.captureShortcuts.map(\.shortcut) + [.screencast]
+            return owners.compactMap { registered[$0.ownerID] }
         }
         keyDisplay.symbolicHotKeys = { [symbolicHotKeys] in try? symbolicHotKeys.readSymbolicHotKeys() }
         screenshotModule.systemShortcuts.didChange = { [keyDisplay] in keyDisplay.systemScreenshotShortcutsDidChange() }
@@ -424,7 +428,7 @@ final class AppModel {
         }
     }
 
-    /// The symbolic-hotkey preferences Quick Search's Spotlight check and the Screenshot Tools
+    /// The symbolic-hotkey preferences Quick Search's Spotlight check and the Screengrabs
     /// takeover use unless a composition injects its own: the owner's `com.apple.symbolichotkeys`,
     /// or inert ones under the unit-test host, so unit tests never rewrite the owner's macOS shortcuts.
     static var defaultSymbolicHotKeyPreferences: any SymbolicHotKeyPreferences {
@@ -811,15 +815,16 @@ final class AppModel {
     }
 
     /// A screenshot hotkey without Screen Recording asks macOS once (which may open System
-    /// Settings); afterwards a brief notice points to Screenshot Tools settings, where Allow and
-    /// Restart live (macOS reports a new grant only after Keybumps reopens).
+    /// Settings); afterwards a brief notice points to Settings › Screengrabs, whose Screen Recording
+    /// row opens System Settings and then offers Restart Keybumps (macOS reports a new grant only
+    /// after Keybumps reopens).
     private func screenshotHotkeyNeedsScreenRecording() {
         guard preferences.didRequestScreenRecording else {
             preferences.didRequestScreenRecording = true
             permissions.requestScreenRecordingAccess()
             return
         }
-        notice.show("Screen Recording needed · Keybumps Settings › Screenshot Tools", systemImage: "exclamationmark.triangle.fill", tint: .orange)
+        notice.show("Screen Recording needed · Keybumps Settings › \(Capability.screenshotTools.title)", systemImage: "exclamationmark.triangle.fill", tint: .orange)
     }
 
     func restartForPermissionRelaunch() {
@@ -1015,10 +1020,14 @@ final class AppModel {
     var quickSearchActions: [QuickSearchAction] { capabilities.quickSearchActions(capabilityContext) }
     /// Runs an action command picked in Quick Search, through its plugin's module.
     func runQuickSearchAction(_ action: QuickSearchAction) { capabilities.perform(action, capabilityContext) }
-    /// What Start Screencast does: the picker, or Screencast's page when something's missing.
+    /// Screengrabs' recording part, which its module owns.
+    var recording: ScreencastModule? {
+        (capabilities.module(for: .screenshotTools) as? ScreenshotToolsModule)?.recording
+    }
+    /// What Record Screen does: the picker, or Screengrabs' page when something's missing.
     func startScreencast() {
         guard isLicensed else { return }
-        (capabilities.module(for: .screencast) as? ScreencastModule)?.start()
+        recording?.start()
     }
     /// Shows the sample tip in the notch without adding it to history.
     func showSampleTip() { coachTips.showCoach(NotchCoachPresentation(event: .sample)) }

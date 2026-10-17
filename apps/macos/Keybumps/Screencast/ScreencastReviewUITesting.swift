@@ -12,8 +12,7 @@ extension AppModel {
     /// (with the UI-test composition's inert context reader). When the panel is done, a small
     /// window says what happened to the capture (`ScreencastReviewUITestOutcome`).
     func showScreencastReviewForUITesting(_ kind: UITestLaunchConfiguration.ScreencastReviewCapture) {
-        guard isLicensed, preferences.enabledCapabilities.contains(.screencast),
-              let module = capabilities.module(for: .screencast) as? ScreencastModule else { return }
+        guard isLicensed, preferences.enabledCapabilities.contains(.screenshotTools), let module = recording else { return }
         let capturesFolder = preferences.screencast.capturesFolder
         Task { @MainActor in
             guard let result = await ScreencastReviewUITestCapture.make(kind, in: capturesFolder) else { return }

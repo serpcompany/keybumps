@@ -37,12 +37,14 @@ struct UITestLaunchConfigurationTests {
                 "ignored outside UI test mode")
     }
 
+    /// The retired `screencast` is ignored like any other unknown name: Screengrabs, which records,
+    /// ships on, so the picker needs no plugin turned on (#490).
     @Test func turnsOnNamedPluginsAndOpensScreencastsPicker() {
         let configuration = UITestLaunchConfiguration(arguments: [
             executable, "-KBUITestPermissions", "granted",
-            "-KBUITestEnableCapabilities", "screencast, keystrokes,nope", "-KBOpenScreencastPicker", "YES",
+            "-KBUITestEnableCapabilities", "translation, keystrokes,nope,screencast", "-KBOpenScreencastPicker", "YES",
         ])
-        #expect(configuration.enabledCapabilities == [.screencast, .keystrokes])
+        #expect(configuration.enabledCapabilities == [.translation, .keystrokes])
         #expect(configuration.opensScreencastPicker)
         #expect(!UITestLaunchConfiguration(arguments: [executable, "-KBUITestPermissions", "granted", "-KBOpenScreencastPicker", "NO"])
             .opensScreencastPicker)
@@ -51,7 +53,7 @@ struct UITestLaunchConfigurationTests {
     @Test func startsAScreencastRecording() {
         let configuration = UITestLaunchConfiguration(arguments: [
             executable, "-KBUITestPermissions", "granted",
-            "-KBUITestEnableCapabilities", "screencast", "-KBUITestScreencastRecording", "YES",
+            "-KBUITestScreencastRecording", "YES",
         ])
         #expect(configuration.startsScreencastRecording)
         #expect(!configuration.opensScreencastPicker)
@@ -62,7 +64,7 @@ struct UITestLaunchConfigurationTests {
     @Test func otherFlagsAreIgnoredWithoutThePermissionsFlag() {
         let configuration = UITestLaunchConfiguration(arguments: [
             executable, "-KBOpenPalette", "clipboard", "-KBOpenSettings", "general", "-KBCloseSettings", "YES",
-            "-KBUITestEnableCapabilities", "screencast", "-KBOpenScreencastPicker", "YES",
+            "-KBUITestEnableCapabilities", "keystrokes", "-KBOpenScreencastPicker", "YES",
             "-KBUITestScreencastRecording", "YES", "-KBUITestScreencastReview", "video", "-KBDisableHotKeys",
         ])
         #expect(configuration == UITestLaunchConfiguration(arguments: [executable]))
@@ -163,7 +165,7 @@ struct UITestLaunchConfigurationTests {
         #expect(Set(tokens).count == tokens.count)
         #expect(tokens == [
             "search", "clipboard", "screenshotTools", "dictation",
-            "windows", "keyboardShortcutter", "snippets", "timer", "emojiPicker", "translation", "keystrokes", "screencast",
+            "windows", "keyboardShortcutter", "snippets", "timer", "emojiPicker", "translation", "keystrokes",
             "plugins", "permissions", "general", "changelog", "account",
         ])
     }
@@ -196,7 +198,7 @@ struct UITestFakeCompositionTests {
         #expect(service.phase == .failed("Audio capture is unavailable in this session."))
     }
 
-    @Test("Screencast's made-up screens are a top and a bottom display, each as wide as the main screen, with two windows pickable at the same place on each")
+    @Test("The recording picker's made-up screens are a top and a bottom display, each as wide as the main screen, with two windows pickable at the same place on each")
     func screencastMadeUpScreens() async throws {
         let layout = UITestScreencastScreen.layout
         let main = try #require(NSScreen.screens.first?.frame)

@@ -71,7 +71,7 @@ struct ScreencastControlBarView: View {
         .environment(\.colorScheme, .dark)
         .uiTestAnimationsDisabled()
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Screencast controls")
+        .accessibilityLabel("Recording controls")
     }
 }
 

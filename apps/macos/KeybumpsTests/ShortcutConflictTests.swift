@@ -66,6 +66,32 @@ struct ShortcutConflictTests {
         #expect(preferences.shortcutConflict(for: commandE, assigningTo: .capability(.timer)) == nil)
     }
 
+    // MARK: A shortcut that can't run on this Mac (#490)
+
+    @Test("On macOS 14, Record Screen's ⇧⌘5 isn't a conflict: another action takes the keys without asking, and Record Screen's row says where they went")
+    func recordScreenOnMacOS14IsNoConflict() {
+        let old = AppPreferences(defaults: InMemoryDefaults(), compatibility: PluginCompatibility(macOSMajorVersion: 14))
+        let keys = DefaultShortcut.recordScreen
+        #expect(old.capabilityShortcut(for: .screencast) == keys, "Record Screen starts with ⇧⌘5")
+
+        let asked: ShortcutOwner? = old.shortcutConflict(for: keys, assigningTo: .capability(.screenshotArea))
+        #expect(asked == nil, "Nobody is asked about keys that do nothing here")
+        let moved: [ShortcutOwner] = old.setShortcut(keys, for: .capability(.screenshotArea))
+        #expect(moved == [.capability(.screencast)])
+        #expect(old.capabilityShortcut(for: .screenshotArea) == keys)
+        #expect(old.capabilityShortcut(for: .screencast) == nil, "Two actions never share the keys, for an update to macOS 15")
+        let note: String? = old.movedShortcut(for: .capability(.screencast))?.note
+        #expect(note == "⇧⌘5 moved to Screengrabs › Screenshot Area.")
+    }
+
+    @Test("On macOS 15, Record Screen's ⇧⌘5 is a conflict like any other")
+    func recordScreenOnMacOS15IsAConflict() {
+        let current = AppPreferences(defaults: InMemoryDefaults(), compatibility: PluginCompatibility(macOSMajorVersion: 15))
+        let asked: ShortcutOwner? = current.shortcutConflict(for: DefaultShortcut.recordScreen, assigningTo: .capability(.screenshotArea))
+        #expect(asked == .capability(.screencast))
+        #expect(asked?.displayName == "Screengrabs › Record Screen")
+    }
+
     // MARK: Replace and Cancel
 
     @Test("A taken shortcut pressed while recording saves nothing until Replace, which moves it")
@@ -249,7 +275,7 @@ struct ShortcutConflictTests {
         edit.recorder.confirmReplacement()
         #expect(preferences.capabilityShortcut(for: .screenshotScreen) == area, "Nothing moves without asking about Screenshot Screen")
         #expect(edit.recorder.pendingReplacement?.owner == .capability(.screenshotScreen))
-        #expect(edit.recorder.pendingReplacement?.message == "⇧⌘4 is used by Screenshot Tools › Screenshot Screen.")
+        #expect(edit.recorder.pendingReplacement?.message == "⇧⌘4 is used by Screengrabs › Screenshot Screen.")
 
         edit.recorder.confirmReplacement()
         #expect(preferences.capabilityShortcut(for: .screenshotScreenAndEdit) == area)
@@ -324,7 +350,7 @@ struct ShortcutConflictTests {
 
         edit.recorder.confirmReplacement()
         #expect(heard.count == 2)
-        #expect(heard.last?.contains("used by Screenshot Screen in Screenshot Tools.") == true)
+        #expect(heard.last?.contains("used by Screenshot Screen in Screengrabs.") == true)
     }
 
     // MARK: One field records at a time (#345)

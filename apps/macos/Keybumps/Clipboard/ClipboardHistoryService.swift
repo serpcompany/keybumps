@@ -15,7 +15,7 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
     let fingerprint: String?
     /// Original file for screenshots and copied image files; nil for image data copied from apps.
     let sourcePath: String?
-    /// True only for files macOS marked as screen captures (ingested by Screenshot Tools).
+    /// True only for files macOS marked as screen captures (ingested by Screengrabs).
     let isScreenCapture: Bool
     /// The app it was copied from; nil for screenshots, other devices, and items saved before this existed.
     let sourceApp: ClipboardSourceApp?
@@ -194,7 +194,7 @@ class ClipboardHistoryService {
     }
 
     /// Puts `entry` back on the pasteboard. A restore the user asked for counts as a copy for
-    /// `pasteboardChanged(since:)`; Screenshot Tools' automatic copy passes `countsAsCopy: false`,
+    /// `pasteboardChanged(since:)`; Screengrabs' automatic copy passes `countsAsCopy: false`,
     /// so one screenshot's copy never stops a newer screenshot from being copied. An image whose
     /// stored copy can't be read returns false and leaves the pasteboard as it was.
     @discardableResult

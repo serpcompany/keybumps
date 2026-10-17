@@ -107,7 +107,7 @@ struct ScreencastSmokeTests {
     // MARK: Running
 
     @available(macOS 15, *)
-    @Test("Each capture goes from Start Screencast through Record and Stop to checked files, all deleted, with no picker window")
+    @Test("Each capture goes from Record Screen through Record and Stop to checked files, all deleted, with no picker window")
     func passes() async throws {
         defer { folder.remove() }
         let (runner, rig) = makeRunner()
@@ -284,7 +284,7 @@ struct ScreencastSmokeTests {
             let (runner, rig) = smoke.makeRunner()
             let pickerSystem = smoke.pickerSystem
             let controller = rig.controller
-            // Only the reads made while a window capture waits, before Start Screencast, fail: the
+            // Only the reads made while a window capture waits, before Record Screen, fail: the
             // picker's own reads still work, so the other captures run as usual.
             var waitReads = 0
             pickerSystem.onContent = {

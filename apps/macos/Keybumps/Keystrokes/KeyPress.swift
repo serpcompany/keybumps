@@ -161,7 +161,7 @@ enum KeystrokeFilter {
     }
 
     /// Whether `press` takes a screenshot: one of `system` (`systemScreenshotKeys`), or one of
-    /// `keybumps`, Screenshot Tools' hotkeys while they're registered. Caps Lock doesn't matter.
+    /// `keybumps`, Screengrabs' hotkeys while they're registered. Caps Lock doesn't matter.
     static func isScreenshotShortcut(
         _ press: KeyPress,
         system: [ScreenshotKey] = systemScreenshotKeys(symbolicHotKeys: nil),

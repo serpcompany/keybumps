@@ -86,7 +86,7 @@ final class InertScreencastOverlays: ScreencastOverlayPresenting {
     func hideGettingReady() {}
 }
 
-/// Runs one capture at a time, from Start Screencast to the saved file: it opens the picker, counts
+/// Runs one capture at a time, from Record Screen to the saved file: it opens the picker, counts
 /// down, starts `recorder`, keeps an area highlighted while it records, and hands each saved
 /// capture to `onCaptureFinished`.
 ///
@@ -190,8 +190,8 @@ final class ScreencastController {
     ///   - areaMemory: The last area recorded, which the picker opens with.
     ///   - pickerMemory: The rest of what was last recorded, which the picker opens with, but the
     ///     switches.
-    ///   - preferences: Settings › Screencast, read each time the picker opens.
-    ///   - saveSwitches: Saves the picker's switches as Settings › Screencast's, at Record.
+    ///   - preferences: Settings › Screengrabs, read each time the picker opens.
+    ///   - saveSwitches: Saves the picker's switches as Settings › Screengrabs', at Record.
     ///   - screens: The displays, read each time the picker opens.
     ///   - pointerLocation: Where the pointer is, in AppKit's global space: Screen mode starts on
     ///     its screen.
@@ -291,7 +291,7 @@ final class ScreencastController {
         var rounds = 0
         while !unannouncedPhases.isEmpty {
             rounds += 1
-            assert(rounds < 100, "Screencast's phase observers keep changing the phase")
+            assert(rounds < 100, "The recording's phase observers keep changing the phase")
             let next = unannouncedPhases.removeFirst()
             onPhaseChange?(next)
             for observation in phaseObservers.map(\.0) {
@@ -311,7 +311,7 @@ final class ScreencastController {
 
     // MARK: Picking
 
-    /// Start Screencast: opens the picker as it was last used to record, with the switches as
+    /// Record Screen: opens the picker as it was last used to record, with the switches as
     /// Settings has them and the last area drawn. Does nothing while a capture is under way.
     func open() {
         guard phase == .idle, Self.canStart(recorder.state) else { return }
@@ -337,7 +337,7 @@ final class ScreencastController {
 
         // The screen is read before the picker covers it, so an alert macOS shows for the read
         // (such as its monthly question about apps that record the screen) is never under it. If
-        // the read takes a moment, "Getting ready…" says Start Screencast was heard, and stays
+        // the read takes a moment, "Getting ready…" says Record Screen was heard, and stays
         // until the read ends. A read that fails, or takes too long, says why instead.
         let generation = generation
         let delay = gettingReadyDelay
@@ -668,7 +668,7 @@ final class ScreencastController {
         if opensFinishedCaptures {
             onCaptureFinished?(result)
         } else {
-            logger.info("screencast capture kept while turned off")
+            logger.info("screencast recording kept while turned off")
         }
     }
 
@@ -712,12 +712,12 @@ final class ScreencastController {
     }
 }
 
-/// What Screencast says when a capture can't start or save.
+/// What Screengrabs says when a recording can't start or save.
 enum ScreencastMessages {
     static func text(for failure: ScreencastFailure) -> String {
         switch failure {
         case .screenRecordingDenied:
-            "Turn on Screen Recording for Keybumps in System Settings to capture your screen."
+            "Turn on Screen Recording for Keybumps in System Settings to record your screen."
         case .targetUnavailable:
             "That window or screen isn’t there anymore."
         case .captureFailed:
@@ -725,16 +725,16 @@ enum ScreencastMessages {
         case .stoppedByMacOS:
             "macOS stopped the recording."
         case .writerFailed:
-            "The capture couldn’t be saved. Check that the disk has room."
+            "The recording couldn’t be saved. Check that the disk has room."
         case .folderUnavailable:
-            "The captures folder couldn’t be created."
+            "The recordings folder couldn’t be created."
         case .noFootage:
             "Nothing was recorded."
         }
     }
 
     /// The displays changed while the picker was open.
-    static let screensChanged = "The screens changed. Start Screencast again."
+    static let screensChanged = "The screens changed. Choose \(PluginAction.recordScreenTitle) again."
 
     /// A recording that stopped on its own: why, and whether what it recorded is saved.
     static func endedEarly(_ failure: ScreencastFailure, kept: Bool) -> String {

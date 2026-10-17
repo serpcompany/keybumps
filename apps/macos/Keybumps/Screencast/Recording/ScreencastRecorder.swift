@@ -208,7 +208,7 @@ final class ScreencastRecorder {
             session.timeline.start(at: hostClock())
             session.activity = ProcessInfo.processInfo.beginActivity(
                 options: [.userInitiated, .idleSystemSleepDisabled],
-                reason: "Recording a screencast"
+                reason: "Recording the screen"
             )
             state = .recording
             publishAudioStates(of: session)

@@ -32,7 +32,7 @@ final class SmokeUITests: XCTestCase {
 
         for section in [
             "permissions", "general", "plugins", "changelog", "search", "clipboard", "screenshotTools", "dictation", "windows",
-            "keyboardShortcutter", "snippets", "timer", "emojiPicker", "translation", "keystrokes", "screencast",
+            "keyboardShortcutter", "snippets", "timer", "emojiPicker", "translation", "keystrokes",
         ] {
             element("settings.sidebar.\(section)").click()
             XCTAssertTrue(element("settings.detail.\(section)").waitForExistence(timeout: 5), section)
@@ -160,11 +160,16 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(element("capability.offBanner.clipboardHistory").waitForNonExistence(timeout: 5))
     }
 
-    /// #490: Screenshot Tools' page, drawn by the plugin template, still says it needs Clipboard
-    /// History and offers to turn it on.
-    func testScreenshotToolsPageAsksForClipboardHistory() {
+    /// #490: Screengrabs' page, on the plugin template, has its Screenshots group and then its
+    /// Recordings group, still says screenshots need Clipboard History, and offers to turn it on.
+    func testScreengrabsPageAsksForClipboardHistory() {
         launch(permissions: "granted", ["-KBOpenSettings", "screenshotTools"])
         XCTAssertTrue(element("settings.detail.screenshotTools").waitForExistence(timeout: 20))
+        // By identifier: macOS may report a group's heading as a heading rather than static text.
+        let screenshots = element("settings.group.Screenshots")
+        let recordings = element("settings.group.Recordings")
+        XCTAssertTrue(screenshots.waitForExistence(timeout: 5) && recordings.exists, "Its two groups")
+        XCTAssertLessThan(screenshots.frame.minY, recordings.frame.minY, "Screenshots, then Recordings")
         element("settings.sidebar.clipboard").click()
         let toggle = element("capability.toggle.clipboardHistory")
         XCTAssertTrue(toggle.waitForExistence(timeout: 5))
@@ -186,7 +191,7 @@ final class SmokeUITests: XCTestCase {
 
         let prompts: [(key: String, prompt: String)] = [
             ("2", "Search clipboard history"),
-            ("3", "Search screenshots"),
+            ("3", "Search screengrabs"),
             ("4", "Search dictation history"),
             ("5", "Search snippets"),
             ("6", "Start a timer: 5m, 1h30m, tea 25"),
@@ -259,25 +264,24 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(element("capability.offBanner.keystrokes").waitForNonExistence(timeout: 5))
     }
 
-    func testScreencastShipsOffAndTurnsOnInSettings() {
-        // Its page is drawn by the plugin template: Screen Recording, the Microphone as an optional
-        // permission, its preferences, and its captures folder. CI's Mac runs macOS 15 or later, so
-        // it can be turned on.
-        launch(permissions: "denied", ["-KBOpenSettings", "screencast"])
-        let toggle = element("capability.toggle.screencast")
+    func testScreengrabsPageShowsRecording() {
+        // Recording is part of Screengrabs, which ships on (#490). Its page is drawn by the plugin
+        // template: Screen Recording, the Microphone and Input Monitoring as optional permissions,
+        // the Recordings group's preferences at Screencast's keys, and the recordings folder. CI's
+        // Mac runs macOS 15 or later, so it can record.
+        launch(permissions: "denied", ["-KBOpenSettings", "screenshotTools"])
+        let toggle = element("capability.toggle.screenshotTools")
         XCTAssertTrue(toggle.waitForExistence(timeout: 20))
-        XCTAssertTrue(waitForValue(of: toggle, 0), "Screencast ships off")
+        XCTAssertTrue(waitForValue(of: toggle, 1), "Screengrabs ships on")
         XCTAssertTrue(app.staticTexts["Screen Recording"].exists)
         XCTAssertTrue(app.staticTexts["Microphone (Optional)"].exists)
+        XCTAssertTrue(app.staticTexts["Input Monitoring (Optional)"].exists)
         for key in ["recordsMicrophone", "recordsSystemAudio", "countdown", "showsShortcuts", "highlightsClicks"] {
             XCTAssertTrue(element("plugin.screencast.\(key)").exists, key)
         }
         XCTAssertTrue(element("plugin.screencast.showCaptures").exists)
-        XCTAssertTrue(element("capability.offBanner.screencast").exists, "Its page says it's off")
-
-        element("capability.offBanner.turnOn.screencast").click()
-        XCTAssertTrue(waitForValue(of: toggle, 1))
-        XCTAssertTrue(element("capability.offBanner.screencast").waitForNonExistence(timeout: 5))
+        XCTAssertFalse(element("plugin.screenshotTools.recordingRequirement").exists, "Recording works here")
+        XCTAssertFalse(element("capability.offBanner.screenshotTools").exists)
     }
 
     func testScreencastPickerOpensAndSwitchesModes() {
@@ -297,7 +301,7 @@ final class SmokeUITests: XCTestCase {
         for key in ["microphone", "systemAudio", "shortcuts", "clicks"] {
             XCTAssertTrue(element("screencast.picker.\(key)").exists, key)
         }
-        XCTAssertFalse(element("screencast.picker.kind.screenshot").exists, "Screencast records video only (#485)")
+        XCTAssertFalse(element("screencast.picker.kind.screenshot").exists, "The picker records video only (#485)")
 
         element("screencast.picker.target.area").click()
         XCTAssertTrue(waitForText(of: hint, "Drag to choose an area."))
@@ -742,18 +746,16 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(element("settings.detail.windows").waitForExistence(timeout: 10), "Settings opens on Window Manager")
     }
 
-    func testQuickSearchListsAndRunsStartScreencast() {
-        // An action command is listed only while its plugin is on, and Screencast ships off.
-        launch(permissions: "granted", [
-            "-KBUITestEnableCapabilities", "screencast", "-KBOpenPalette", "search", "-KBCloseSettings", "YES",
-        ])
+    func testQuickSearchListsAndRunsRecordScreen() {
+        // An action command is listed only while its plugin is on; Screengrabs ships on (#490).
+        launch(permissions: "granted", ["-KBOpenPalette", "search", "-KBCloseSettings", "YES"])
         let field = paletteField("Search apps, files, and folders")
         XCTAssertTrue(field.waitForExistence(timeout: 20))
 
         app.typeText("screencast")
-        XCTAssertTrue(element("quickSearch.command.screencast").waitForExistence(timeout: 5))
+        XCTAssertTrue(element("quickSearch.command.screenshotTools").waitForExistence(timeout: 5))
         let action = element("quickSearch.action.startScreencast")
-        XCTAssertTrue(action.waitForExistence(timeout: 5), "Start Screencast is listed beside Screencast's command")
+        XCTAssertTrue(action.waitForExistence(timeout: 5), "Record Screen is listed beside Screengrabs' command")
         action.click()
         XCTAssertTrue(waitForNonExistence(of: field), "The palette closes")
         XCTAssertTrue(element("screencast.picker.bar").waitForExistence(timeout: 10), "It opens the picker, as the shortcut does")
@@ -879,15 +881,16 @@ final class SmokeUITests: XCTestCase {
         app.launch()
     }
 
-    /// Turns Screencast on (it ships off) and opens its picker, as Start Screencast does.
+    /// Opens the recording picker, as Record Screen does. Screengrabs ships on, so no plugin needs
+    /// turning on (#490).
     private func launchScreencastPicker() {
-        launch(permissions: "granted", ["-KBUITestEnableCapabilities", "screencast", "-KBOpenScreencastPicker", "YES"])
+        launch(permissions: "granted", ["-KBOpenScreencastPicker", "YES"])
         XCTAssertTrue(element("screencast.picker.bar").waitForExistence(timeout: 20))
     }
 
-    /// Turns Screencast on and starts a recording of a made-up screen, as Record would.
+    /// Starts a recording of a made-up screen, as Record would.
     private func launchScreencastRecording() {
-        launch(permissions: "granted", ["-KBUITestEnableCapabilities", "screencast", "-KBUITestScreencastRecording", "YES"])
+        launch(permissions: "granted", ["-KBUITestScreencastRecording", "YES"])
         // The bar shows as the recording starts, its buttons waiting until it records.
         let pause = element("screencast.bar.pause")
         XCTAssertTrue(pause.waitForExistence(timeout: 20))
@@ -895,9 +898,9 @@ final class SmokeUITests: XCTestCase {
         XCTAssertEqual(XCTWaiter().wait(for: [enabled], timeout: 10), .completed, "Recording")
     }
 
-    /// Turns Screencast on and opens its review on a made-up `video`.
+    /// Opens the recording window on a made-up `video`.
     private func launchScreencastReview(_ capture: String) {
-        launch(permissions: "granted", ["-KBUITestEnableCapabilities", "screencast", "-KBUITestScreencastReview", capture])
+        launch(permissions: "granted", ["-KBUITestScreencastReview", capture])
         XCTAssertTrue(element("screencast.review.save").waitForExistence(timeout: 20))
         // So a later check that it closed is about the review, not a query that finds nothing.
         XCTAssertTrue(reviewPanel.waitForExistence(timeout: 5), "the window itself is found")

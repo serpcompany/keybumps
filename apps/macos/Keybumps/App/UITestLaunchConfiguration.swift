@@ -60,16 +60,17 @@ struct UITestLaunchConfiguration: Equatable {
     /// Adds three made-up plain snippets, so a test can select several.
     private(set) var seedsSnippets = false
     private(set) var licenseState: LicenseStateMode = .active
-    /// Plugins turned on at launch, such as those that ship off (`screencast,keystrokes`). Names
-    /// that aren't a `Capability` are ignored.
+    /// Plugins turned on at launch, such as those that ship off (`translation,keystrokes`). Names
+    /// that aren't a `Capability`, such as the retired `screencast`, are ignored.
     private(set) var enabledCapabilities: Set<Capability> = []
-    /// Opens Screencast's picker once, at launch, as Start Screencast does (Screencast must be on).
+    /// Opens Screengrabs' recording picker once, at launch, as Record Screen does (Screengrabs, which
+    /// ships on, must be on).
     private(set) var opensScreencastPicker = false
-    /// Starts a Screencast recording of the first made-up screen at launch, with no countdown, so
-    /// the control bar shows (Screencast must be on). It captures nothing.
+    /// Starts a recording of the first made-up screen at launch, with no countdown, so
+    /// the control bar shows (Screengrabs must be on). It captures nothing.
     private(set) var startsScreencastRecording = false
-    /// Opens Screencast's review panel once, at launch, on a capture made up in the sandbox's
-    /// captures folder (Screencast must be on).
+    /// Opens the recording window once, at launch, on a recording made up in the sandbox's
+    /// captures folder (Screengrabs must be on).
     private(set) var screencastReview: ScreencastReviewCapture?
 
     var isUITesting: Bool { permissions != nil }

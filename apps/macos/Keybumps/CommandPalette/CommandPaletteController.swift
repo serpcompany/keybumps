@@ -409,7 +409,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     private var openHolds: Set<UUID> = []
     var isHeldOpen: Bool { !openHolds.isEmpty }
     private let notices: any PaletteNoticePresenting
-    /// Set while Screenshot Tools is enabled; opens the markup editor for an image item.
+    /// Set while Screengrabs is enabled; opens the markup editor for an image item.
     var editImage: ((ClipboardEntry) -> Bool)?
     /// Opens Settings on a page, or where it was left when nil. The app shell sets it to the status
     /// menu's route.
@@ -1835,7 +1835,7 @@ private struct CommandPaletteView: View {
             switch screenshotContent {
             case .disabled:
                 PaletteResultsContainer {
-                    PaletteEmptyState(title: "Screenshot Tools is turned off", systemImage: "camera.viewfinder")
+                    PaletteEmptyState(title: "\(Capability.screenshotTools.title) is turned off", systemImage: "camera.viewfinder")
                 }
             case .empty:
                 PaletteResultsContainer {
@@ -2332,7 +2332,7 @@ private struct ClipboardResultsView: View {
     let selection: Int
     let choose: (ClipboardEntry) -> Void
     let copy: (ClipboardEntry) -> Void
-    /// Opens an image in the Screenshot Editor; nil while Screenshot Tools is off.
+    /// Opens an image in the Screenshot Editor; nil while Screengrabs is off.
     let edit: ((ClipboardEntry) -> Void)?
     let delete: (ClipboardEntry) -> Void
     let clear: () -> Void

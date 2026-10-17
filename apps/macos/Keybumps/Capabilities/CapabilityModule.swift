@@ -26,7 +26,7 @@ struct CapabilityDescriptor: Identifiable {
     /// ranks the command after the apps, so it never hides an app with that name.
     let searchKeywords: [String]?
     /// What it does that Quick Search offers as action commands while it's on (#468), such as
-    /// Start Screencast. Its module runs them (`CapabilityModule.perform(_:_:)`).
+    /// Record Screen. Its module runs them (`CapabilityModule.perform(_:_:)`).
     var actions: [PluginAction] = []
     /// Its plugin manifest's Store category.
     let category: PluginCategory
@@ -69,7 +69,15 @@ struct CapabilitySettingsPage {
     let summary: String
     /// What turning the module off releases; the tooltip on its toolbar enable switch.
     let disableExplanation: String?
+    /// The tooltip in its place where Screengrabs can't record (`PluginCompatibility.supportsRecording`),
+    /// for a page whose explanation names recording; nil keeps `disableExplanation` everywhere.
+    var disableExplanationWithoutRecording: String? = nil
     let content: @MainActor () -> AnyView
+
+    /// The switch's tooltip on this Mac.
+    func disableExplanation(on compatibility: PluginCompatibility) -> String? {
+        compatibility.supportsRecording ? disableExplanation : disableExplanationWithoutRecording ?? disableExplanation
+    }
 }
 
 /// Every registered module's descriptor.
@@ -78,7 +86,7 @@ enum CapabilityCatalog {
     /// follows every module it depends on, so a dependency is settled before its dependents read it.
     static let descriptors: [CapabilityDescriptor] = [
         .quickSearch, .clipboardHistory, .screenshotTools, .dictation, .windowManagement, .keyboardShortcutter, .snippets, .timer, .emojiPicker,
-        .translation, .keystrokes, .screencast,
+        .translation, .keystrokes,
     ]
 
     /// The default capabilities: the feature set Keybumps was locked at (#205). Every capability
@@ -139,7 +147,7 @@ protocol CapabilityModule: AnyObject {
     /// Resumes resources that were waiting on a permission after `PermissionCoordinator` re-reads macOS.
     func permissionsDidRefresh(_ context: CapabilityContext)
     /// Settings attention the module reports for its own page, including setup that isn't a
-    /// TCC permission (for example Screenshot Tools' Requires Clipboard History).
+    /// TCC permission (for example Screengrabs' Requires Clipboard History).
     func attentionCount(_ context: CapabilityContext) -> Int
     /// The rows of the module's palette tab, when the module supplies them itself rather than
     /// through a case in `CommandPaletteController`.
@@ -151,7 +159,7 @@ protocol CapabilityModule: AnyObject {
     /// Keystrokes); nil keeps the declared title.
     func title(for action: PluginAction, _ context: CapabilityContext) -> String?
     /// Whether Quick Search lists one of its actions now: false while picking it would do nothing,
-    /// such as Start Screencast during a capture.
+    /// such as Record Screen during a capture.
     func offers(_ action: PluginAction, _ context: CapabilityContext) -> Bool
 }
 

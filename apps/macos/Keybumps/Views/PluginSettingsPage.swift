@@ -3,27 +3,32 @@ import SwiftUI
 /// A plugin's Settings page, drawn from its manifest in one fixed order, as Raycast draws every
 /// extension's settings: its header with who makes it, any preference placed at the top, its
 /// Commands, the permissions it needs and then the ones it can use (marked Optional), a slot for
-/// parts of its own that come before its declared preferences (such as Screenshot Tools'
-/// Screenshots group), its other declared preferences by group, and last a slot for parts no
-/// declaration covers (such as a library to edit). Both slots are empty unless the page fills
-/// them. The other plugins move over one at a time.
-struct PluginSettingsPage<AbovePreferences: View, Custom: View>: View {
+/// parts of its own that come before its declared preferences (such as Screengrabs' Screenshots
+/// group), its other declared preferences by group, each ending with any rows the page adds to it
+/// (such as Screengrabs' recordings folder under Recordings), and last a slot for parts no
+/// declaration covers (such as a library to edit). The slots are empty unless the page fills them.
+/// The other plugins move over one at a time.
+struct PluginSettingsPage<AbovePreferences: View, GroupRows: View, Custom: View>: View {
     let capability: Capability
-    /// False for a page whose own rows explain the permissions it needs, as Screenshot Tools' does
-    /// Screen Recording, with Restart Keybumps. The ones it can use are listed either way.
-    let includesRequiredPermissions: Bool
+    /// The headings of declared groups whose preferences can't change now, such as Screengrabs'
+    /// Recordings where it can't record.
+    let unavailableGroups: Set<String>
     let abovePreferences: AbovePreferences
+    /// The rows the page adds at the end of one of its declared groups, by the group's heading.
+    let groupRows: (String) -> GroupRows
     let custom: Custom
 
     init(
         capability: Capability,
-        includesRequiredPermissions: Bool = true,
+        unavailableGroups: Set<String> = [],
         @ViewBuilder abovePreferences: () -> AbovePreferences,
+        @ViewBuilder groupRows: @escaping (String) -> GroupRows,
         @ViewBuilder custom: () -> Custom
     ) {
         self.capability = capability
-        self.includesRequiredPermissions = includesRequiredPermissions
+        self.unavailableGroups = unavailableGroups
         self.abovePreferences = abovePreferences()
+        self.groupRows = groupRows
         self.custom = custom()
     }
 
@@ -31,9 +36,9 @@ struct PluginSettingsPage<AbovePreferences: View, Custom: View>: View {
         let descriptor = capability.descriptor
         SettingsPage {
             CapabilityControl(capability: capability, shortcuts: descriptor.shortcuts, byline: Self.byline(descriptor))
-            PluginPermissionsGroup(capability: capability, includesRequired: includesRequiredPermissions)
+            PluginPermissionsGroup(capability: capability)
             abovePreferences
-            PluginPreferenceGroups(capability: capability)
+            PluginPreferenceGroups(capability: capability, unavailable: unavailableGroups, rows: groupRows)
             custom
         }
     }
@@ -45,13 +50,23 @@ struct PluginSettingsPage<AbovePreferences: View, Custom: View>: View {
     }
 }
 
-extension PluginSettingsPage where AbovePreferences == EmptyView {
+extension PluginSettingsPage where GroupRows == EmptyView {
+    init(
+        capability: Capability,
+        @ViewBuilder abovePreferences: () -> AbovePreferences,
+        @ViewBuilder custom: () -> Custom
+    ) {
+        self.init(capability: capability, abovePreferences: abovePreferences, groupRows: { _ in EmptyView() }, custom: custom)
+    }
+}
+
+extension PluginSettingsPage where AbovePreferences == EmptyView, GroupRows == EmptyView {
     init(capability: Capability, @ViewBuilder custom: () -> Custom) {
         self.init(capability: capability, abovePreferences: { EmptyView() }, custom: custom)
     }
 }
 
-extension PluginSettingsPage where AbovePreferences == EmptyView, Custom == EmptyView {
+extension PluginSettingsPage where AbovePreferences == EmptyView, GroupRows == EmptyView, Custom == EmptyView {
     init(capability: Capability) {
         self.init(capability: capability, abovePreferences: { EmptyView() }, custom: { EmptyView() })
     }
@@ -59,18 +74,16 @@ extension PluginSettingsPage where AbovePreferences == EmptyView, Custom == Empt
 
 /// A plugin page's Permissions group: a `PermissionRow` for each permission its manifest declares,
 /// the ones it needs and then the ones it can use, marked Optional with why. Every plugin page shows
-/// its optional permissions here (#379). A page that already explains its required permissions in
-/// rows of its own, as Screenshot Tools' does Screen Recording, passes `includesRequired: false`
-/// (through `PluginSettingsPage`'s `includesRequiredPermissions`), so they aren't shown twice. The
+/// its optional permissions here (#379). A required permission's row stays after it's granted, and
+/// offers Open System Settings…, then Restart Keybumps once macOS needs a restart to apply it. The
 /// rows follow System Settings while the page is open, as the Permissions page's do.
 struct PluginPermissionsGroup: View {
     @Environment(AppModel.self) private var model
     let capability: Capability
-    var includesRequired = true
 
     var body: some View {
         let descriptor = capability.descriptor
-        let required = includesRequired ? MacPermission.allCases.filter(descriptor.requiredPermissions.contains) : []
+        let required = MacPermission.allCases.filter(descriptor.requiredPermissions.contains)
         if !required.isEmpty || !descriptor.optionalPermissions.isEmpty {
             SettingsGroup("Permissions") {
                 ForEach(required, id: \.self) {
@@ -85,18 +98,29 @@ struct PluginPermissionsGroup: View {
     }
 }
 
-/// A plugin's declared preferences, a `SettingsGroup` for each of their groups. A page drawn by hand,
-/// as Dictation's is, lists them here too, so they move to the template unchanged. Those placed at
-/// the top are drawn by `CapabilityControl` instead.
-struct PluginPreferenceGroups: View {
+/// A plugin's declared preferences, a `SettingsGroup` for each of their groups, each ending with the
+/// rows its page adds to it. A page drawn by hand, as Dictation's is, lists them here too, so they
+/// move to the template unchanged. Those placed at the top are drawn by `CapabilityControl` instead.
+struct PluginPreferenceGroups<Rows: View>: View {
     let capability: Capability
+    /// The headings of groups whose preferences can't change now.
+    var unavailable: Set<String> = []
+    let rows: (String) -> Rows
 
     var body: some View {
         ForEach(capability.descriptor.preferenceGroups, id: \.title) { group in
             SettingsGroup(group.title) {
                 ForEach(group.preferences) { PluginPreferenceRow(capability: capability, preference: $0) }
+                    .disabled(unavailable.contains(group.title))
+                rows(group.title)
             }
         }
+    }
+}
+
+extension PluginPreferenceGroups where Rows == EmptyView {
+    init(capability: Capability) {
+        self.init(capability: capability, rows: { _ in EmptyView() })
     }
 }
 
@@ -144,7 +168,7 @@ struct PluginPreferenceRow: View {
         }
     }
 
-    private var identifier: String { "plugin.\(capability.rawValue).\(preference.key)" }
+    private var identifier: String { preference.storageKey(for: capability) }
 
     /// The keys of the rows a page draws, in order.
     struct Shown: PreferenceKey {

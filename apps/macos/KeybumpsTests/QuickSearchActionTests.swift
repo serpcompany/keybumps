@@ -17,9 +17,12 @@ struct QuickSearchActionTests {
         displayName: "⌃⌥⇧R"
     )
 
+    /// Screengrabs' Record Screen. A model starts with its ⇧⌘5.
     private static func start(_ shortcut: String? = nil) -> QuickSearchAction {
-        QuickSearchAction(capability: .screencast, action: .startScreencast, title: "Start Screencast", shortcut: shortcut)
+        QuickSearchAction(capability: .screenshotTools, action: .startScreencast, title: "Record Screen", shortcut: shortcut)
     }
+
+    private static let recordScreenKeys = DefaultShortcut.recordScreen.displayName
 
     /// Named Show Keystrokes by default: the harness's keyboard tap never starts, so no keys are on
     /// screen.
@@ -54,13 +57,13 @@ struct QuickSearchActionTests {
 
     // MARK: Manifests
 
-    @Test("Screencast declares Start Screencast and Keystrokes its show and hide, each with its plugin's shortcut")
+    @Test("Screengrabs declares Record Screen and Keystrokes its show and hide, each with its plugin's shortcut")
     func declared() {
-        #expect(CapabilityDescriptor.screencast.actions == [.startScreencast])
+        #expect(CapabilityDescriptor.screenshotTools.actions == [.startScreencast])
         #expect(CapabilityDescriptor.keystrokes.actions == [.toggleKeystrokes])
         #expect(PluginAction.startScreencast.shortcut == .screencast)
         #expect(PluginAction.toggleKeystrokes.shortcut == .keystrokes)
-        for descriptor in CapabilityCatalog.descriptors where descriptor.capability != .screencast && descriptor.capability != .keystrokes {
+        for descriptor in CapabilityCatalog.descriptors where descriptor.capability != .screenshotTools && descriptor.capability != .keystrokes {
             #expect(descriptor.actions.isEmpty, "\(descriptor.title)")
         }
     }
@@ -88,18 +91,20 @@ struct QuickSearchActionTests {
         off.model.start()
         #expect(off.model.quickSearchActions.isEmpty)
 
-        let on = WiringHarness(enabled: [.quickSearch, .keystrokes, .screencast], missing: nil, root: root)
+        let on = WiringHarness(enabled: [.quickSearch, .keystrokes, .screenshotTools], missing: nil, root: root)
         on.model.start()
-        #expect(on.model.quickSearchActions == [Self.keystrokes(), Self.start()], "Registry order")
+        #expect(on.model.quickSearchActions == [Self.start(Self.recordScreenKeys), Self.keystrokes()], "Registry order")
 
         on.model.preferences.setCapabilityShortcut(Self.startScreencastKeys, for: .screencast)
-        #expect(on.model.quickSearchActions.last == Self.start("⌃⌥⇧R"), "Its shortcut's keycaps, once assigned")
+        #expect(on.model.quickSearchActions.first == Self.start("⌃⌥⇧R"), "Its shortcut's keycaps, as they are now")
+        on.model.preferences.setCapabilityShortcut(nil, for: .screencast)
+        #expect(on.model.quickSearchActions.first == Self.start())
 
-        on.model.setCapability(.screencast, enabled: false)
+        on.model.setCapability(.screenshotTools, enabled: false)
         #expect(on.model.quickSearchActions == [Self.keystrokes()])
     }
 
-    @Test("Before macOS 15, Start Screencast is never listed, even saved on; Keystrokes' is")
+    @Test("Before macOS 15, Record Screen is never listed, with Screengrabs on; Keystrokes' is")
     func screencastNeedsMacOS15() {
         let root = Self.temporaryRoot("KeybumpsQuickSearchActionsGate")
         defer { try? FileManager.default.removeItem(at: root) }
@@ -118,11 +123,11 @@ struct QuickSearchActionTests {
         let root = Self.temporaryRoot("KeybumpsQuickSearchActionsLocked")
         defer { try? FileManager.default.removeItem(at: root) }
         let licensing = FixedLicenseController(state: .unlicensed)
-        let harness = WiringHarness(enabled: [.quickSearch, .screencast, .keystrokes], missing: nil, root: root, licensing: licensing)
+        let harness = WiringHarness(enabled: [.quickSearch, .screenshotTools, .keystrokes], missing: nil, root: root, licensing: licensing)
         harness.model.preferences.set(.bool(false), of: .keystrokesShowing, for: .keystrokes)
         harness.model.start()
         #expect(!harness.model.isLicensed)
-        #expect(harness.model.preferences.enabledCapabilities.isSuperset(of: [.screencast, .keystrokes]), "Saved on")
+        #expect(harness.model.preferences.enabledCapabilities.isSuperset(of: [.screenshotTools, .keystrokes]), "Saved on")
         #expect(harness.model.quickSearchActions.isEmpty)
 
         let keystrokes = try #require(harness.model.capabilities.module(for: .keystrokes) as? KeystrokesModule)
@@ -130,23 +135,23 @@ struct QuickSearchActionTests {
         #expect(!keystrokes.isShowing, "Locked runs nothing: running it would show the hidden keys")
 
         await licensing.activate(key: "KEYBUMPS-TEST")
-        #expect(harness.model.quickSearchActions == [Self.keystrokes(), Self.start()])
+        #expect(harness.model.quickSearchActions == [Self.start(Self.recordScreenKeys), Self.keystrokes()])
     }
 
-    @Test("Quick Search finds Start Screencast for screencast through the real model, beside Screencast's command")
+    @Test("Quick Search finds Record Screen for screencast through the real model, beside Screengrabs' command")
     func modelListsTheAction() {
         let root = Self.temporaryRoot("KeybumpsQuickSearchActionsModel")
         defer { try? FileManager.default.removeItem(at: root) }
         let search = QuickSearchModel.forTests(in: root)
-        let harness = WiringHarness(enabled: [.quickSearch, .screencast], missing: nil, root: root, quickSearch: search)
+        let harness = WiringHarness(enabled: [.quickSearch, .screenshotTools], missing: nil, root: root, quickSearch: search)
         harness.model.start()
 
         search.query = "screencast"
-        #expect(search.items == [.command(.capability(.screencast)), .command(.action(Self.start()))])
+        #expect(search.items == [.command(.capability(.screenshotTools)), .command(.action(Self.start(Self.recordScreenKeys)))])
 
-        harness.model.setCapability(.screencast, enabled: false)
-        search.query = "start screencast"
-        #expect(search.items.isEmpty, "Off: no action, and the command's name has no \"start\"")
+        harness.model.setCapability(.screenshotTools, enabled: false)
+        search.query = "record screen"
+        #expect(search.items == [.command(.capability(.screenshotTools))], "Off: no action, and Screengrabs' command opens its page")
     }
 
     // MARK: Ranking
@@ -160,16 +165,17 @@ struct QuickSearchActionTests {
         }
         let start = QuickSearchItem.command(.action(Self.start()))
 
-        #expect(QuickSearchCommand.action(Self.start()).match("start screencast") == .name)
-        #expect(QuickSearchCommand.action(Self.start()).match("record") == .keyword)
-        #expect(QuickSearchCommand.action(Self.start()).match("sta") == .prefix)
-        #expect(QuickSearchCommand.action(Self.start()).match("screenshot") == nil, "Screenshots are Screenshot Tools' alone (#485)")
+        #expect(QuickSearchCommand.action(Self.start()).match("record screen") == .name)
+        #expect(QuickSearchCommand.action(Self.start()).match("screencast") == .keyword)
+        #expect(QuickSearchCommand.action(Self.start()).match("video") == .keyword)
+        #expect(QuickSearchCommand.action(Self.start()).match("rec scr") == .prefix)
+        #expect(QuickSearchCommand.action(Self.start()).match("screenshot") == nil, "It records video only (#485)")
         #expect(!items("screenshot").contains(start))
-        #expect(items("start") == [start, .result(file)])
-        #expect(items("screencast") == [.command(.capability(.screencast)), start, .result(file)], "Equal scores keep commands first")
+        #expect(items("record screen") == [start, .command(.capability(.screenshotTools)), .result(file)])
+        #expect(items("screencast") == [.command(.capability(.screenshotTools)), start, .result(file)], "Equal scores keep commands first")
         #expect(
             items("capture", apps: [imageCapture])
-                == [.result(imageCapture), .command(.capability(.screenshotTools)), .command(.capability(.screencast)), start, .result(file)],
+                == [.result(imageCapture), .command(.capability(.screenshotTools)), start, .result(file)],
             "A keyword lists it after the app it names"
         )
         #expect(items("hello").filter { if case .command = $0 { true } else { false } }.isEmpty)
@@ -185,11 +191,11 @@ struct QuickSearchActionTests {
 
         usage.record(action)
         #expect(usage.record(for: action)?.launchCount == 1)
-        #expect(usage.record(for: .capability(.screencast)) == nil, "Kept apart from its plugin's command")
+        #expect(usage.record(for: .capability(.screenshotTools)) == nil, "Kept apart from its plugin's command")
         let stored = try JSONDecoder().decode([String: ApplicationUsageRecord].self, from: Data(contentsOf: url))
         #expect(Array(stored.keys) == ["action:startScreencast"])
         #expect(action.usageKey == "action:startScreencast")
-        #expect(QuickSearchCommand.capability(.screencast).usageKey == "command:screencast")
+        #expect(QuickSearchCommand.capability(.screenshotTools).usageKey == "command:screenshotTools")
 
         let ranked = QuickSearchRanking.items(matching: "screencast", applications: [], files: [], actions: [Self.start()], usage: usage)
         #expect(ranked.first == .command(action))
@@ -203,61 +209,61 @@ struct QuickSearchActionTests {
     func row() {
         let action = QuickSearchCommand.action(Self.start("⌃⌥⇧R"))
         #expect(action.kindLabel == "Action")
-        #expect(QuickSearchCommand.capability(.screencast).kindLabel == "Command")
-        #expect(action.title == "Start Screencast")
+        #expect(QuickSearchCommand.capability(.screenshotTools).kindLabel == "Command")
+        #expect(action.title == "Record Screen")
         #expect(action.accessibilityIdentifier == "quickSearch.action.startScreencast")
-        #expect(QuickSearchCommand.capability(.screencast).accessibilityIdentifier == "quickSearch.command.screencast")
-        #expect(action.rowShortcut(enabledCapabilities: [.screencast], visibleTabs: []) == "⌃⌥⇧R")
-        #expect(QuickSearchCommand.action(Self.start()).rowShortcut(enabledCapabilities: [.screencast], visibleTabs: []) == nil)
+        #expect(QuickSearchCommand.capability(.screenshotTools).accessibilityIdentifier == "quickSearch.command.screenshotTools")
+        #expect(action.rowShortcut(enabledCapabilities: [.screenshotTools], visibleTabs: []) == "⌃⌥⇧R")
+        #expect(QuickSearchCommand.action(Self.start()).rowShortcut(enabledCapabilities: [.screenshotTools], visibleTabs: []) == nil)
         #expect(action.shortcut == nil && action.commandKey == nil, "No Command-key of its own")
         #expect(!action.isTurnedOff(enabledCapabilities: []))
-        #expect(action.destination(enabledCapabilities: [.screencast]) == .action(Self.start("⌃⌥⇧R")))
-        #expect(action.destination(enabledCapabilities: []).hint == "Closes the palette, then runs Start Screencast")
+        #expect(action.destination(enabledCapabilities: [.screenshotTools]) == .action(Self.start("⌃⌥⇧R")))
+        #expect(action.destination(enabledCapabilities: []).hint == "Closes the palette, then runs Record Screen")
         #expect(PaletteFilter.commands.matches(.command(action)), "/'s Commands filter keeps it")
     }
 
     // MARK: Running
 
     @available(macOS 15, *)
-    @Test("Picking Start Screencast in Quick Search learns it, closes the palette, and opens the picker")
+    @Test("Picking Record Screen in Quick Search learns it, closes the palette, and opens the picker")
     func pickingStartScreencastOpensThePicker() throws {
         let root = Self.temporaryRoot("KeybumpsQuickSearchActionsRun")
         defer { try? FileManager.default.removeItem(at: root) }
         let search = QuickSearchModel.forTests(in: root)
-        let harness = WiringHarness(enabled: [.quickSearch, .screencast], missing: nil, root: root, quickSearch: search)
+        let harness = WiringHarness(enabled: [.quickSearch, .screenshotTools], missing: nil, root: root, quickSearch: search)
         harness.model.start()
         let action = try #require(harness.model.quickSearchActions.first)
 
         harness.model.commandPalette.choose(.action(action))
-        let module = try #require(harness.model.capabilities.module(for: .screencast) as? ScreencastModule)
-        let controller = try #require(module.controller, "Start Screencast's own path")
+        let module = try #require(harness.model.recording)
+        let controller = try #require(module.controller, "Record Screen's own path")
         #expect(controller.phase == .picking)
         #expect(!harness.model.commandPalette.isVisible)
         #expect(search.applicationUsage.record(for: .action(action))?.launchCount == 1)
 
         #expect(harness.model.quickSearchActions.isEmpty, "Not listed while a capture is under way, when it would do nothing")
-        search.query = "start screencast"
-        #expect(search.items.isEmpty)
+        search.query = "record screen"
+        #expect(!search.items.contains(.command(.action(action))))
         controller.cancel()
         #expect(harness.model.quickSearchActions == [action], "Listed again once the capture is over")
     }
 
-    @Test("Without Screen Recording, Start Screencast from Quick Search opens Screencast's page, as the shortcut does")
+    @Test("Without Screen Recording, Record Screen from Quick Search opens Screengrabs' page, as the shortcut does")
     func startWithoutScreenRecordingOpensItsPage() {
         var opened: [SettingsSection] = []
         let preferences = AppPreferences(defaults: InMemoryDefaults())
         let permissions = PermissionCoordinator(screenRecordingAuthorized: { false })
         let module = ScreencastModule(preferences: preferences, permissions: permissions, openSettings: { opened.append($0) })
         let context = CapabilityContext(
-            enabledCapabilities: [.screencast], preferences: preferences,
+            enabledCapabilities: [.screenshotTools], preferences: preferences,
             shortcuts: GlobalShortcutCoordinator(backend: SilentHotKeys()), permissions: permissions,
             permissionReadiness: { _ in PermissionReadinessSnapshot.resolve(enabledCapabilities: [], states: [:], permissionsRequiringRelaunch: []) }
         )
         module.apply(context)
         module.perform(.startScreencast, context)
-        #expect(opened == [.screencast])
+        #expect(opened == [.screenshotTools])
         module.perform(.toggleKeystrokes, context)
-        #expect(opened == [.screencast], "Another plugin's action does nothing here")
+        #expect(opened == [.screenshotTools], "Another plugin's action does nothing here")
     }
 
     @Test("Show and Hide Keystrokes take the keys off the screen and back without turning the plugin off, named for what they'll do")

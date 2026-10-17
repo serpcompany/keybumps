@@ -8,7 +8,7 @@ struct SettingsSidebarTests {
         #expect(SettingsSidebar.groups(matching: "") == [
             [.general, .permissions, .plugins, .changelog],
             [.search, .clipboard, .dictation, .screenshotTools, .keyboardShortcutter, .snippets, .windows],
-            [.emojiPicker, .keystrokes, .screencast, .timer, .translation],
+            [.emojiPicker, .keystrokes, .timer, .translation],
         ])
     }
 
@@ -22,11 +22,21 @@ struct SettingsSidebarTests {
         #expect(SettingsSidebar.groups(matching: "change") == [[.changelog]])
     }
 
+    @Test("Search also finds a plugin's page by its search keywords, such as Screengrabs by its former names (#490)")
+    func searchFindsPluginsByKeyword() {
+        #expect(SettingsSidebar.groups(matching: "screenshot") == [[.screenshotTools]])
+        #expect(SettingsSidebar.groups(matching: "Screencast") == [[.screenshotTools]])
+        let record: [[SettingsSection]] = SettingsSidebar.groups(matching: "record")
+        #expect(record.joined().contains(.screenshotTools))
+        #expect(SettingsSidebar.groups(matching: "recordings") == [[.dictation, .screenshotTools]])
+        #expect(SettingsSidebar.groups(matching: "countdown") == [[.timer]])
+    }
+
     @Test("The Plugins page lists the default plugins, Quick Search first, then added ones, and filters by name or keyword")
     func pluginsTable() {
         #expect(PluginsTable.sections == [
             .init(title: "Default", plugins: [.search, .clipboard, .dictation, .screenshotTools, .keyboardShortcutter, .snippets, .windows]),
-            .init(title: "Added", plugins: [.emojiPicker, .keystrokes, .screencast, .timer, .translation]),
+            .init(title: "Added", plugins: [.emojiPicker, .keystrokes, .timer, .translation]),
         ])
         #expect(PluginsTable.sections(matching: "countdown") == [.init(title: "Added", plugins: [.timer])])
         #expect(PluginsTable.sections(matching: "translate") == [.init(title: "Added", plugins: [.translation])])
@@ -44,10 +54,11 @@ struct SettingsSidebarTests {
         #expect(PluginsTable.tabKey(for: .emojiPicker, showsHotkeysTab: false) == "⌘7")
         #expect(PluginsTable.tabKey(for: .translation, showsHotkeysTab: false) == "⌘8")
         #expect(PluginsTable.tabKey(for: .keystrokes, showsHotkeysTab: true) == "", "No tab")
-        #expect(PluginsTable.tabKey(for: .screencast, showsHotkeysTab: true) == "", "No tab")
+        #expect(PluginsTable.tabKey(for: .screenshotTools, showsHotkeysTab: false) == "⌘3")
 
         let key = ShortcutBinding(keyCode: 1, modifiers: 0, displayName: "⇧⌘2")
-        #expect(PluginsTable.shortcutText(for: .screenshotTools) { _ in key } == "⇧⌘2 +2")
+        // Screengrabs' three screenshot hotkeys and Record Screen; the recording shortcuts work only while recording.
+        #expect(PluginsTable.shortcutText(for: .screenshotTools) { _ in key } == "⇧⌘2 +3")
         #expect(PluginsTable.shortcutText(for: .screenshotTools) { $0 == .screenshotArea ? key : nil } == "⇧⌘2")
         #expect(PluginsTable.shortcutText(for: .timer) { _ in nil } == "", "Unassigned")
     }

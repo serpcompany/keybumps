@@ -17,7 +17,7 @@ enum PluginLinks {
 }
 
 /// Something a plugin does that Quick Search offers, with the kind Action, while the plugin is on
-/// (#468): Start Screencast, or Show or Hide Keystrokes. The manifest declares it; the plugin's
+/// (#468): Record Screen, or Show or Hide Keystrokes. The manifest declares it; the plugin's
 /// module runs it (`CapabilityModule.perform(_:_:)`) and can name it after its state
 /// (`CapabilityModule.title(for:_:)`).
 struct PluginAction: Hashable, Identifiable {
@@ -44,7 +44,8 @@ struct PluginOptionalPermission: Equatable {
 /// The one rule for plugins that need a newer macOS than Keybumps does (#322): one whose
 /// `minimumMacOS` is newer than this Mac's can't be turned on, and is never on. `AppPreferences`
 /// applies it to the plugins that are on, so no module, palette tab, or shortcut of such a plugin
-/// ever runs; Settings shows its `requirement`.
+/// ever runs; Settings shows its `requirement`. Within a plugin, Screengrabs' recording needs
+/// macOS 15 (`supportsRecording`, ADR 0010), where its screenshots don't.
 struct PluginCompatibility: Equatable {
     /// This Mac's macOS major version, such as 15. Tests pass their own.
     let macOSMajorVersion: Int
@@ -63,6 +64,18 @@ struct PluginCompatibility: Equatable {
         guard !supports(capability), let minimum = capability.descriptor.minimumMacOS else { return nil }
         return "Requires macOS \(minimum)"
     }
+
+    /// Whether Screengrabs can record here: ScreenCaptureKit records the screen, the microphone, and
+    /// the Mac's sound in one stream from macOS 15. Settings, Quick Search's Record Screen, its
+    /// shortcut, and the menu bar read this, never `#available`, which a test can't fake; on macOS 14
+    /// Screengrabs takes screenshots only, and macOS keeps ⇧⌘5.
+    var supportsRecording: Bool { macOSMajorVersion >= Self.recordingMacOS }
+
+    /// The oldest macOS Screengrabs records on.
+    static let recordingMacOS = 15
+
+    /// What Settings says in place of recording where it isn't supported.
+    static let recordingRequirement = "Recording needs macOS \(recordingMacOS)"
 }
 
 /// Who makes a plugin. For now every plugin is official, built by Keybumps (ADR 0006).
@@ -75,7 +88,9 @@ enum PluginPublisher: Equatable {
 
 /// A setting a plugin declares in its manifest. The shell draws it on the plugin's Settings page
 /// and stores it under the plugin's own name (`plugin.<capability>.<key>`), as Raycast draws and
-/// keeps an extension's declared preferences.
+/// keeps an extension's declared preferences. One that moved from a retired plugin keeps that
+/// plugin's name (`storageName`), so nothing is copied: Screengrabs' recording settings are still
+/// `plugin.screencast.<key>` (ADR 0010).
 struct PluginPreference: Identifiable, Equatable {
     enum Kind: Equatable {
         /// A switch.
@@ -116,6 +131,9 @@ struct PluginPreference: Identifiable, Equatable {
     /// Translation's two languages. Choosing that one's value swaps the two (`AppPreferences.set`).
     var differsFrom: String?
     var placement = Placement.inGroup
+    /// The plugin name it's stored under when that isn't its plugin's ID: the retired plugin it
+    /// came from. Never changed once shipped.
+    var storageName: String?
 
     var id: String { key }
 
@@ -126,9 +144,9 @@ struct PluginPreference: Identifiable, Equatable {
         }
     }
 
-    /// The name it's stored under.
+    /// The name it's stored under, also its row's accessibility identifier.
     func storageKey(for capability: Capability) -> String {
-        "plugin.\(capability.rawValue).\(key)"
+        "plugin.\(storageName ?? capability.rawValue).\(key)"
     }
 
     /// Whether `value` is of this preference's kind, and for a menu one of its options.

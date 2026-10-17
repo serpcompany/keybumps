@@ -1759,8 +1759,8 @@ final class KeybumpsFeatureTests: XCTestCase {
         let defaults = InMemoryDefaults()
         let first = AppPreferences(defaults: defaults)
         XCTAssertEqual(
-            first.enabledCapabilities, Set(Capability.allCases).subtracting([.emojiPicker, .translation, .keystrokes, .screencast]),
-            "Emoji Picker, Translation, Keystrokes, and Screencast ship off"
+            first.enabledCapabilities, Set(Capability.allCases).subtracting([.emojiPicker, .translation, .keystrokes]),
+            "Emoji Picker, Translation, and Keystrokes ship off"
         )
         first.setCapability(.dictation, enabled: false)
         XCTAssertFalse(AppPreferences(defaults: defaults).enabledCapabilities.contains(.dictation))
@@ -2291,7 +2291,7 @@ final class KeybumpsFeatureTests: XCTestCase {
             [
                 CommandPaletteTabLabel(shortcut: "⌘1", name: "Search"),
                 CommandPaletteTabLabel(shortcut: "⌘2", name: "Clipboard"),
-                CommandPaletteTabLabel(shortcut: "⌘3", name: "Screenshots"),
+                CommandPaletteTabLabel(shortcut: "⌘3", name: "Screengrabs"),
                 CommandPaletteTabLabel(shortcut: "⌘4", name: "Dictation"),
                 CommandPaletteTabLabel(shortcut: "⌘5", name: "Snippets"),
                 CommandPaletteTabLabel(shortcut: "⌘6", name: "Timers"),
@@ -2328,7 +2328,7 @@ final class KeybumpsFeatureTests: XCTestCase {
         XCTAssertEqual(CommandPaletteTab.screenshots.primaryActionTitle, "Copy")
         XCTAssertEqual(CommandPaletteTab.screenshots.secondaryActions, [.paste(), .edit])
         XCTAssertEqual(CommandPaletteTab.clipboard.secondaryActions, [.paste()])
-        XCTAssertEqual(CommandPaletteTab.screenshots.prompt, "Search screenshots")
+        XCTAssertEqual(CommandPaletteTab.screenshots.prompt, "Search screengrabs")
         XCTAssertNil(CommandPaletteTab.keyboardShortcutter.primaryActionTitle)
         XCTAssertEqual(CommandPaletteTab.clipboard.primaryActionTitle, "Copy")
         XCTAssertEqual(CommandPaletteTab.dictation.primaryActionTitle, "Copy")
