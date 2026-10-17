@@ -555,7 +555,7 @@ final class SmokeUITests: XCTestCase {
 
     /// #475: a recording's review is a standard window that all but fills the screen: the player edge
     /// to edge, under the bar the Screenshot Editor has too (#511), with Discard, Copy, and Save on its
-    /// right. Nothing to type, no Trim yet, and Save closes it.
+    /// right. Nothing to type, no timeline until Trim is picked (#517), and Save closes it.
     func testScreencastReviewOfAVideoFillsTheScreenWithItsActionsInTheEditorBar() throws {
         launchScreencastReview("video")
         let window = reviewPanel
@@ -585,12 +585,34 @@ final class SmokeUITests: XCTestCase {
             XCTAssertLessThan(copy.frame.maxX, save.frame.minX, "Save last")
             XCTAssertEqual(save.label, "Save", "VoiceOver reads Save, not the Return sign in it")
         }
-        for gone in ["note", "type", "repository", "destination", "saveAndSend", "sendAndDelete", "trim", "addToScreenshots", "edit"] {
+        for gone in ["note", "type", "repository", "destination", "saveAndSend", "sendAndDelete", "timeline", "addToScreenshots", "edit"] {
             XCTAssertFalse(element("screencast.review.\(gone)").exists, gone)
         }
 
         element("screencast.review.save").click()
         XCTAssertTrue(window.waitForNonExistence(timeout: 10), "Save closes the window")
+        XCTAssertTrue(waitForReviewOutcome("saved; folder kept; note empty"))
+    }
+
+    /// #517: Trim, the bar's first tool, opens the timeline under the player with its options in the
+    /// bar; Escape puts it down first, and the window stays; with no edits, Escape then closes it,
+    /// which saves.
+    func testScreencastReviewTrimOpensTheTimeline() {
+        launchScreencastReview("video")
+        let trim = element("screencast.review.tool.trim")
+        XCTAssertTrue(trim.waitForExistence(timeout: 5), "Trim is in the bar")
+        trim.click()
+        let timeline = element("screencast.review.timeline")
+        XCTAssertTrue(timeline.waitForExistence(timeout: 5), "Trim opens the timeline")
+        XCTAssertTrue(element("screencast.review.cutSection").exists, "Cut Section is in the bar")
+        XCTAssertTrue(element("screencast.review.resetTrim").exists, "and Reset Trim")
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        XCTAssertTrue(waitForNonExistence(of: timeline), "Escape puts Trim down first")
+        XCTAssertTrue(reviewPanel.exists, "and the window stays")
+        XCTAssertFalse(element("screencast.review.uitest.outcome").exists, "nothing saved yet")
+
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        XCTAssertTrue(reviewPanel.waitForNonExistence(timeout: 10), "then Escape closes it")
         XCTAssertTrue(waitForReviewOutcome("saved; folder kept; note empty"))
     }
 

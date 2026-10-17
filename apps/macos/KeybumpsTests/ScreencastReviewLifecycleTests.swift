@@ -51,6 +51,67 @@ struct ScreencastReviewLifecycleTests {
         #expect(ScreencastReview.read(from: input.metadataURL)?.repository == "serpcompany/keybumps")
     }
 
+    // MARK: Launching
+
+    /// Applies `module` as a launch does, with `enabled` as the plugins turned on.
+    private func apply(_ module: ScreencastModule, _ preferences: AppPreferences, enabled: Set<Capability>) {
+        let permissions = PermissionCoordinator(screenRecordingAuthorized: { true })
+        module.apply(CapabilityContext(
+            enabledCapabilities: enabled,
+            preferences: preferences,
+            shortcuts: GlobalShortcutCoordinator(backend: DrawingHotKeyBackend()),
+            permissions: permissions,
+            permissionReadiness: { capabilities in
+                PermissionReadinessSnapshot.resolve(enabledCapabilities: capabilities, states: [:], permissionsRequiringRelaunch: [])
+            }
+        ))
+    }
+
+    /// ScreenGrabs' recording on `preferences` and inert seams, with `review` as the review's services.
+    private func module(_ preferences: AppPreferences, review: ScreencastReviewServices?) -> ScreencastModule {
+        ScreencastModule(
+            preferences: preferences,
+            permissions: PermissionCoordinator(screenRecordingAuthorized: { true }),
+            openSettings: { _ in },
+            seams: ScreencastSeams(presenter: FakeOverlays(), screens: { PickerScreens.both }, contextReader: .inert),
+            review: review
+        )
+    }
+
+    @Test("ScreenGrabs coming on cleans up, once a launch, after an export a quit cut short; never without the review's services or while it's off")
+    func launchRecoversInterruptedExports() async throws {
+        defer { fixture.tearDown() }
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
+        // The unit-test host's own captures folder, never the person's.
+        let captures = preferences.screencast.capturesFolder
+        let recording = captures.appendingPathComponent("recovery-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: recording) }
+        try FileManager.default.createDirectory(at: recording, withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: recording.appendingPathComponent(ScreencastMetadata.fileName))
+        let partial = recording.appendingPathComponent(".video-1.editing.mov")
+        try Data("partial".utf8).write(to: partial)
+        let services = ScreencastReviewServices(
+            clipboard: fixture.clipboard,
+            pasteboard: fixture.pasteboard,
+            notices: nil,
+            repositories: { [fixture] in fixture.repositories }
+        )
+
+        let bare = module(preferences, review: nil)
+        apply(bare, preferences, enabled: [.screenshotTools])
+        #expect(bare.review.recovery == nil, "a composition without services touches no folder")
+        let launched = module(preferences, review: services)
+        apply(launched, preferences, enabled: [])
+        #expect(launched.review.recovery == nil, "nor while ScreenGrabs is off")
+
+        apply(launched, preferences, enabled: [.screenshotTools])
+        let recovery = try #require(launched.review.recovery)
+        _ = await recovery.value
+        #expect(!FileManager.default.fileExists(atPath: partial.path))
+        apply(launched, preferences, enabled: [.screenshotTools])
+        #expect(launched.review.recovery == recovery, "once a launch")
+    }
+
     // MARK: Turning Screencast off, and captures taking turns
 
     @Test("A capture finishing as Screencast turns off is saved, with its context once read, and never shown")

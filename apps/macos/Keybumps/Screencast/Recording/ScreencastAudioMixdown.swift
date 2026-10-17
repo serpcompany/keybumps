@@ -19,6 +19,12 @@ enum ScreencastAudioMixdown {
         case unusable
     }
 
+    /// The writer's failure: its own error when it has one, so a full disk reads as one
+    /// (`ScreencastExportFailure.from`), or `writerFailed`.
+    static func writerFailure(_ error: Error?) -> Error {
+        error ?? MixdownError.writerFailed
+    }
+
     /// One track plays everywhere already; two or more need mixing.
     static func isNeeded(audioTrackCount: Int) -> Bool {
         audioTrackCount > 1
@@ -30,7 +36,13 @@ enum ScreencastAudioMixdown {
         audioTrackCount > 1 ? 1 / Float(audioTrackCount) : 1
     }
 
-    static func write(from source: URL, to destination: URL) async throws {
+    /// Writes the mixdown of `source` to `destination`. `isCancelled` is asked before each sample:
+    /// once it says so, the mixdown stops, deletes what it wrote, and throws `CancellationError`.
+    static func write(
+        from source: URL,
+        to destination: URL,
+        isCancelled: @escaping @Sendable () -> Bool = { false }
+    ) async throws {
         let asset = AVURLAsset(url: source)
         let audioTracks = try await asset.loadTracks(withMediaType: .audio)
         guard let videoTrack = try await asset.loadTracks(withMediaType: .video).first else {
@@ -52,7 +64,8 @@ enum ScreencastAudioMixdown {
                             duration: duration,
                             transform: transform,
                             formatHint: formatHint,
-                            to: destination
+                            to: destination,
+                            isCancelled: isCancelled
                         )
                         continuation.resume()
                     } catch {
@@ -84,8 +97,10 @@ enum ScreencastAudioMixdown {
         duration: CMTime,
         transform: CGAffineTransform,
         formatHint: CMFormatDescription?,
-        to destination: URL
+        to destination: URL,
+        isCancelled: @escaping @Sendable () -> Bool
     ) throws {
+        if isCancelled() { throw CancellationError() }
         let reader = try AVAssetReader(asset: inputs.asset)
         reader.timeRange = CMTimeRange(start: .zero, duration: duration)
         let writer = try AVAssetWriter(outputURL: destination, fileType: .mp4)
@@ -139,74 +154,42 @@ enum ScreencastAudioMixdown {
             pairs.append((audioOutput, audioInput))
         }
 
-        guard writer.startWriting() else { throw MixdownError.writerFailed }
+        guard writer.startWriting() else { throw writerFailure(writer.error) }
         guard reader.startReading() else {
             writer.cancelWriting()
             throw MixdownError.readerFailed
         }
         writer.startSession(atSourceTime: .zero)
-        try copySamples(reader: reader, writer: writer, pairs: pairs)
+        try copySamples(reader: reader, writer: writer, pairs: pairs, isCancelled: isCancelled)
         guard reader.status == .completed else { throw MixdownError.readerFailed }
+        if isCancelled() {
+            writer.cancelWriting()
+            throw CancellationError()
+        }
 
+        // A writer that failed on its own once the copy was done (a full disk) isn't asked to finish.
         let finished = DispatchSemaphore(value: 0)
-        writer.finishWriting { finished.signal() }
+        ScreencastSampleCopier.finishWriting(writer) { _ in finished.signal() }
         finished.wait()
-        guard writer.status == .completed else { throw MixdownError.writerFailed }
+        guard writer.status == .completed else { throw writerFailure(writer.error) }
     }
 
-    /// Pulls every output into its input, each on its own queue, until all are done or one fails.
-    /// A failure cancels both sides and releases every copy still waiting, since a cancelled
-    /// writer never asks its inputs for more.
+    /// Pulls every output into its input until all are done, one fails, or `isCancelled` says so
+    /// (`ScreencastSampleCopier`, which cancels both sides only once no queue is inside them).
     private static func copySamples(
         reader: AVAssetReader,
         writer: AVAssetWriter,
-        pairs: [(AVAssetReaderOutput, AVAssetWriterInput)]
+        pairs: [(AVAssetReaderOutput, AVAssetWriterInput)],
+        isCancelled: @escaping @Sendable () -> Bool
     ) throws {
-        let group = DispatchGroup()
-        let lock = NSLock()
-        var finished = Array(repeating: false, count: pairs.count)
-        var failed = false
-
-        /// Leaves the group for `index`, once.
-        func finish(_ index: Int) {
-            lock.withLock {
-                guard !finished[index] else { return }
-                finished[index] = true
-                group.leave()
-            }
-        }
-
-        func fail() {
-            let isFirst = lock.withLock {
-                defer { failed = true }
-                return !failed
-            }
-            guard isFirst else { return }
-            reader.cancelReading()
-            writer.cancelWriting()
-            pairs.indices.forEach(finish)
-        }
-
-        for (index, (output, input)) in pairs.enumerated() {
-            group.enter()
-            let queue = DispatchQueue(label: "com.serp.keybumps.screencast.mixdown.\(index)")
-            input.requestMediaDataWhenReady(on: queue) {
-                while input.isReadyForMoreMediaData {
-                    guard !lock.withLock({ failed || finished[index] }) else { return }
-                    guard let sample = output.copyNextSampleBuffer() else {
-                        if writer.status == .writing { input.markAsFinished() }
-                        finish(index)
-                        return
-                    }
-                    // Appending to a writer that's no longer writing raises an exception.
-                    guard writer.status == .writing, input.append(sample) else {
-                        fail()
-                        return
-                    }
-                }
-            }
-        }
-        group.wait()
-        if lock.withLock({ failed }) { throw MixdownError.writerFailed }
+        let copier = ScreencastSampleCopier(
+            reader: reader, writer: writer, pairs: pairs.map { (output: $0.0, input: $0.1) },
+            label: "com.serp.keybumps.screencast.mixdown", qos: .utility, isCancelled: isCancelled
+        )
+        let done = DispatchSemaphore(value: 0)
+        copier.run { done.signal() }
+        done.wait()
+        guard copier.didStop else { return }
+        throw isCancelled() ? CancellationError() : writerFailure(writer.error)
     }
 }

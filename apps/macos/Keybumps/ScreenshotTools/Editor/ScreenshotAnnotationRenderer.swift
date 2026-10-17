@@ -53,8 +53,8 @@ struct ScreenshotRenderSource {
 final class ScreenshotAnnotationRenderer {
     /// Pixelate block size in points; never smaller than `minimumPixelateBlock`
     /// so text under a mosaic cannot be recovered.
-    static let pixelateBlock: CGFloat = 14
-    static let minimumPixelateBlock: CGFloat = 10
+    nonisolated static let pixelateBlock: CGFloat = 14
+    nonisolated static let minimumPixelateBlock: CGFloat = 10
     static let redactColor = CGColor(red: 0, green: 0, blue: 0, alpha: 1)
     static let failureFill = CGColor(red: 0.5, green: 0.5, blue: 0.5, alpha: 1)
 
@@ -169,17 +169,24 @@ final class ScreenshotAnnotationRenderer {
             image = override(cropped)
         } else {
             let block = max(Self.pixelateBlock, Self.minimumPixelateBlock) * source.density
-            let output = clamped
-                .applyingFilter("CIBoxBlur", parameters: [kCIInputRadiusKey: max(block / 2, 1)])
-                .applyingFilter("CIPixellate", parameters: [
-                    kCIInputScaleKey: block,
-                    kCIInputCenterKey: CIVector(x: extent.minX, y: extent.maxY)
-                ])
-                .cropped(to: extent)
+            let output = Self.mosaic(input, block: block)
             image = Self.ciContext.createCGImage(output, from: extent, format: .RGBA8, colorSpace: colorSpace)
         }
         guard let image else { return nil }
         return Tile(image: image, fill: averageColor(of: clamped.cropped(to: extent), colorSpace: colorSpace))
+    }
+
+    /// `image` as a mosaic of `block`-pixel squares, each the mean of what it covers, lined up from
+    /// its top left and no bigger than it: the Screenshot Editor's Blur, and a recording's (#517).
+    nonisolated static func mosaic(_ image: CIImage, block: CGFloat) -> CIImage {
+        let extent = image.extent
+        return image.clampedToExtent()
+            .applyingFilter("CIBoxBlur", parameters: [kCIInputRadiusKey: max(block / 2, 1)])
+            .applyingFilter("CIPixellate", parameters: [
+                kCIInputScaleKey: block,
+                kCIInputCenterKey: CIVector(x: extent.minX, y: extent.maxY)
+            ])
+            .cropped(to: extent)
     }
 
     private func averageColor(of image: CIImage, colorSpace: CGColorSpace) -> CGColor {
