@@ -37,6 +37,22 @@ final class ApplicationUsageStore {
         return folder.appendingPathComponent("application-usage.json", isDirectory: false)
     }
 
+    /// Adds the usage learned under `oldKey` to `newKey`'s in the file at `url`, and removes
+    /// `oldKey`, for a command whose ID is retired (#489). Run before a store reads the file. Learned
+    /// ranking is optional, so a file that can't be read or written is left as it is.
+    static func moveUsage(from oldKey: String, to newKey: String, at url: URL) {
+        guard let data = try? Data(contentsOf: url),
+              var stored = try? JSONDecoder().decode([String: ApplicationUsageRecord].self, from: data),
+              let moved = stored.removeValue(forKey: oldKey)
+        else { return }
+        let kept = stored[newKey]
+        stored[newKey] = ApplicationUsageRecord(
+            launchCount: (kept?.launchCount ?? 0) + moved.launchCount,
+            lastOpenedAt: max(kept?.lastOpenedAt ?? moved.lastOpenedAt, moved.lastOpenedAt)
+        )
+        try? JSONEncoder().encode(stored).write(to: url, options: .atomic)
+    }
+
     func record(_ result: QuickSearchResult) {
         guard result.kind == .application else { return }
         record(key: result.url.standardizedFileURL.path)
