@@ -318,7 +318,8 @@ final class ReviewFixture {
         context: ScreencastCaptureContext = .none,
         contextRead: Task<ScreencastCaptureContext, Never>? = nil,
         fileManager: FileManager = .default,
-        keepOutOfClipboardHistory: (() -> Void)? = nil
+        keepOutOfClipboardHistory: (() -> Void)? = nil,
+        export: ScreencastEditExport = .movies
     ) -> ScreencastReviewModel {
         let pasteboard = pasteboard
         let model = ScreencastReviewModel(
@@ -329,7 +330,8 @@ final class ReviewFixture {
             fileManager: fileManager,
             pasteboard: pasteboard,
             keepOutOfClipboardHistory: keepOutOfClipboardHistory ?? { [weak self] in self?.suppressions.append(pasteboard.changeCount) },
-            now: { Self.reviewDate }
+            now: { Self.reviewDate },
+            export: export
         )
         model.onFinish = { [weak self] in self?.outcomes.append($0) }
         return model

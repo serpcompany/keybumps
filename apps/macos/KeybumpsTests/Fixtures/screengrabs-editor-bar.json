@@ -46,7 +46,7 @@
         "title" : "Save"
       }
     ],
-    "hasHistory" : false,
+    "hasHistory" : true,
     "state" : "reviewing",
     "window" : "recording"
   },
@@ -67,9 +67,86 @@
         "title" : "Discard"
       }
     ],
-    "hasHistory" : false,
+    "hasHistory" : true,
     "question" : "Discard this recording?",
     "state" : "askingToDiscard",
+    "window" : "recording"
+  },
+  {
+    "actions" : [
+      {
+        "help" : "Delete this recording",
+        "identifier" : "screencast.review.discard",
+        "isDefault" : false,
+        "style" : "destructive",
+        "title" : "Discard"
+      },
+      {
+        "help" : "Save, and copy the recording’s file (⌘C)",
+        "identifier" : "screencast.review.copy",
+        "isDefault" : false,
+        "key" : "⌘C",
+        "style" : "standard",
+        "title" : "Copy"
+      },
+      {
+        "help" : "Keep the recording in the recordings folder (Return)",
+        "identifier" : "screencast.review.save",
+        "isDefault" : true,
+        "key" : "↩",
+        "style" : "prominent",
+        "title" : "Save"
+      }
+    ],
+    "hasHistory" : true,
+    "state" : "trimming",
+    "tools" : [
+      {
+        "identifier" : "screencast.review.tool.trim",
+        "isSelected" : true,
+        "key" : "t",
+        "number" : "1",
+        "title" : "Trim"
+      }
+    ],
+    "window" : "recording"
+  },
+  {
+    "actions" : [
+      {
+        "help" : "Save the recording without the edits",
+        "identifier" : "screencast.review.keepOriginal",
+        "isDefault" : false,
+        "style" : "standard",
+        "title" : "Keep Original"
+      },
+      {
+        "help" : "Save the recording with the edits (Return)",
+        "identifier" : "screencast.review.saveEdited",
+        "isDefault" : true,
+        "key" : "↩",
+        "style" : "prominent",
+        "title" : "Save Edited"
+      }
+    ],
+    "hasHistory" : true,
+    "question" : "Save your edits?",
+    "state" : "askingToSaveEdits",
+    "window" : "recording"
+  },
+  {
+    "actions" : [
+      {
+        "help" : "Stop exporting; the original stays as it was (Esc)",
+        "identifier" : "screencast.review.cancelExport",
+        "isDefault" : false,
+        "key" : "esc",
+        "style" : "standard",
+        "title" : "Cancel"
+      }
+    ],
+    "hasHistory" : true,
+    "state" : "exporting",
     "window" : "recording"
   }
 ]

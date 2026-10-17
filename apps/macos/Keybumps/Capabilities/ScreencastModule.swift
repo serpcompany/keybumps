@@ -148,6 +148,7 @@ final class ScreencastModule {
         }
         recordingControls.apply(context)
         overlays.apply(context)
+        if isOn { review.recoverInterruptedExports(in: context.preferences.screencast.capturesFolder) }
     }
 
     /// ScreenGrabs turned off, or Keybumps Locked: the picker closes and a countdown is cancelled,
