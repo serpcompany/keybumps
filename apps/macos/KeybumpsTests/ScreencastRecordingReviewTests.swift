@@ -106,7 +106,7 @@ struct ScreencastRecordingReviewTests {
         #expect(window.level == .normal && window.collectionBehavior.isSuperset(of: [.managed, .participatesInCycle]))
         #expect(window.collectionBehavior.contains(.fullScreenAuxiliary), "it opens over a full-screen app")
         #expect(!window.isRestorable, "nothing to put back at launch")
-        #expect(window.minSize == CGSize(width: 640, height: 400))
+        #expect(window.minSize == CGSize(width: 760, height: 400))
         #expect(window.identifier?.rawValue == "screencast.review.window")
         #expect(!window.canBecomeKey && !window.canBecomeMain && !window.isReleasedWhenClosed)
     }
@@ -213,10 +213,10 @@ struct ScreencastRecordingReviewTests {
         #expect(ScreencastRecordingReviewWindow.frame(in: laptop) == CGRect(x: 16, y: 41, width: 1_480, height: 913))
         let external = CGRect(x: -1_920, y: 0, width: 1_920, height: 1_080)
         #expect(ScreencastRecordingReviewWindow.frame(in: external) == CGRect(x: -1_904, y: 16, width: 1_888, height: 1_048))
-        let small = CGRect(x: 0, y: 0, width: 660, height: 420)
-        #expect(ScreencastRecordingReviewWindow.frame(in: small) == CGRect(x: 10, y: 10, width: 640, height: 400))
-        let tiny = CGRect(x: 0, y: 0, width: 600, height: 380)
-        #expect(ScreencastRecordingReviewWindow.frame(in: tiny) == CGRect(x: 0, y: 0, width: 600, height: 380))
+        let small = CGRect(x: 0, y: 0, width: 780, height: 420)
+        #expect(ScreencastRecordingReviewWindow.frame(in: small) == CGRect(x: 10, y: 10, width: 760, height: 400))
+        let tiny = CGRect(x: 0, y: 0, width: 720, height: 380)
+        #expect(ScreencastRecordingReviewWindow.frame(in: tiny) == CGRect(x: 0, y: 0, width: 720, height: 380))
     }
 
     @Test("The window opens filling the screen with the pointer")
@@ -654,7 +654,7 @@ struct ScreencastRecordingReviewTests {
         #expect(copyKey(.command, confirming: true) == .ignore, "never while Discard is asked")
         #expect(copyKey([.command, .shift]) == .pass)
         #expect(copyKey([.command, .option]) == .pass)
-        #expect(copyKey([]) == .pass, "C alone does nothing")
+        #expect(copyKey([]) == .tool(.crop), "C alone picks Crop (#517), never copies")
         #expect(copyKey(.command, "v") == .pass)
 
         // The layout's C wherever it is, or the C key on a layout with no Latin letters, as menus do.

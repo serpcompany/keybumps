@@ -36,7 +36,9 @@ final class ScreencastReviewModel {
     }
     private(set) var guess: ScreencastRepositoryGuess?
     /// The display shown, for a recording of every display.
-    var selectedDisplay = 0
+    var selectedDisplay = 0 {
+        didSet { followPickedBlur() }
+    }
     /// Discard asked "Discard this recording?" and waits for Discard or Keep.
     private(set) var isConfirmingDiscard = false
     /// Save or Copy is writing files.
@@ -59,6 +61,11 @@ final class ScreencastReviewModel {
     private(set) var exportProgress: Double?
     /// Why the edited recording wasn't written, until the next action.
     private(set) var exportFailure: ScreencastExportFailure?
+    /// The blur picked on the shown display, which Strength, Delete, and its handles change.
+    private(set) var selectedBlurID: Int?
+    /// What Strength shows with no blur picked, and the next blur drawn takes: the last picked in
+    /// Strength, or the last strength Strength showed for a picked blur (`followPickedBlur()`).
+    private var nextBlurStrength: ScreencastBlurStrength = .high
 
     /// Called once, when the review is done with the capture.
     @ObservationIgnored var onFinish: ((ScreencastReviewOutcome) -> Void)?
@@ -291,8 +298,8 @@ final class ScreencastReviewModel {
     /// The tools and their options take edits only while nothing else is under way or asked.
     var acceptsEdits: Bool { acceptsActions && !isConfirmingDiscard && !isAskingToSaveEdits }
 
-    /// The timeline shows under the player while Trim is picked.
-    var showsTimeline: Bool { tool == .trim }
+    /// The timeline shows under the player while Trim or Blur is picked (decision 1).
+    var showsTimeline: Bool { tool == .trim || tool == .blur }
 
     /// Picks `tool`, or puts it down if it's picked.
     func pick(_ tool: ScreencastEditTool) {
@@ -338,8 +345,10 @@ final class ScreencastReviewModel {
     }
 
     /// A drag starts: its changes are one edit, made when it ends, or when something else happens
-    /// first (a tool picked or put down, undo, redo, another edit, Save), since the drag may then
-    /// never say it ended. A drag that goes on after that is a new one.
+    /// first (a tool picked or put down, undo, redo, another edit, a blur picked, Save), since the
+    /// drag may then never say it ended. A drag that goes on after that changes nothing until it
+    /// begins again. Crop's and Blur's begin only as the press starts, so the rest of a press cut
+    /// short changes nothing.
     func beginDrag() {
         guard acceptsEdits, editsBeforeDrag == nil else { return }
         editsBeforeDrag = edits
@@ -365,6 +374,7 @@ final class ScreencastReviewModel {
         self.edits = edits
         trimSelection = nil
         editRevision += 1
+        followPickedBlur()
     }
 
     // MARK: Trim (#517)
@@ -404,6 +414,146 @@ final class ScreencastReviewModel {
             edits.resetTrim()
             return true
         }
+    }
+
+    // MARK: Crop (#517)
+
+    /// The shown display's video's size in pixels.
+    var pixelSize: CGSize {
+        guard let video = currentVideo else { return .zero }
+        return CGSize(width: video.pixelWidth, height: video.pixelHeight)
+    }
+
+    /// The shown display's edits.
+    private var shownEdits: ScreencastDisplayEdits {
+        edits.displays.indices.contains(selectedDisplay) ? edits.displays[selectedDisplay] : ScreencastDisplayEdits()
+    }
+
+    /// The shown display's crop, in fractions of its frame: the whole frame without one.
+    var crop: CGRect { shownEdits.crop ?? ScreencastFrameRect.whole }
+
+    /// The shown display is cropped.
+    var hasCrop: Bool { shownEdits.crop != nil }
+
+    /// Crop's shape on the shown display, kept while its handles are dragged; part of the edits, so
+    /// undo, redo, and Reset Crop take it with the crop.
+    var cropAspect: ScreencastCropAspect { shownEdits.cropAspect }
+
+    /// The crop in the shown video's pixels, as Save writes it.
+    var cropPixels: CGRect {
+        shownEdits.cropPixels(width: Int(pixelSize.width), height: Int(pixelSize.height))
+    }
+
+    /// The part of the shown frame the player shows, in fractions: all of it while Crop is picked,
+    /// to place the crop over it, and otherwise the crop as Save writes it.
+    var shownFrame: CGRect {
+        let size = pixelSize
+        guard tool != .crop, shownEdits.crop != nil, size.width > 0, size.height > 0 else { return ScreencastFrameRect.whole }
+        let pixels = cropPixels
+        return CGRect(
+            x: pixels.minX / size.width, y: pixels.minY / size.height,
+            width: pixels.width / size.width, height: pixels.height / size.height
+        )
+    }
+
+    /// A shape in Crop's segmented control: the largest crop of that shape, centered where the crop
+    /// is. Free keeps the crop and lets its sides move on their own.
+    func setCropAspect(_ aspect: ScreencastCropAspect) {
+        guard acceptsEdits else { return }
+        let display = selectedDisplay
+        let reshaped = ScreencastFrameRect.crop(aspect, around: crop, pixelSize: pixelSize)
+        edit { $0.setCrop(reshaped, aspect: aspect, display: display) }
+    }
+
+    /// Reset Crop: the whole frame again, Free.
+    func resetCrop() {
+        let display = selectedDisplay
+        edit { $0.setCrop(nil, display: display) }
+    }
+
+    /// A crop handle, or the crop, dragged to `rect`, after `beginDrag`: one edit when the drag ends.
+    func dragCrop(to rect: CGRect) {
+        let display = selectedDisplay
+        dragEdit { $0.setCrop(rect, display: display) }
+    }
+
+    // MARK: Blur (#517)
+
+    /// The shown display's blurs, in the order drawn.
+    var blurs: [ScreencastBlur] { shownEdits.blurs }
+
+    /// The picked blur, if it's on the shown display.
+    var selectedBlur: ScreencastBlur? { blurs.first { $0.id == selectedBlurID } }
+
+    /// What Strength shows, and the next blur drawn takes: the picked blur's, as the edits have it
+    /// after undo, redo, or a display switch; with none picked, the last Strength showed or picked.
+    var blurStrength: ScreencastBlurStrength { selectedBlur?.strength ?? nextBlurStrength }
+
+    /// Draws a blur over `rect` on the shown display, at the strength Strength shows, showing for the
+    /// whole recording, and picks it.
+    func addBlur(_ rect: CGRect) {
+        let display = selectedDisplay
+        let strength = blurStrength
+        nextBlurStrength = strength
+        var added: Int?
+        edit { edits in
+            added = edits.addBlur(rect, strength: strength, display: display)
+            return added != nil
+        }
+        if let added { selectedBlurID = added }
+    }
+
+    /// Picks the blur `id`, or none. A drag under way ends first: its handles are the picked blur's.
+    func selectBlur(_ id: Int?) {
+        guard acceptsEdits else { return }
+        endDrag()
+        selectedBlurID = id.flatMap { id in blurs.contains { $0.id == id } ? id : nil }
+        followPickedBlur()
+    }
+
+    /// Keeps the next blur's strength at what Strength shows while a blur is picked, as the edits
+    /// have it after undo, redo, or a display switch, so a blur drawn next, or after the picked one
+    /// goes, takes the strength Strength last showed: never one it didn't.
+    private func followPickedBlur() {
+        if let selectedBlur { nextBlurStrength = selectedBlur.strength }
+    }
+
+    /// Tab: picks the next blur drawn, after the last the first.
+    func selectNextBlur() {
+        let blurs = blurs
+        guard !blurs.isEmpty else { return }
+        let index = blurs.firstIndex { $0.id == selectedBlurID }.map { ($0 + 1) % blurs.count } ?? 0
+        selectBlur(blurs[index].id)
+    }
+
+    /// Strength: the picked blur's, and the next one drawn.
+    func setBlurStrength(_ strength: ScreencastBlurStrength) {
+        guard acceptsEdits else { return }
+        nextBlurStrength = strength
+        guard let id = selectedBlur?.id else { return }
+        let display = selectedDisplay
+        edit { $0.setBlurStrength(id, display: display, to: strength) }
+    }
+
+    /// Delete, or ⌫: takes the picked blur off.
+    func deleteSelectedBlur() {
+        guard let id = selectedBlur?.id else { return }
+        let display = selectedDisplay
+        edit { $0.removeBlur(id, display: display) }
+        if selectedBlur == nil { selectedBlurID = nil }
+    }
+
+    /// The blur `id` moved or resized to `rect`, after `beginDrag`: one edit when the drag ends.
+    func dragBlur(_ id: Int, to rect: CGRect) {
+        let display = selectedDisplay
+        dragEdit { $0.setBlurRect(id, display: display, to: rect) }
+    }
+
+    /// An end of the blur `id`'s bar on the timeline dragged to `time`, after `beginDrag`: one edit
+    /// when the drag ends.
+    func dragBlurTime(_ id: Int, edge: ScreencastTimeEdge, to time: Double) {
+        let display = selectedDisplay
+        dragEdit { $0.setBlurTime(id, display: display, edge: edge, to: time) }
     }
 
     // MARK: Saving the edits (#517)

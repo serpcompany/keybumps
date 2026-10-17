@@ -191,6 +191,8 @@ struct ScreencastDisplayEdits: Equatable, Sendable {
     /// The part of the frame kept, in fractions of its width and height from its top left; nil keeps
     /// all of it.
     var crop: CGRect?
+    /// The shape Crop's handles keep, picked in Aspect; it changes nothing written.
+    var cropAspect: ScreencastCropAspect = .free
     /// In the order drawn; a later one draws over an earlier one.
     var blurs: [ScreencastBlur] = []
 

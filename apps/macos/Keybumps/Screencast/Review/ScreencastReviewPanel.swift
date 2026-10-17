@@ -313,7 +313,8 @@ final class ScreencastReviewPanel {
                 tool: model.tool,
                 isExporting: model.isExporting,
                 isAskingToSaveEdits: model.isAskingToSaveEdits,
-                hasExportFailure: model.exportFailure != nil
+                hasExportFailure: model.exportFailure != nil,
+                hasBlurs: !model.blurs.isEmpty
             )
         )
     }
@@ -342,6 +343,8 @@ final class ScreencastReviewPanel {
         case .cutSelection: if !isRepeat { model.cutSelection() }
         case .markIn: model.markSelectionStart(at: playback?.recordingTime ?? 0)
         case .markOut: model.markSelectionEnd(at: playback?.recordingTime ?? 0)
+        case .deleteBlur: if !isRepeat { model.deleteSelectedBlur() }
+        case .selectNextBlur: model.selectNextBlur()
         case .cancelExport: model.cancelExport()
         case .dismissQuestion: model.dismissSaveQuestion()
         case .saveEdited: if !isRepeat { Task { await model.saveEdited() } }
@@ -362,8 +365,9 @@ final class ScreencastReviewPanel {
 /// claims it.
 ///
 /// Editing (#517): a tool's number or letter picks it, ⌘Z and ⇧⌘Z undo and redo, and with Trim
-/// picked, ⌫ cuts the selection and I and O start and end it at the playhead. Escape puts the picked
-/// tool down before it closes anything. While "Save your edits?" is asked, Return saves the edits and
+/// picked, ⌫ cuts the selection and I and O start and end it at the playhead. With Blur picked, ⌫
+/// deletes the picked blur and Tab picks the next one, while there are blurs and no control in the
+/// bar has the keyboard. Escape puts the picked tool down before it closes anything. While "Save your edits?" is asked, Return saves the edits and
 /// Escape goes back; while the edited recording is written, Escape stops it and only Space still
 /// works; after it failed, Return tries again.
 enum ScreencastReviewKey: Equatable {
@@ -392,6 +396,10 @@ enum ScreencastReviewKey: Equatable {
     /// I and O with Trim picked: the selection starts, or ends, at the playhead.
     case markIn
     case markOut
+    /// ⌫ with Blur picked: deletes the picked blur.
+    case deleteBlur
+    /// Tab with Blur picked: picks the next blur.
+    case selectNextBlur
     /// Escape while the edited recording is written.
     case cancelExport
     /// Escape while "Save your edits?" is asked: back to editing.
@@ -407,6 +415,8 @@ enum ScreencastReviewKey: Equatable {
         var isExporting = false
         var isAskingToSaveEdits = false
         var hasExportFailure = false
+        /// The shown display has blurs.
+        var hasBlurs = false
 
         static let none = Editing()
     }
@@ -451,7 +461,10 @@ enum ScreencastReviewKey: Equatable {
             return held.contains(.shift) ? .redo : .undo
         }
         guard modifiers.intersection([.command, .control, .option]).isEmpty else { return .pass }
-        if keyCode == tabKeyCode { return .tab }
+        if keyCode == tabKeyCode {
+            let picksBlur = editing.tool == .blur && editing.hasBlurs && !isAsking && !controlHasKeyboard && !modifiers.contains(.shift)
+            return picksBlur ? .selectNextBlur : .tab
+        }
         if keyCode == spaceKeyCode { return modifiers.contains(.shift) || controlHasKeyboard ? .pass : .togglePlay }
         if keyCode == escapeKeyCode {
             if isConfirmingDiscard { return .keep }
@@ -464,6 +477,7 @@ enum ScreencastReviewKey: Equatable {
             return editing.hasExportFailure ? .tryAgain : .save
         }
         guard !isAsking, !modifiers.contains(.shift) else { return .pass }
+        if editing.tool == .blur, deleteKeyCodes.contains(keyCode) { return .deleteBlur }
         if editing.tool == .trim {
             if deleteKeyCodes.contains(keyCode) { return .cutSelection }
             switch characters?.lowercased() {
@@ -557,7 +571,7 @@ final class ScreencastReviewPlayback {
 
     @ObservationIgnored private let player = AVPlayer()
     @ObservationIgnored private var shown: URL?
-    /// The edits the shown item plays, and the parts of the recording it plays.
+    /// What the shown item plays of the edits (`played`), and the parts of the recording it plays.
     @ObservationIgnored private var shownEdits: ScreencastRecordingEdits?
     @ObservationIgnored private var shownDisplay = 0
     @ObservationIgnored private var kept: [ScreencastTimeRange] = []
@@ -584,10 +598,11 @@ final class ScreencastReviewPlayback {
     }
 
     /// Shows `display`'s `video` with `edits`, keeping the place in the recording; the recording as
-    /// it was when they change nothing.
-    func show(_ video: ScreencastVideo, display: Int, edits: ScreencastRecordingEdits?) {
+    /// it was when they change nothing. `crops` false shows the whole frame, for placing the crop.
+    /// It loads again only when what plays changes: not for Crop picked or put down without a crop.
+    func show(_ video: ScreencastVideo, display: Int, edits: ScreencastRecordingEdits?, crops: Bool = true) {
         let url = video.forSharing
-        let edits = edits.flatMap { Self.changes(display: display, of: $0) ? $0 : nil }
+        let edits = edits.flatMap { Self.played(display: display, of: $0, crops: crops) }
         guard shown != url || player.currentItem == nil || shownEdits != edits || shownDisplay != display else { return }
         let isNewVideo = shown != url
         let place = recordingTime
@@ -607,7 +622,7 @@ final class ScreencastReviewPlayback {
         guard edits.keepsSomething(of: video) else { return showBlank(.nothingKept) }
         let generation = generation
         Task { [weak self] in
-            let edit = try? await ScreencastEditComposition.make(source: url, edits: edits, display: display)
+            let edit = try? await ScreencastEditComposition.make(source: url, edits: edits, display: display, crops: crops)
             guard let self, self.generation == generation else { return }
             guard let edit else { return self.showBlank(.cannotPlay) }
             let item = AVPlayerItem(asset: edit.composition)
@@ -625,9 +640,27 @@ final class ScreencastReviewPlayback {
         blank = reason
     }
 
-    /// Whether `edits` change what `display`'s video plays.
-    private static func changes(display: Int, of edits: ScreencastRecordingEdits) -> Bool {
-        edits.isTrimmed || (edits.displays.indices.contains(display) && !edits.displays[display].isEmpty)
+    /// What `display`'s video plays of `edits`: the trim and cuts, and its blurs, and its crop if
+    /// `crops`, without what plays the same (the other displays' edits, Crop's shape); nil when
+    /// that's the recording as it was.
+    static func played(display: Int, of edits: ScreencastRecordingEdits, crops: Bool = true) -> ScreencastRecordingEdits? {
+        guard changes(display: display, of: edits, crops: crops) else { return nil }
+        var played = edits
+        for index in played.displays.indices {
+            let shown = played.displays[index]
+            played.displays[index] = index == display
+                ? ScreencastDisplayEdits(crop: crops ? shown.crop : nil, blurs: shown.blurs)
+                : ScreencastDisplayEdits()
+        }
+        return played
+    }
+
+    /// Whether `edits` change what `display`'s video plays; its crop only if `crops`.
+    static func changes(display: Int, of edits: ScreencastRecordingEdits, crops: Bool = true) -> Bool {
+        guard !edits.isTrimmed else { return true }
+        guard edits.displays.indices.contains(display) else { return false }
+        let displayEdits = edits.displays[display]
+        return !displayEdits.blurs.isEmpty || (crops && displayEdits.crop != nil)
     }
 
     func pause() { player.pause() }

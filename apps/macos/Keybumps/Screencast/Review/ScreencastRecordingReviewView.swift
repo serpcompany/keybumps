@@ -22,6 +22,14 @@ enum ScreencastReviewID {
     static let length = "screencast.review.length"
     static let resetTrim = "screencast.review.resetTrim"
     static let timeline = "screencast.review.timeline"
+    /// Crop's and Blur's options, and what they draw over the video (#517).
+    static let cropAspect = "screencast.review.cropAspect"
+    static let resetCrop = "screencast.review.resetCrop"
+    static let cropOverlay = "screencast.review.cropOverlay"
+    static let blurStrength = "screencast.review.blurStrength"
+    static let deleteBlur = "screencast.review.deleteBlur"
+    static let blurOverlay = "screencast.review.blurOverlay"
+    static let blurLanes = "screencast.review.blurLanes"
     /// Saving the edits (#517): the export's progress and Cancel, "Save your edits?" with Keep
     /// Original and Save Edited, and a failure's Save Original and Try Again.
     static let exportProgress = "screencast.review.exportProgress"
@@ -39,9 +47,10 @@ enum ScreencastReviewID {
 /// A recording's review window's content (#475), after Snapzy's Video Editor (BSD-3-Clause, see
 /// LICENSE.snapzy): the bar the Screenshot Editor has too (`ScreencastRecordingReviewBar`, #511),
 /// then the player edge to edge, `AVPlayerView` with its own controls along its bottom for play,
-/// pause, and scrubbing, the video fitted to it, playing the edits (#517). Picking Trim opens the
-/// timeline under it. Save and Copy close the window, and the notch says where it was saved, or that
-/// it was copied. No note, type, or repository.
+/// pause, and scrubbing, the video fitted to it, playing the edits (#517). Picking Trim or Blur opens
+/// the timeline under it, and Crop and Blur draw over the video (`ScreencastEditOverlay`). Save and
+/// Copy close the window, and the notch says where it was saved, or that it was copied. No note,
+/// type, or repository.
 struct ScreencastRecordingReviewView: View {
     let model: ScreencastReviewModel
     /// The player, for a window on screen; nil under the unit-test host.
@@ -63,6 +72,12 @@ struct ScreencastRecordingReviewView: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .background(Color.black)
                             .allowsHitTesting(false)
+                    }
+                }
+                .overlay {
+                    // Crop's and Blur's rectangles over the video (#517).
+                    if model.tool == .crop || model.tool == .blur {
+                        ScreencastEditOverlay(model: model, playback: playback)
                     }
                 }
                 .overlay(alignment: .top) {
@@ -104,9 +119,12 @@ struct ScreencastRecordingReviewView: View {
         .onChange(of: model.isWorking) { _, isWorking in
             if isWorking { playback?.pause() }
         }
-        .onChange(of: model.showsTimeline) { _, shows in
-            // A handle's drag cut short by the tool going never says it ended.
-            if !shows { playback?.endPreview() }
+        .onChange(of: model.tool) { _, tool in
+            // A trim handle's drag cut short by the tool changing never says it ended. By the
+            // tool, not the timeline, since the timeline stays from Trim to Blur.
+            playback?.endPreview()
+            // Crop places the crop on a still frame (#517).
+            if tool == .crop { playback?.pause() }
         }
     }
 }
@@ -265,15 +283,17 @@ private struct ScreencastReviewPlayer: View {
                 .onAppear { showCurrentVideo() }
                 .onChange(of: model.selectedDisplay) { showCurrentVideo() }
                 .onChange(of: model.editRevision) { showCurrentVideo() }
+                .onChange(of: model.tool) { showCurrentVideo() }
         } else {
             Color.black
         }
     }
 
-    /// The selected display's video, with the edits.
+    /// The selected display's video, with the edits: the whole frame while Crop is picked, to place
+    /// the crop over it.
     private func showCurrentVideo() {
         guard let playback, let video = model.currentVideo else { return }
-        playback.show(video, display: model.selectedDisplay, edits: model.edits)
+        playback.show(video, display: model.selectedDisplay, edits: model.edits, crops: model.tool != .crop)
     }
 }
 

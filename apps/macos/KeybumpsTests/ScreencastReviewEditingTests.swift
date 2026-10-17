@@ -40,11 +40,11 @@ struct ScreencastReviewEditingTests {
 
     // MARK: Tools and history
 
-    @Test("The bar's one tool so far is Trim, number 1 and T; picking it shows the timeline, and picking it again or Escape puts it down")
+    @Test("Trim is the bar's first tool, number 1 and T; picking it shows the timeline, and picking it again or Escape puts it down")
     func trimTool() throws {
         defer { fixture.tearDown() }
-        let tools = ScreencastEditTool.allCases.map(\.title)
-        #expect(tools == ["Trim"])
+        let first = ScreencastEditTool.allCases.first
+        #expect(first == .trim)
         let byNumber = ScreencastEditTool.matching(key: "1")
         #expect(byNumber == .trim)
         let byLetter = ScreencastEditTool.matching(key: "T")

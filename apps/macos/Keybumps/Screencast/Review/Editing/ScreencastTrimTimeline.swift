@@ -33,7 +33,11 @@ struct ScreencastTimelineGeometry: Equatable {
 /// trimmed ends stay on the strip, dimmed, so they can be dragged back. Drag across the strip to
 /// select a part, then Cut Section or ⌫ cuts it; a cut stays on the strip, hatched, with Restore. A
 /// click on the strip or the ruler moves the playhead there.
+///
+/// Blur opens it too, without the trim's frame: the shown display's blurs have their bars under the
+/// strip (`ScreencastBlurLanes`), and a click or drag on the strip moves the playhead.
 struct ScreencastTrimTimeline: View {
+    /// Its height without blurs' bars.
     static let height: CGFloat = 104
     static let rulerTop: CGFloat = 8
     static let stripTop: CGFloat = 36
@@ -46,19 +50,33 @@ struct ScreencastTrimTimeline: View {
     /// Where a drag across the strip started, in the recording's time.
     @State private var selectionStart: Double?
 
+    /// Its height with `lanes` blurs' bars under the strip.
+    static func height(blurLanes lanes: Int) -> CGFloat {
+        lanes == 0 ? height : stripTop + stripHeight + 4 + ScreencastBlurLanes.height(lanes: lanes) + 8
+    }
+
+    private var isTrimming: Bool { model.tool == .trim }
+
     var body: some View {
+        let height = Self.height(blurLanes: model.blurs.count)
         GeometryReader { proxy in
             let geometry = ScreencastTimelineGeometry(duration: model.edits.duration, width: proxy.size.width)
             ZStack(alignment: .topLeading) {
                 ruler(geometry)
                 strip(geometry)
-                trimFrame(geometry)
-                pills(geometry)
-                ScreencastTimelinePlayhead(playback: playback, geometry: geometry)
+                if !model.blurs.isEmpty {
+                    ScreencastBlurLanes(model: model, geometry: geometry, isEditable: model.tool == .blur)
+                        .offset(y: Self.stripTop + Self.stripHeight + 4)
+                }
+                if isTrimming {
+                    trimFrame(geometry)
+                    pills(geometry)
+                }
+                ScreencastTimelinePlayhead(playback: playback, geometry: geometry, height: height - 12)
             }
             .coordinateSpace(name: Self.space)
         }
-        .frame(height: Self.height)
+        .frame(height: height)
         .background(Color(nsColor: .underPageBackgroundColor))
         .overlay(alignment: .top) { Divider() }
         .accessibilityElement(children: .contain)
@@ -131,7 +149,8 @@ struct ScreencastTrimTimeline: View {
         .frame(width: width, height: Self.stripHeight, alignment: .topLeading)
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         .contentShape(Rectangle())
-        .gesture(selectionGesture(geometry))
+        .gesture(isTrimming ? selectionGesture(geometry) : nil)
+        .gesture(isTrimming ? nil : scrubGesture(geometry))
         .offset(x: ScreencastTimelineGeometry.inset, y: Self.stripTop)
     }
 
@@ -166,6 +185,14 @@ struct ScreencastTrimTimeline: View {
                 defer { selectionStart = nil }
                 guard abs(value.translation.width) < 3 else { return }
                 model.selectForCut(nil)
+                playback?.seek(toRecordingTime: geometry.time(atX: value.location.x + ScreencastTimelineGeometry.inset))
+            }
+    }
+
+    /// Without Trim, a click or drag on the strip moves the playhead.
+    private func scrubGesture(_ geometry: ScreencastTimelineGeometry) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
                 playback?.seek(toRecordingTime: geometry.time(atX: value.location.x + ScreencastTimelineGeometry.inset))
             }
     }
@@ -277,6 +304,7 @@ struct ScreencastTrimTimeline: View {
 private struct ScreencastTimelinePlayhead: View {
     let playback: ScreencastReviewPlayback?
     let geometry: ScreencastTimelineGeometry
+    let height: CGFloat
 
     var body: some View {
         let x = geometry.x(playback?.recordingTime ?? 0)
@@ -287,7 +315,7 @@ private struct ScreencastTimelinePlayhead: View {
         }
         .foregroundStyle(Color.primary)
         .shadow(color: Color(nsColor: .windowBackgroundColor).opacity(0.75), radius: 0.5)
-        .frame(width: 12, height: ScreencastTrimTimeline.height - 12)
+        .frame(width: 12, height: height)
         .offset(x: x - 6, y: 6)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
