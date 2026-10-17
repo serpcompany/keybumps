@@ -190,6 +190,24 @@ struct ScreenshotClipboardTests {
         #expect(written.count == 3 && off.clipboard.entries.isEmpty)
     }
 
+    @Test("A cancelled Area capture leaves its path to the watcher, so a macOS screenshot there still reaches ⌘3")
+    func cancelledAreaFreesItsPath() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let capture = HotkeyCapture(fixture)
+        defer { capture.watcher.stop() }
+        capture.runner.writes = false
+        capture.delivery.capture(.area, with: capture.capturer, watcher: capture.watcher)
+        capture.runner.finish?()
+
+        let path = try #require(capture.runner.files.first)
+        FileManager.default.createFile(atPath: path, contents: ScreenshotClipboardTests.png)
+        HeldRunner.mark(path)
+        capture.scan()
+        let listed = ScreenshotPaletteContent.resolve(entries: fixture.clipboard.entries, query: "", isEnabled: true)
+        #expect(listed.entries.compactMap(\.sourceURL?.standardizedFileURL.path) == [path], "⌘3")
+    }
+
     @Test("With the setting off, or for the Screen and Edit hotkey, screenshots reach Clipboard History but leave the clipboard alone")
     func leavesClipboardAloneWhenNotCopying() throws {
         let fixture = try Fixture()
@@ -260,23 +278,32 @@ struct ScreenshotClipboardTests {
         }
     }
 
+    /// `writes: false` stands in for an Area capture cancelled with Escape: no file.
     fileprivate final class HeldRunner: ScreenshotCaptureRunning {
         let png: Data
+        var writes = true
+        private(set) var files: [String] = []
         private(set) var finish: (@MainActor () -> Void)?
 
         init(png: Data) { self.png = png }
 
         func run(arguments: [String], completion: @escaping @MainActor () -> Void) {
-            let files = arguments.filter { $0.hasSuffix(".png") }
-            for file in files {
-                FileManager.default.createFile(atPath: file, contents: png + Data(file.utf8))
-            }
-            if let first = files.first, let mark = try? PropertyListSerialization.data(fromPropertyList: true, format: .binary, options: 0) {
-                _ = mark.withUnsafeBytes {
-                    setxattr(first, FileSystemScreenshotDirectoryReader.screenCaptureAttribute, $0.baseAddress, mark.count, 0, 0)
+            files = arguments.filter { $0.hasSuffix(".png") }
+            if writes {
+                for file in files {
+                    FileManager.default.createFile(atPath: file, contents: png + Data(file.utf8))
                 }
+                files.first.map(Self.mark)
             }
             finish = completion
+        }
+
+        /// Gives a file macOS's screen-capture metadata.
+        static func mark(_ path: String) {
+            guard let mark = try? PropertyListSerialization.data(fromPropertyList: true, format: .binary, options: 0) else { return }
+            _ = mark.withUnsafeBytes {
+                setxattr(path, FileSystemScreenshotDirectoryReader.screenCaptureAttribute, $0.baseAddress, mark.count, 0, 0)
+            }
         }
     }
 

@@ -149,12 +149,16 @@ struct ScreenshotClipboardDelivery {
         forEditing: Bool = false,
         completion: @escaping @MainActor ([URL]) -> Void = { _ in }
     ) {
-        capturer.capture(mode, willWrite: watcher.skip) { files in
+        var planned: [URL] = []
+        capturer.capture(mode, willWrite: { planned = $0; watcher.skip($0) }) { files in
             if forEditing {
                 _ = addForEditing(files)
             } else if case .watching = watcher.status {
                 addCapture(files)
             }
+            // After adding, so the watcher finds them in Clipboard History; and every planned
+            // path, written or not, so a later screenshot at one of them still reaches ⌘3.
+            watcher.stopSkipping(planned)
             completion(files)
         }
     }
@@ -235,10 +239,16 @@ class ScreenshotToolsService {
     func scanForTesting() { scan() }
 
     /// Leaves alone the files a Screengrabs hotkey is about to write; the hotkey adds them itself
-    /// once `screencapture` exits (`ScreenshotClipboardDelivery.capture`). Otherwise the watcher
-    /// could add the main display's file before the others are written, and copy it.
+    /// once `screencapture` exits (`ScreenshotClipboardDelivery.capture`), then calls
+    /// `stopSkipping`. Otherwise the watcher could add the main display's file before the others
+    /// are written, and copy it.
     func skip(_ files: [URL]) {
         skipped.formUnion(files.map(\.standardizedFileURL.path))
+    }
+
+    /// Ends `skip` for a finished capture's files, including any it didn't write.
+    func stopSkipping(_ files: [URL]) {
+        skipped.subtract(files.map(\.standardizedFileURL.path))
     }
 
     private func start() {
