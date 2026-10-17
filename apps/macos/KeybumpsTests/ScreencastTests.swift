@@ -166,11 +166,14 @@ struct ScreencastTests {
     @available(macOS 15, *)
     @Test("Record Screen counts down from the Countdown saved at plugin.screencast.countdown, read again at each open (#520)")
     func countdownFromSettings() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsCountdownReread-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
         let defaults = InMemoryDefaults()
         defaults.set("5", forKey: "plugin.screencast.countdown")
-        let preferences = AppPreferences(defaults: defaults)
+        let harness = WiringHarness(enabled: [.clipboardHistory, .screenshotTools], missing: nil, root: root, defaults: defaults)
         let overlays = FakeOverlays()
         let sleeper = ManualSleeper()
+        let preferences = harness.model.preferences
         let module = Self.moduleOnFakes(preferences: preferences, presenter: overlays, sleep: { try await sleeper.sleep($0) })
 
         module.start()
@@ -183,8 +186,8 @@ struct ScreencastTests {
         overlays.cancelTheCountdown()
         #expect(controller.phase == .idle)
 
-        // Settings › ScreenGrabs' menu, as its row sets it.
-        preferences.set(.choice("10"), of: .screencastCountdown, for: .screenshotTools)
+        // Settings › ScreenGrabs' menu, through its row's own selection.
+        PluginPreferenceRow.selection(of: .screencastCountdown, for: .screenshotTools, in: harness.model).wrappedValue = "10"
         module.start()
         try await Self.waitUntil { overlays.picker != nil }
         overlays.record()

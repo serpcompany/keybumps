@@ -352,6 +352,31 @@ struct ScreencastControllerTests {
     }
 
     @available(macOS 15, *)
+    @Test("With the bar on the right screen, the left screen recorded counts down on it and on the right one (#520)")
+    func countdownOnTheRightBarsScreen() async throws {
+        defer { captures.remove() }
+        // The bar opens on the pointer's screen: the right one, not the first.
+        let controller = makeController(pointer: { CGPoint(x: 2000, y: 500) })
+        try await record(controller, .screen) { $0.clickScreen(PickerScreens.left) }
+        #expect(await ScreencastWait.until { sleeper.pending == 1 })
+        let frames = [PickerScreens.left.frame, PickerScreens.right.frame]
+        #expect(overlays.events.contains(.countdown(3, frames: frames)))
+    }
+
+    @available(macOS 15, *)
+    @Test("A window on the screen away from the bar counts down on it and on the bar's screen (#520)")
+    func windowCountdownOnTheBarsScreen() async throws {
+        defer { captures.remove() }
+        let controller = makeController(pointer: { CGPoint(x: 100, y: 100) })
+        // (2000, 400) in the top-left space: on the other app's window, on the right screen.
+        try await record(controller, .window) { $0.clickWindow(at: CGPoint(x: 2000, y: 582)) }
+        #expect(await ScreencastWait.until { sleeper.pending == 1 })
+        #expect(controller.choice?.target == .window(20))
+        let window = CGRect(x: 1600, y: 282, width: 800, height: 600)
+        #expect(overlays.events.contains(.countdown(3, frames: [window, PickerScreens.left.frame])))
+    }
+
+    @available(macOS 15, *)
     @Test("With one display, the countdown shows on it once")
     func countdownOnOneDisplay() async throws {
         defer { captures.remove() }
