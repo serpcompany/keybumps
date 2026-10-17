@@ -303,7 +303,7 @@ struct ScreencastCropAndBlurReviewTests {
         #expect(timeUndone?.time.start == 0, "the bar's drag")
     }
 
-    @Test("Strength shows the picked blur's strength after undo, redo, and a display switch")
+    @Test("Strength shows the picked blur's strength after undo, redo, and a display switch, and a blur drawn next takes what it shows")
     func strengthFollowsThePickedBlur() throws {
         defer { fixture.tearDown() }
         let model = fixture.model(try fixture.video(displays: 2))
@@ -313,15 +313,81 @@ struct ScreencastCropAndBlurReviewTests {
         model.undo()
         #expect(model.selectedBlur?.strength == .high)
         #expect(model.blurStrength == .high, "undo")
+        draw(model, from: CGPoint(x: 200, y: 200), to: CGPoint(x: 300, y: 300))
+        #expect(model.selectedBlur?.strength == .high, "Blur 2 takes the High shown after the undo")
+        model.undo()
+        #expect(model.selectedBlur == nil, "Blur 2 undone")
+        #expect(model.blurStrength == .high, "what Strength last showed")
+        model.redo()
+        model.setBlurStrength(.low)
+        model.undo()
+        #expect(model.blurStrength == .high)
         model.redo()
         #expect(model.blurStrength == .low, "redo")
 
         model.selectedDisplay = 1
         #expect(model.selectedBlur == nil)
+        #expect(model.blurStrength == .low, "what Strength last showed")
         model.setBlurStrength(.high)
         #expect(model.blurStrength == .high, "the next one drawn's")
         model.selectedDisplay = 0
-        #expect(model.blurStrength == .low, "Blur 1 is still picked")
+        #expect(model.blurStrength == .low, "Blur 2 is still picked")
+        draw(model, from: CGPoint(x: 400, y: 200), to: CGPoint(x: 500, y: 300))
+        #expect(model.selectedBlur?.strength == .low, "a blur drawn after the switch back takes the Low shown")
+
+        // With the picked blur gone, Strength keeps what it showed, and the next blur takes it.
+        model.setBlurStrength(.medium)
+        model.deleteSelectedBlur()
+        #expect(model.selectedBlur == nil)
+        #expect(model.blurStrength == .medium)
+        draw(model, from: CGPoint(x: 400, y: 200), to: CGPoint(x: 500, y: 300))
+        #expect(model.selectedBlur?.strength == .medium)
+        model.undo()
+        #expect(model.selectedBlur == nil, "the drawn blur undone")
+        #expect(model.blurStrength == .medium)
+    }
+
+    @Test("⌫ with a blur's handle held ends that drag as the handles go away, so the next blur's handle drag resizes it")
+    func blurHandleDragEndsWithItsHandles() throws {
+        defer { fixture.tearDown() }
+        let model = fixture.model(try fixture.video())
+        model.pick(.blur)
+        draw(model, from: CGPoint(x: 0, y: 0), to: CGPoint(x: 100, y: 100))
+        let kept = try #require(model.selectedBlur)
+        draw(model, from: CGPoint(x: 200, y: 200), to: CGPoint(x: 300, y: 300))
+        let deleted = try #require(model.selectedBlur)
+        let delta = CGSize(width: 0.1, height: 0.1)
+
+        // As the overlay does: a handle pressed and dragged, then ⌫, which takes the handles away
+        // mid-press (their `onDisappear`).
+        var resize = ScreencastOverlayDrag()
+        let deletedOrigin = resize.start(from: deleted.rect, model: model, playback: nil)
+        model.dragBlur(deleted.id, to: ScreencastFrameRect.resized(
+            deletedOrigin, handle: .bottomRight, by: delta, minimumSide: ScreencastFrameRect.minimumBlurSide
+        ))
+        model.deleteSelectedBlur()
+        resize.end(model: model)
+        #expect(resize.origin == nil)
+        #expect(model.blurs.map(\.id) == [kept.id])
+
+        model.selectBlur(kept.id)
+        let origin = resize.start(from: kept.rect, model: model, playback: nil)
+        #expect(origin == kept.rect, "from the blur picked, not the deleted one")
+        let resized = ScreencastFrameRect.resized(
+            origin, handle: .bottomRight, by: delta, minimumSide: ScreencastFrameRect.minimumBlurSide
+        )
+        model.dragBlur(kept.id, to: resized)
+        resize.end(model: model)
+        #expect(model.selectedBlur?.rect == resized, "the next drag resizes")
+
+        model.undo()
+        #expect(model.selectedBlur?.rect == kept.rect, "the resize is one edit")
+        model.undo()
+        #expect(model.blurs.map(\.id) == [kept.id, deleted.id], "the delete, with the drag before it")
+        let restored = model.blurs.last?.rect
+        model.undo()
+        #expect(model.blurs.last?.rect == deleted.rect, "the deleted blur's drag")
+        #expect(restored != deleted.rect)
     }
 
     @Test("Each display has its own crop and blurs, picked with the display picker")

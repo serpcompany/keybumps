@@ -35,6 +35,34 @@ struct ScreencastEditOverlay: View {
     }
 }
 
+/// A press on the crop or a handle, as its overlay keeps it: the rectangle as the press found it,
+/// from the press's start until it ends, or until the view pressed goes away, which cancels the
+/// press without saying it ended. A drag the model ends first (`ScreencastReviewModel.endDrag`)
+/// keeps it, so the rest of that press changes nothing.
+struct ScreencastOverlayDrag {
+    private(set) var origin: CGRect?
+
+    /// The press's start, once: the player pauses and the model's drag begins. Returns the
+    /// rectangle as the press found it.
+    @MainActor
+    mutating func start(from rect: CGRect, model: ScreencastReviewModel, playback: ScreencastReviewPlayback?) -> CGRect {
+        if let origin { return origin }
+        playback?.pause()
+        origin = rect
+        model.beginDrag()
+        return rect
+    }
+
+    /// The press ends, or the view pressed goes away: its changes are one edit, and the next press
+    /// starts afresh.
+    @MainActor
+    mutating func end(model: ScreencastReviewModel) {
+        guard origin != nil else { return }
+        origin = nil
+        model.endDrag()
+    }
+}
+
 /// Crop's rectangle over the whole frame, after Shotnix's `VideoCropOverlay` (MIT, see
 /// LICENSE.shotnix): dimmed outside, a thirds grid inside, a handle at each corner and side, the
 /// size in the video's pixels as Save writes it, and a drag inside moves it. A picked shape keeps
@@ -46,7 +74,7 @@ struct ScreencastCropOverlay: View {
     let reach: CGRect
 
     /// The crop as the drag found it.
-    @State private var origin: CGRect?
+    @State private var drag = ScreencastOverlayDrag()
 
     var body: some View {
         let rect = geometry.viewRect(model.crop)
@@ -144,16 +172,11 @@ struct ScreencastCropOverlay: View {
 
     /// The drag's start, once: its changes are one edit, and none once it's cut short.
     private func start() -> CGRect {
-        if let origin { return origin }
-        playback?.pause()
-        origin = model.crop
-        model.beginDrag()
-        return model.crop
+        drag.start(from: model.crop, model: model, playback: playback)
     }
 
     private func end() {
-        origin = nil
-        model.endDrag()
+        drag.end(model: model)
     }
 }
 
@@ -220,7 +243,7 @@ struct ScreencastBlurOverlay: View {
     /// The blur being drawn, in fractions of the frame.
     @State private var drawn: CGRect?
     /// The picked blur as a handle's drag found it.
-    @State private var resizeOrigin: CGRect?
+    @State private var resize = ScreencastOverlayDrag()
 
     var body: some View {
         let video = geometry.videoRect
@@ -257,6 +280,9 @@ struct ScreencastBlurOverlay: View {
                         .contentShape(Rectangle())
                         .gesture(resizeGesture(handle, blur: selected))
                         .position(handle.point(in: rect))
+                        // ⌫ or undo taking the blur off mid-drag takes its handles away, and the
+                        // drag never says it ended.
+                        .onDisappear { resize.end(model: model) }
                 }
             }
         }
@@ -328,20 +354,12 @@ struct ScreencastBlurOverlay: View {
     private func resizeGesture(_ handle: ScreencastRectHandle, blur: ScreencastBlur) -> some Gesture {
         DragGesture(minimumDistance: 0, coordinateSpace: .named(ScreencastEditOverlay.space))
             .onChanged { value in
-                if resizeOrigin == nil {
-                    playback?.pause()
-                    resizeOrigin = blur.rect
-                    model.beginDrag()
-                }
-                guard let origin = resizeOrigin else { return }
+                let origin = resize.start(from: blur.rect, model: model, playback: playback)
                 model.dragBlur(blur.id, to: ScreencastFrameRect.resized(
                     origin, handle: handle, by: geometry.frameDelta(value.translation), minimumSide: ScreencastFrameRect.minimumBlurSide
                 ))
             }
-            .onEnded { _ in
-                resizeOrigin = nil
-                model.endDrag()
-            }
+            .onEnded { _ in resize.end(model: model) }
     }
 }
 

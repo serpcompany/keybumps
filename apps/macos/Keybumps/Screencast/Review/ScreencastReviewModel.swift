@@ -36,7 +36,9 @@ final class ScreencastReviewModel {
     }
     private(set) var guess: ScreencastRepositoryGuess?
     /// The display shown, for a recording of every display.
-    var selectedDisplay = 0
+    var selectedDisplay = 0 {
+        didSet { followPickedBlur() }
+    }
     /// Discard asked "Discard this recording?" and waits for Discard or Keep.
     private(set) var isConfirmingDiscard = false
     /// Save or Copy is writing files.
@@ -61,7 +63,8 @@ final class ScreencastReviewModel {
     private(set) var exportFailure: ScreencastExportFailure?
     /// The blur picked on the shown display, which Strength, Delete, and its handles change.
     private(set) var selectedBlurID: Int?
-    /// The strength of the next blur drawn: the last picked in Strength, or the last blur picked's.
+    /// What Strength shows with no blur picked, and the next blur drawn takes: the last picked in
+    /// Strength, or the last strength Strength showed for a picked blur (`followPickedBlur()`).
     private var nextBlurStrength: ScreencastBlurStrength = .high
 
     /// Called once, when the review is done with the capture.
@@ -371,6 +374,7 @@ final class ScreencastReviewModel {
         self.edits = edits
         trimSelection = nil
         editRevision += 1
+        followPickedBlur()
     }
 
     // MARK: Trim (#517)
@@ -481,15 +485,16 @@ final class ScreencastReviewModel {
     /// The picked blur, if it's on the shown display.
     var selectedBlur: ScreencastBlur? { blurs.first { $0.id == selectedBlurID } }
 
-    /// What Strength shows: the picked blur's, as the edits have it after undo, redo, or a display
-    /// switch; with none picked, the next one drawn's.
+    /// What Strength shows, and the next blur drawn takes: the picked blur's, as the edits have it
+    /// after undo, redo, or a display switch; with none picked, the last Strength showed or picked.
     var blurStrength: ScreencastBlurStrength { selectedBlur?.strength ?? nextBlurStrength }
 
-    /// Draws a blur over `rect` on the shown display, at the strength picked, showing for the whole
-    /// recording, and picks it.
+    /// Draws a blur over `rect` on the shown display, at the strength Strength shows, showing for the
+    /// whole recording, and picks it.
     func addBlur(_ rect: CGRect) {
         let display = selectedDisplay
-        let strength = nextBlurStrength
+        let strength = blurStrength
+        nextBlurStrength = strength
         var added: Int?
         edit { edits in
             added = edits.addBlur(rect, strength: strength, display: display)
@@ -503,6 +508,13 @@ final class ScreencastReviewModel {
         guard acceptsEdits else { return }
         endDrag()
         selectedBlurID = id.flatMap { id in blurs.contains { $0.id == id } ? id : nil }
+        followPickedBlur()
+    }
+
+    /// Keeps the next blur's strength at what Strength shows while a blur is picked, as the edits
+    /// have it after undo, redo, or a display switch, so a blur drawn next, or after the picked one
+    /// goes, takes the strength Strength last showed: never one it didn't.
+    private func followPickedBlur() {
         if let selectedBlur { nextBlurStrength = selectedBlur.strength }
     }
 
