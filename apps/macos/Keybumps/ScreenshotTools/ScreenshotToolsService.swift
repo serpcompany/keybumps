@@ -201,7 +201,7 @@ class ScreenshotToolsService {
     @ObservationIgnored private var startedAt = Date.distantPast
     @ObservationIgnored private var handled: Set<URL> = []
     @ObservationIgnored private var lastSeenSize: [URL: Int] = [:]
-    /// Paths of files a Screengrabs hotkey adds itself (`skip`).
+    /// Paths of files a ScreenGrabs hotkey adds itself (`skip`).
     @ObservationIgnored private var skipped: Set<String> = []
     @ObservationIgnored private var source: DispatchSourceFileSystemObject?
     @ObservationIgnored private var locationTimer: Timer?
@@ -238,7 +238,7 @@ class ScreenshotToolsService {
 
     func scanForTesting() { scan() }
 
-    /// Leaves alone the files a Screengrabs hotkey is about to write; the hotkey adds them itself
+    /// Leaves alone the files a ScreenGrabs hotkey is about to write; the hotkey adds them itself
     /// once `screencapture` exits (`ScreenshotClipboardDelivery.capture`), then calls
     /// `stopSkipping`. Otherwise the watcher could add the main display's file before the others
     /// are written, and copy it.

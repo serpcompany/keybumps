@@ -1,7 +1,7 @@
 import AVFoundation
 import Foundation
 
-/// What the Screengrabs smoke test records, in the order it runs them (#470): a video of a screen, a
+/// What the ScreenGrabs smoke test records, in the order it runs them (#470): a video of a screen, a
 /// window, and an area. Its screenshots come first (`ScreenshotSmokeKind`, #491).
 enum ScreencastSmokeMode: String, CaseIterable, Codable, Sendable {
     case videoScreen = "video-screen"
@@ -35,7 +35,7 @@ enum ScreencastSmokeStage: String, Codable, Sendable {
     case cleanedUp
 }
 
-/// What the smoke test takes screenshots of, in order, through Screengrabs' own path (#491): every
+/// What the smoke test takes screenshots of, in order, through ScreenGrabs' own path (#491): every
 /// display, one file each, as Screenshot Screen does, then an area in the middle of the main display.
 enum ScreenshotSmokeKind: String, CaseIterable, Codable, Sendable {
     case screen

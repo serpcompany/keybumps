@@ -72,7 +72,7 @@ struct ScreencastSmokeRig {
     /// and the bar's position.
     let defaults: UserDefaults
 
-    /// Settings › Screengrabs for the smoke test: no microphone, no Mac's sound, no countdown, no
+    /// Settings › ScreenGrabs for the smoke test: no microphone, no Mac's sound, no countdown, no
     /// shortcuts or click highlights, and its own captures folder.
     static func preferences(capturesFolder: URL) -> ScreencastPreferences {
         ScreencastPreferences(
