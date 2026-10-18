@@ -40,6 +40,9 @@ function renderPage(plugin: Plugin): string {
 /** src/app/(analytics)/plugins/, where each plugin has its own static route. */
 const pluginsDir = fileURLToPath(new URL('../app/(analytics)/plugins/', import.meta.url))
 
+/** scripts/smoke.sh, which each deploy runs against staging and then production. */
+const smokeScript = fileURLToPath(new URL('../../scripts/smoke.sh', import.meta.url))
+
 /** A plugin's route module, src/app/(analytics)/plugins/<slug>/page.tsx. */
 async function routeModule(slug: string) {
   return (await import(join(pluginsDir, slug, 'page.tsx'))) as {
@@ -301,6 +304,25 @@ describe('plugin pages', () => {
     expect(paths.slice(0, sitePages.length)).toEqual(sitePages.map(page => page.path))
     expect(paths.slice(sitePages.length)).toEqual(plugins.map(plugin => pluginPath(plugin.slug)))
     expect(new Set(paths).size).toBe(paths.length)
+  })
+
+  it('makes the smoke script wait for every plugin page in the sitemap', () => {
+    // smoke.sh retries until the pages sitemap lists this many plugin pages, so a deploy's smoke
+    // test passes only once the new Worker serves. A floor left below the count would let it pass
+    // against the old site without ever loading the new plugin's page (#537).
+    const script = readFileSync(smokeScript, 'utf8')
+    const floors = (pattern: RegExp) => [...script.matchAll(pattern)].map(match => Number(match[1]))
+    const comparison = floors(/"\$\{#plugin_paths\[@\]\}" -lt (\d+)\b/g)
+    const message = floors(/\bwant (\d+)\+ plugin pages\b/g)
+    expect(comparison, 'one plugin-page floor, "-lt N", in scripts/smoke.sh').toHaveLength(1)
+    expect(message, 'one "want N+ plugin pages" message in scripts/smoke.sh').toHaveLength(1)
+    expect(message, 'scripts/smoke.sh: its "want N+" message names its -lt N floor').toEqual(
+      comparison
+    )
+    expect(
+      comparison[0],
+      `raise the plugin-page floor in scripts/smoke.sh (-lt N and "want N+") to ${plugins.length}, the number of plugins in plugins.ts`
+    ).toBe(plugins.length)
   })
 })
 
