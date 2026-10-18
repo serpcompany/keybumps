@@ -321,7 +321,7 @@ describe('plugin pages', () => {
     )
     expect(
       comparison[0],
-      `raise the plugin-page floor in scripts/smoke.sh (-lt N and "want N+") to ${plugins.length}, the number of plugins in plugins.ts`
+      `set the plugin-page floor in scripts/smoke.sh (-lt N and "want N+") to ${plugins.length}, the number of plugins in plugins.ts`
     ).toBe(plugins.length)
   })
 })
