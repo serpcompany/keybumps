@@ -32,6 +32,16 @@ enum ScreencastReviewInput: Equatable {
     }
 }
 
+/// Which recording the window shows: one just recorded (#479), or one already saved, opened again
+/// from the ⌘3 tab (#494), whose Discard is Move to Trash and whose Save is Done.
+enum ScreencastReviewMode: Equatable {
+    /// After a recording: Discard deletes it, and every other way out saves its review.
+    case afterRecording
+    /// Opened from ⌘3: Move to Trash moves its folder to the Trash, as Delete in ⌘3 does; Done,
+    /// Return, Escape, and closing it only close, writing nothing but edits Done saves.
+    case saved
+}
+
 /// How the review panel ended.
 enum ScreencastReviewOutcome: Equatable {
     /// Save, Return, or closing without a choice: the capture stays in its folder, its review in
@@ -44,6 +54,11 @@ enum ScreencastReviewOutcome: Equatable {
     /// Escape, closing, the next capture, or quitting, after the review couldn't be written: the
     /// recording is wherever it was, without its review, and the notch says why (#479).
     case saveFailed(ScreencastReviewInput, ScreencastReviewFailure)
+    /// A recording opened from ⌘3 (`ScreencastReviewMode.saved`), closed with nothing to write:
+    /// Done, Return, Escape, closing it, or Keep Original. It stays as it was.
+    case closed(ScreencastReviewInput)
+    /// Move to Trash, on a recording opened from ⌘3: its folder is in the Trash.
+    case movedToTrash(ScreencastReviewInput)
 }
 
 /// What a capture reports: a bug, a feature, or feedback, as Clipy's `--type` takes them.
@@ -76,6 +91,8 @@ enum ScreencastReviewFailure: String, Error, Equatable {
     case copyFailed
     /// The capture's folder couldn't be deleted, or wasn't the capture's.
     case deleteFailed
+    /// The recording's folder couldn't be moved to the Trash, or wasn't the recording's.
+    case trashFailed
 
     /// What the window says, and the notch when it closes anyway: what failed, then why.
     var message: String {
@@ -86,6 +103,7 @@ enum ScreencastReviewFailure: String, Error, Equatable {
         case .metadataFailed: "Couldn’t save the recording: its folder can’t be written to."
         case .copyFailed: "Couldn’t copy the recording."
         case .deleteFailed: "Couldn’t delete the recording."
+        case .trashFailed: "Couldn’t move the recording to the Trash."
         }
     }
 

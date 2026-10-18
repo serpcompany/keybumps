@@ -287,12 +287,13 @@ final class RecordingLibrary {
         upsert(capture.folder, RecordingStructure.read(in: capture.folder) ?? RecordingStructure(capture, startedAt: now()))
     }
 
-    /// How the recording window ended: Save, Copy, or a review that couldn't be written read the
-    /// recording's entry again (adding it if it isn't there); Discard removes it.
+    /// How the recording window ended: Save, Copy, closing one opened from ⌘3, or a review that
+    /// couldn't be written read the recording's entry again (adding it if it isn't there); Discard
+    /// and Move to Trash remove it.
     func reviewEnded(_ outcome: ScreencastReviewOutcome) {
         switch outcome {
-        case .saved(let input), .copied(let input), .saveFailed(let input, _): update(input.folder)
-        case .discarded(let input): remove(folder: input.folder)
+        case .saved(let input), .copied(let input), .saveFailed(let input, _), .closed(let input): update(input.folder)
+        case .discarded(let input), .movedToTrash(let input): remove(folder: input.folder)
         }
     }
 

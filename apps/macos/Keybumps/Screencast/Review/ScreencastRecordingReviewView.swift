@@ -15,6 +15,11 @@ enum ScreencastReviewID {
     /// Discard, answering "Discard this recording?".
     static let confirmDiscard = "screencast.review.confirmDiscard"
     static let keep = "screencast.review.keep"
+    /// Opened from ⌘3 on a saved recording (#494): Move to Trash in Discard's place, its answer to
+    /// "Move this recording to the Trash?", and Done in Save's.
+    static let moveToTrash = "screencast.review.moveToTrash"
+    static let confirmMoveToTrash = "screencast.review.confirmMoveToTrash"
+    static let done = "screencast.review.done"
     static let failure = "screencast.review.failure"
     /// The tools and Trim's options and timeline (#517).
     static func tool(_ tool: ScreencastEditTool) -> String { "screencast.review.tool.\(tool.rawValue)" }
@@ -134,11 +139,14 @@ struct ScreencastRecordingReviewView: View {
 /// display picker for a recording of every display, undo and redo, and Discard, Copy, and Save, Save
 /// the window's default button. While Discard is asked, "Discard this recording?" with Keep and
 /// Discard takes their place; while closing with edits asks, "Save your edits?" with Keep Original and
-/// Save Edited; and while the edited recording is written, Cancel.
+/// Save Edited; and while the edited recording is written, Cancel. Opened from ⌘3 on a saved
+/// recording (#494), Move to Trash takes Discard's place, asking "Move this recording to the Trash?"
+/// with Keep and Move to Trash, and Done takes Save's.
 struct ScreencastRecordingReviewBar: View {
     /// Copy's key.
     static let copyKey = "⌘C"
     static let discardQuestion = "Discard this recording?"
+    static let moveToTrashQuestion = "Move this recording to the Trash?"
     static let saveEditsQuestion = "Save your edits?"
     static let cancelKey = "esc"
 
@@ -170,7 +178,7 @@ struct ScreencastRecordingReviewBar: View {
 
     /// The question the actions answer, if one is asked.
     static func question(for model: ScreencastReviewModel) -> String? {
-        if model.isConfirmingDiscard { return discardQuestion }
+        if model.isConfirmingDiscard { return model.mode == .saved ? moveToTrashQuestion : discardQuestion }
         if model.isAskingToSaveEdits { return saveEditsQuestion }
         return nil
     }
@@ -186,6 +194,19 @@ struct ScreencastRecordingReviewBar: View {
                     title: "Cancel", key: cancelKey, help: "Stop exporting; the original stays as it was (Esc)",
                     identifier: ScreencastReviewID.cancelExport, perform: model.cancelExport
                 ),
+            ]
+        }
+        if model.isConfirmingDiscard, model.mode == .saved {
+            return [
+                ScreengrabsEditorAction(
+                    title: "Keep", help: "Keep the recording", identifier: ScreencastReviewID.keep, perform: model.keep
+                ),
+                ScreengrabsEditorAction(
+                    title: "Move to Trash", style: .prominentDestructive, help: "Move the recording and its folder to the Trash",
+                    identifier: ScreencastReviewID.confirmMoveToTrash
+                ) {
+                    Task { model.confirmDiscard() }
+                },
             ]
         }
         if model.isConfirmingDiscard {
@@ -214,6 +235,27 @@ struct ScreencastRecordingReviewBar: View {
                     help: "Save the recording with the edits (Return)", identifier: ScreencastReviewID.saveEdited
                 ) {
                     Task { await model.saveEdited() }
+                },
+            ]
+        }
+        if model.mode == .saved {
+            return [
+                ScreengrabsEditorAction(
+                    title: "Move to Trash", style: .destructive, help: "Move this recording to the Trash",
+                    identifier: ScreencastReviewID.moveToTrash, isEnabled: model.acceptsActions, perform: model.askToDiscard
+                ),
+                ScreengrabsEditorAction(
+                    title: "Copy", key: copyKey, help: "Copy the recording’s file (⌘C)",
+                    identifier: ScreencastReviewID.copy, isEnabled: model.acceptsActions
+                ) {
+                    Task { await model.copy() }
+                },
+                ScreengrabsEditorAction(
+                    title: "Done", key: ScreengrabsEditorAction.returnSign, style: .prominent, isDefault: true,
+                    help: "Close the recording (Return)",
+                    identifier: ScreencastReviewID.done, isEnabled: model.acceptsActions
+                ) {
+                    Task { await model.save() }
                 },
             ]
         }

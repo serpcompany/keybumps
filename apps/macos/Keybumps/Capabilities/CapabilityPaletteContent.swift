@@ -38,7 +38,8 @@ protocol CapabilityPaletteContent: AnyObject {
     /// A row that doesn't paste does nothing.
     func paste(row: Int, query: String, palette: PaletteContentActions)
     /// What Space does on the selected row while the search field is empty: plays or pauses its
-    /// audio, such as a saved translation read aloud. Nil for a row with none, where Space types.
+    /// audio, such as a saved translation read aloud, or opens it in Quick Look, as a screengrab's
+    /// does. Nil for a row with none, where Space types.
     func playback(row: Int, query: String) -> PalettePlayback?
     /// Delete on the selected row, with Command or once the search field is empty. Returns whether
     /// it removed something; the palette then keeps the selection on a row that still exists.
@@ -92,6 +93,8 @@ struct PaletteDeletionConfirmation {
     let title: String
     let message: String
     let delete: @MainActor () -> Void
+    /// The destructive button's name, such as Move to Trash for a ScreenGrabs recording.
+    var confirmTitle = "Delete"
 }
 
 /// What the footer names after Select: Return's action, then each other key's, such as Paste ⌘P.
@@ -125,8 +128,15 @@ struct PaletteKeyAction: Equatable, CustomStringConvertible {
         PaletteKeyAction(title: title, keys: ["⌘", "P"], needsHighlightedRow: true)
     }
 
-    /// ⌘Return, which in the Screenshots tab opens the Screenshot Editor.
+    /// ⌘Return, which in the ScreenGrabs tab opens a screenshot in the Screenshot Editor.
     static let edit = PaletteKeyAction(title: "Edit", keys: ["⌘", "↵"])
+
+    /// ⌘Return, which in the ScreenGrabs tab opens a recording in the recording window.
+    static let open = PaletteKeyAction(title: "Open", keys: ["⌘", "↵"])
+
+    /// Delete, named in the footer where it's all a row offers, as for a ScreenGrabs recording that
+    /// was moved or deleted.
+    static let remove = PaletteKeyAction(title: "Remove", keys: ["⌫"], needsHighlightedRow: true)
 
     /// Space, which plays or pauses a row's audio while the search field is empty.
     static func space(_ title: String) -> PaletteKeyAction {
@@ -160,6 +170,9 @@ struct PaletteKeyAction: Equatable, CustomStringConvertible {
 struct PalettePlayback {
     let title: String
     let toggle: @MainActor () -> Void
+    /// False keeps it out of the footer, for a row whose Space only says why it can't, as a moved or
+    /// deleted recording's does.
+    var listsInFooter = true
 }
 
 /// What a tab's rows can ask of the palette.
@@ -193,6 +206,16 @@ struct PaletteContentActions {
     /// Closes the palette and opens an image item in the Screenshot Editor, as ⌘E does in the
     /// Clipboard tab. It does nothing for text, or while ScreenGrabs is off.
     var editClipboardImage: (ClipboardEntry) -> Void = { _ in }
+    /// Puts files on the clipboard, as Finder copies them, kept out of Clipboard History, then
+    /// closes the palette and confirms the copy at the notch, as a ScreenGrabs recording's Return does.
+    var copyFiles: ([URL]) -> Void = { _ in }
+    /// Copies files as `copyFiles` does, then closes the palette and pastes them into the app that
+    /// was in front when it opened (⌘P). They stay on the clipboard afterwards.
+    var pasteFiles: ([URL]) -> Void = { _ in }
+    /// Shows a warning at the notch, such as why a recording couldn't open, leaving the palette open.
+    var warn: (String) -> Void = { _ in }
+    /// Closes the palette and opens Settings on a page.
+    var openSettings: (SettingsSection) -> Void = { _ in }
 }
 
 /// An arrow key in a grid tab.

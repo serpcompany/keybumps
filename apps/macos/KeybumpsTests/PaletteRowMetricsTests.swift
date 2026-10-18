@@ -62,7 +62,7 @@ struct PaletteRowMetricsTests {
         #expect(row.minY - header.minY + PaletteRowMetrics.headerTop == PaletteRowMetrics.headerBlockHeight)
     }
 
-    @Test("The Screenshots and Emoji grids start where the list rows' wells do, under the same header band")
+    @Test("The ScreenGrabs and Emoji grids start where the list rows' wells do, under the same header band, a recording's tile too")
     func gridsLineUpWithTheRows() async throws {
         let clipboard = try await PaletteMetricsFixture.measure(.clipboard)
         let screenshots = try await PaletteMetricsFixture.measure(.screenshots)
@@ -202,8 +202,29 @@ final class PaletteMetricsFixture {
             search: search
         )
         let emojiLibrary = EmojiLibrary(catalog: try EmojiCatalog.bundled(), canDraw: { _ in true })
+        // Two made-up recordings beside the screenshots (#494), newer, so the grid starts with one.
+        let defaults = InMemoryDefaults()
+        let recordings = RecordingLibrary(
+            storageURL: root.appendingPathComponent(RecordingIndexFile.fileName),
+            capturesFolder: root.appendingPathComponent("captures", isDirectory: true),
+            posterFrames: RecordingPosterFrames(folder: root.appendingPathComponent("posters", isDirectory: true)),
+            importMemory: RecordingImportMemory(defaults: defaults),
+            folderMemory: RecordingFolderMemory(defaults: defaults),
+            screenshots: clipboard
+        )
+        for offset in [60.0, 120] {
+            let startedAt = Date().addingTimeInterval(offset)
+            let folder = root.appendingPathComponent("Recordings/\(Int(startedAt.timeIntervalSince1970))", isDirectory: true)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let file = folder.appendingPathComponent(ScreencastCaptureFolder.videoName(index: 0))
+            try Data("made-up video".utf8).write(to: file)
+            let video = ScreencastVideo(file: file, mixdown: nil, pixelWidth: 64, pixelHeight: 36, audioTracks: [], duration: 42)
+            let capture = ScreencastCapture(folder: folder, videos: [video], duration: 42, endedEarly: nil)
+            try ScreencastMetadata(capture: capture, target: .display(1), startedAt: startedAt).write(to: capture.metadataURL)
+            recordings.add(capture)
+        }
         palette.tabContents = [
-            .screenshots: ScreengrabsPaletteContent(clipboard: clipboard, preferences: preferences) { [weak palette] in palette?.state.filter },
+            .screenshots: ScreengrabsPaletteContent(clipboard: clipboard, preferences: preferences, recordings: recordings) { [weak palette] in palette?.state.filter },
             .timers: TimerPaletteContent(store: timers, preferences: preferences, notices: MetricsNotices()),
             .emoji: EmojiPaletteContent(
                 preferences: preferences,

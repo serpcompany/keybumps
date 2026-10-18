@@ -6,7 +6,8 @@ import SwiftUI
 // UI test mode's `-KBUITestScreencastReview video`: Screencast's review panel on a recording made
 // up in the Recordings folder (`preferences.screencast.capturesFolder`, which defaults to the
 // sandbox's screenshot folder), as the flow controller would save one, since UI tests can't record
-// the screen. Debug builds only, like the rest of UI test mode.
+// the screen. With `-KBOpenPalette`, the recording is indexed instead, beside a made-up screenshot,
+// and the palette opens (#494). Debug builds only, like the rest of UI test mode.
 
 extension AppModel {
     /// Opens the review panel on a made-up capture, through the same flow a saved capture takes
@@ -22,6 +23,28 @@ extension AppModel {
             module.review.onFinish = { outcome in ScreencastReviewUITestOutcome.show(outcome, of: result) }
             module.review.captureStarting()
             module.review.captureFinished(result)
+        }
+    }
+}
+
+extension AppModel {
+    /// With `-KBOpenPalette` (#494): a made-up screenshot a minute old goes into Clipboard History and
+    /// the made-up recording into the recordings index, as the recorder adds one, so the ⌘3 tab lists
+    /// both, the recording first; then `open` runs. When the recording window opened from ⌘3 is
+    /// done, the outcome window says what happened, as for the window opened at launch.
+    func indexScreencastRecordingForUITesting(_ kind: UITestLaunchConfiguration.ScreencastReviewCapture, then open: @escaping () -> Void) {
+        guard isLicensed, preferences.enabledCapabilities.contains(.screenshotTools), let module = recording,
+              let sandbox = ProductPaths.sandboxRoot else { return }
+        let capturesFolder = preferences.screencast.capturesFolder
+        Task { @MainActor in
+            if let image = UITestSandbox.writeSampleImage(in: sandbox) {
+                clipboard.importScreenshot(at: image, capturedAt: Date().addingTimeInterval(-60))
+            }
+            guard let result = await ScreencastReviewUITestCapture.make(kind, in: capturesFolder) else { return }
+            NSPasteboard.keybumps.clearContents()
+            module.review.onFinish = { outcome in ScreencastReviewUITestOutcome.show(outcome, of: result) }
+            if case .video(let capture) = result { module.recordings?.add(capture) }
+            open()
         }
     }
 }
@@ -119,6 +142,8 @@ enum ScreencastReviewUITestOutcome {
         case .copied: "copied"
         case .discarded: "discarded"
         case .saveFailed: "save failed"
+        case .closed: "closed"
+        case .movedToTrash: "moved to trash"
         }
         let folder = FileManager.default.fileExists(atPath: result.folder.path) ? "kept" : "deleted"
         let note = ScreencastReview.read(from: result.folder.appendingPathComponent(ScreencastMetadata.fileName))?.note

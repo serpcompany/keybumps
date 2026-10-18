@@ -28,6 +28,7 @@ final class ScreencastReviewPanel {
     private let fullKeyboardAccess: @MainActor () -> Bool
     private let front: ScreencastReviewFront
     private let export: ScreencastEditExport
+    private let trash: RecordingTrash
     /// The recording's player, while the window is up.
     private(set) var playback: ScreencastReviewPlayback?
     /// The app in front before the window took it, which gets it back after. It's kept while the
@@ -57,6 +58,7 @@ final class ScreencastReviewPanel {
     ///     so a button in the bar can have the keyboard.
     ///   - front: Who has the front and the keyboard, which the window takes and gives back.
     ///   - export: How Save and Copy write a recording's edits (#517).
+    ///   - trash: Where Move to Trash moves a saved recording opened from ⌘3 (#494).
     init(
         repositories: ScreencastRepositoryMemory,
         fileManager: FileManager = .default,
@@ -69,10 +71,12 @@ final class ScreencastReviewPanel {
         },
         fullKeyboardAccess: @escaping @MainActor () -> Bool = { NSApp.isFullKeyboardAccessEnabled },
         front: ScreencastReviewFront = .app,
-        export: ScreencastEditExport = .movies
+        export: ScreencastEditExport = .movies,
+        trash: RecordingTrash = .app
     ) {
         self.repositories = repositories
         self.export = export
+        self.trash = trash
         self.fileManager = fileManager
         self.pasteboard = pasteboard
         self.keepOutOfClipboardHistory = keepOutOfClipboardHistory
@@ -91,16 +95,17 @@ final class ScreencastReviewPanel {
 
     /// Shows the window for `input` once the captures before it are done, guessing its repository
     /// from `context`, or from `contextRead` when it comes. It returns once the window is up, or the
-    /// capture is saved without showing.
+    /// capture is saved without showing. `mode` is `.saved` for a recording opened from ⌘3 (#494).
     func show(
         _ input: ScreencastReviewInput,
         context: ScreencastCaptureContext = .none,
-        contextRead: Task<ScreencastCaptureContext, Never>? = nil
+        contextRead: Task<ScreencastCaptureContext, Never>? = nil,
+        mode: ScreencastReviewMode = .afterRecording
     ) async {
         let previous = turn
         let current = Task { @MainActor [weak self] in
             await previous?.value
-            await self?.present(input, context: context, contextRead: contextRead)
+            await self?.present(input, context: context, contextRead: contextRead, mode: mode)
         }
         turn = current
         await current.value
@@ -152,7 +157,8 @@ final class ScreencastReviewPanel {
     private func present(
         _ input: ScreencastReviewInput,
         context: ScreencastCaptureContext,
-        contextRead: Task<ScreencastCaptureContext, Never>?
+        contextRead: Task<ScreencastCaptureContext, Never>?,
+        mode: ScreencastReviewMode
     ) async {
         // The next window takes the front, and gives it back to the app before this one.
         isTakingTurns = true
@@ -160,7 +166,7 @@ final class ScreencastReviewPanel {
             await close()
         }
         isTakingTurns = false
-        let model = makeModel(input, context: context, contextRead: contextRead)
+        let model = makeModel(input, context: context, contextRead: contextRead, mode: mode)
         guard isAccepting else {
             await model.saveWhenContextComes()
             return
@@ -171,7 +177,8 @@ final class ScreencastReviewPanel {
     private func makeModel(
         _ input: ScreencastReviewInput,
         context: ScreencastCaptureContext,
-        contextRead: Task<ScreencastCaptureContext, Never>?
+        contextRead: Task<ScreencastCaptureContext, Never>?,
+        mode: ScreencastReviewMode
     ) -> ScreencastReviewModel {
         ScreencastReviewModel(
             input: input,
@@ -181,7 +188,9 @@ final class ScreencastReviewPanel {
             fileManager: fileManager,
             pasteboard: pasteboard,
             keepOutOfClipboardHistory: keepOutOfClipboardHistory,
-            export: export
+            export: export,
+            mode: mode,
+            trash: trash
         )
     }
 

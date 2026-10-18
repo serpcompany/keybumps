@@ -32,21 +32,31 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
     var prompt: String { registration.prompt }
 
     /// The tabs in the tab bar: those of plugins that are on, and whose data source is on too (the
-    /// Screenshots tab lists Clipboard History), as Raycast leaves out turned-off extensions.
-    /// Command-numbers stay fixed. The Hotkeys tab shows only when its Settings page says so, and
-    /// the tab on screen always stays.
-    static func visibleTabs(showsHotkeys: Bool, selected: CommandPaletteTab, enabled: Set<Capability>) -> [CommandPaletteTab] {
+    /// ScreenGrabs tab's screenshots are Clipboard History's), as Raycast leaves out turned-off
+    /// extensions. A tab that also lists its plugin's recordings (`listsRecordings`, #494) shows
+    /// without its data source wherever its plugin records (`PluginCompatibility.supportsRecording`),
+    /// so on macOS 14 the ScreenGrabs tab still needs Clipboard History. Command-numbers stay fixed.
+    /// The Hotkeys tab shows only when its Settings page says so, and the tab on screen always stays.
+    static func visibleTabs(
+        showsHotkeys: Bool,
+        selected: CommandPaletteTab,
+        enabled: Set<Capability>,
+        compatibility: PluginCompatibility = .current
+    ) -> [CommandPaletteTab] {
         allCases.filter { tab in
             tab == selected || (
                 enabled.contains(tab.owner)
-                    && (tab.dataSource.map(enabled.contains) ?? true)
+                    && ((tab.dataSource.map(enabled.contains) ?? true) || (tab.listsRecordings && compatibility.supportsRecording))
                     && (tab != .keyboardShortcutter || showsHotkeys)
             )
         }
     }
 
-    /// Another plugin whose data the tab lists, such as Clipboard History for Screenshots.
+    /// Another plugin whose data the tab lists, such as Clipboard History for ScreenGrabs' screenshots.
     var dataSource: Capability? { registration.dataSource }
+
+    /// Whether the tab also lists its plugin's own recordings, which need no data source.
+    var listsRecordings: Bool { registration.listsRecordings }
 
     static func matchingCommandKey(_ characters: String?, in tabs: [CommandPaletteTab] = allCases) -> CommandPaletteTab? {
         tabs.first { characters == String($0.registration.commandKey) }
@@ -968,7 +978,17 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 guard let self else { return }
                 self.pasteClipboardEntry(entry, for: self.state.tab.owner)
             },
-            editClipboardImage: { [weak self] entry in _ = self?.editClipboardImage(entry) }
+            editClipboardImage: { [weak self] entry in _ = self?.editClipboardImage(entry) },
+            copyFiles: { [weak self] files in self?.copyFiles(files) },
+            pasteFiles: { [weak self] files in
+                guard let self else { return }
+                self.pasteFiles(files, for: self.state.tab.owner)
+            },
+            warn: { [weak self] message in self?.showWarning(message) },
+            openSettings: { [weak self] section in
+                self?.dismiss()
+                self?.openSettings(section)
+            }
         )
     }
 
@@ -994,7 +1014,10 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
 
     /// The tabs in the tab bar, which Command-number and Left and Right switch between.
     private var visibleTabs: [CommandPaletteTab] {
-        CommandPaletteTab.visibleTabs(showsHotkeys: preferences.showsHotkeysTab, selected: state.tab, enabled: preferences.enabledCapabilities)
+        CommandPaletteTab.visibleTabs(
+            showsHotkeys: preferences.showsHotkeysTab, selected: state.tab, enabled: preferences.enabledCapabilities,
+            compatibility: preferences.compatibility
+        )
     }
 
     /// Whether the open tab lays its items out in a grid. `/`'s list of filters is always a list.
@@ -1338,6 +1361,34 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         confirmCopy()
     }
 
+    /// Puts files on the clipboard as Finder copies them, marked so Clipboard History skips them.
+    private func writeFiles(_ files: [URL]) -> Bool {
+        guard !files.isEmpty else { return false }
+        pasteboard.clearContents()
+        guard pasteboard.writeObjects(files.map { $0 as NSURL }) else { return false }
+        clipboard.suppressCurrentChange()
+        return true
+    }
+
+    /// A module tab's copy of files, such as a ScreenGrabs recording's videos.
+    private func copyFiles(_ files: [URL]) {
+        guard writeFiles(files) else { return showWarning("Couldn’t copy") }
+        confirmCopy()
+    }
+
+    /// ⌘P on a module tab's files: copies them, as Return's copy does, then pastes them into the app
+    /// that was in front when the palette opened. They stay on the clipboard afterwards. When it
+    /// can't paste, the notch notice says why, and they're still copied.
+    private func pasteFiles(_ files: [URL], for plugin: Capability) {
+        guard writeFiles(files) else { return showWarning("Couldn’t copy") }
+        let paster = paster
+        paste(
+            for: plugin,
+            otherwise: { [weak self] notice in if let notice { self?.showWarning(notice) } },
+            post: { try paster.pasteClipboard() }
+        )
+    }
+
     /// Closes the palette and confirms the copy at the notch.
     private func confirmCopy() {
         dismiss()
@@ -1629,7 +1680,10 @@ private struct CommandPaletteView: View {
                 focused: $inputFocused
             )
             PaletteTabBar(
-                tabs: CommandPaletteTab.visibleTabs(showsHotkeys: preferences.showsHotkeysTab, selected: state.tab, enabled: preferences.enabledCapabilities),
+                tabs: CommandPaletteTab.visibleTabs(
+                    showsHotkeys: preferences.showsHotkeysTab, selected: state.tab, enabled: preferences.enabledCapabilities,
+                    compatibility: preferences.compatibility
+                ),
                 selected: state.tab,
                 showsShortcuts: state.isCommandHeld,
                 select: selectTab
@@ -1712,7 +1766,7 @@ private struct CommandPaletteView: View {
                 ),
                 presenting: state.contentPendingDeletion
             ) { confirmation in
-                Button("Delete", role: .destructive) { confirmContentDeletion(confirmation) }
+                Button(confirmation.confirmTitle, role: .destructive) { confirmContentDeletion(confirmation) }
                 Button("Cancel", role: .cancel) {}
             } message: { confirmation in
                 Text(confirmation.message)
@@ -1732,7 +1786,10 @@ private struct CommandPaletteView: View {
                 selection: state.selection,
                 query: search.query,
                 enabledCapabilities: preferences.enabledCapabilities,
-                visibleTabs: CommandPaletteTab.visibleTabs(showsHotkeys: preferences.showsHotkeysTab, selected: state.tab, enabled: preferences.enabledCapabilities),
+                visibleTabs: CommandPaletteTab.visibleTabs(
+                    showsHotkeys: preferences.showsHotkeysTab, selected: state.tab, enabled: preferences.enabledCapabilities,
+                    compatibility: preferences.compatibility
+                ),
                 recentItems: recentSearchItems,
                 open: activateSearchResult,
                 reveal: revealSearchResult,
@@ -1816,7 +1873,7 @@ private struct CommandPaletteView: View {
     private var playbackTitle: String? {
         guard state.tab != .search, state.historyQuery.isEmpty else { return nil }
         if let tabContent = tabContents[state.tab] {
-            return tabContent.playback(row: state.selection, query: state.historyQuery)?.title
+            return tabContent.playback(row: state.selection, query: state.historyQuery).flatMap { $0.listsInFooter ? $0.title : nil }
         }
         guard state.tab == .dictation, filteredDictations.indices.contains(state.selection) else { return nil }
         return DictationPaletteResults.playbackTitle(of: filteredDictations[state.selection], player: dictationPlayer)

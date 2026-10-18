@@ -20,6 +20,11 @@ import os
 /// why, with Try Again and Save Original. Closing with edits asks first ("Save your edits?", Keep
 /// Original or Save Edited). The ways out that can't ask (the next capture, quitting, turning
 /// ScreenGrabs off) keep the original, since an export could fail after the window is gone.
+///
+/// Opened from the ⌘3 tab on a saved recording (`ScreencastReviewMode.saved`, #494), it never
+/// writes the review again: Done, Return, Escape, and closing only close (`closed`), Save writes
+/// only edits, and Discard is Move to Trash, which moves the recording's folder to the Trash
+/// (`RecordingTrash`) as Delete in ⌘3 does.
 @MainActor
 @Observable
 final class ScreencastReviewModel {
@@ -69,6 +74,8 @@ final class ScreencastReviewModel {
 
     /// Called once, when the review is done with the capture.
     @ObservationIgnored var onFinish: ((ScreencastReviewOutcome) -> Void)?
+    /// A recording just made, or a saved one opened from ⌘3.
+    @ObservationIgnored let mode: ScreencastReviewMode
 
     @ObservationIgnored private let repositories: ScreencastRepositoryMemory
     @ObservationIgnored private let fileManager: FileManager
@@ -76,6 +83,8 @@ final class ScreencastReviewModel {
     @ObservationIgnored private let keepOutOfClipboardHistory: () -> Void
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let export: ScreencastEditExport
+    /// Where Move to Trash moves a saved recording.
+    @ObservationIgnored private let trash: RecordingTrash
     /// The edits before each change, newest last, and those undone, newest last.
     @ObservationIgnored private var undoStack: [ScreencastRecordingEdits] = []
     @ObservationIgnored private var redoStack: [ScreencastRecordingEdits] = []
@@ -99,6 +108,8 @@ final class ScreencastReviewModel {
     ///     History skips it (`ClipboardHistoryService.suppressCurrentChange`).
     ///   - contextRead: The context's read, when it's still on its way; `context` until it comes.
     ///   - export: How Save and Copy write the edits: the movies, or a test's stand-in.
+    ///   - mode: A recording just made, or a saved one opened from ⌘3.
+    ///   - trash: Where Move to Trash moves a saved recording; tests pass their own.
     init(
         input: ScreencastReviewInput,
         context: ScreencastCaptureContext = .none,
@@ -108,10 +119,14 @@ final class ScreencastReviewModel {
         pasteboard: NSPasteboard,
         keepOutOfClipboardHistory: @escaping () -> Void,
         now: @escaping () -> Date = Date.init,
-        export: ScreencastEditExport = .movies
+        export: ScreencastEditExport = .movies,
+        mode: ScreencastReviewMode = .afterRecording,
+        trash: RecordingTrash = .app
     ) {
         self.input = input
         self.export = export
+        self.mode = mode
+        self.trash = trash
         edits = Self.noEdits(for: input)
         self.context = context
         self.repositories = repositories
@@ -197,7 +212,7 @@ final class ScreencastReviewModel {
     }
 
     /// Keybumps is quitting or relaunching, or the capture won't be shown: writes the review into
-    /// `meta.json` at once.
+    /// `meta.json` at once. A saved recording opened from ⌘3 has nothing to write.
     func saveNow() {
         guard !isFinished else { return }
         if let cancellation = exportCancellation, case .video(let capture) = input {
@@ -208,6 +223,7 @@ final class ScreencastReviewModel {
         }
         isConfirmingDiscard = false
         isAskingToSaveEdits = false
+        guard mode == .afterRecording else { return finish(.closed(input)) }
         let text = repositoryText.trimmingCharacters(in: .whitespacesAndNewlines)
         let repository = text.isEmpty ? nil : ScreencastRepository(text)
         if let failure = record(repository: repository) {
@@ -217,7 +233,8 @@ final class ScreencastReviewModel {
         finish(.saved(input))
     }
 
-    /// Discard asks first, in the window: "Discard this recording?" with Discard and Keep.
+    /// Discard asks first, in the window: "Discard this recording?" with Discard and Keep; Move to
+    /// Trash, opened from ⌘3, "Move this recording to the Trash?" with Move to Trash and Keep.
     func askToDiscard() {
         guard acceptsActions else { return }
         failure = nil
@@ -231,11 +248,21 @@ final class ScreencastReviewModel {
         isConfirmingDiscard = false
     }
 
-    /// Discard, answering "Discard this recording?": deletes the recording's folder.
+    /// Discard, answering "Discard this recording?": deletes the recording's folder. Opened from ⌘3,
+    /// Move to Trash moves it to the Trash instead.
     func confirmDiscard() {
         guard isConfirmingDiscard else { return }
         isConfirmingDiscard = false
         guard acceptsActions else { return }
+        if mode == .saved {
+            do {
+                try trash.moveToTrash(folder: input.folder, holding: input.mediaFiles)
+            } catch {
+                fail(.trashFailed)
+                return
+            }
+            return finish(.movedToTrash(input))
+        }
         do {
             try ScreencastReviewFiles.delete(input, fileManager: fileManager)
         } catch {
@@ -269,9 +296,13 @@ final class ScreencastReviewModel {
         if !text.isEmpty, repository == nil, strictly { return fail(.invalidRepository) }
         // Only a choice made in the window writes the edits; the ways out that can't ask keep the
         // original.
+        var exported = false
         if strictly, withEdits, !edits.isEmpty {
             guard await exportEdits(copying: copying) else { return }
+            exported = true
         }
+        // Opened from ⌘3, the recording is saved already: its review is never written again.
+        if mode == .saved { return finishSaved(copying: copying, exported: exported) }
 
         if let failure = record(repository: repository) {
             // Stays open to say why; closing anyway ends without claiming it was saved.
@@ -284,6 +315,16 @@ final class ScreencastReviewModel {
             keepOutOfClipboardHistory()
         }
         finish(copying ? .copied(input) : .saved(input))
+    }
+
+    /// How a saved recording opened from ⌘3 ends: copied, saved when Done wrote its edits, or closed.
+    private func finishSaved(copying: Bool, exported: Bool) {
+        if copying {
+            guard ScreencastReviewFiles.copy(input, to: pasteboard) else { return fail(.copyFailed) }
+            keepOutOfClipboardHistory()
+            return finish(.copied(input))
+        }
+        finish(exported ? .saved(input) : .closed(input))
     }
 
     // MARK: Editing (#517)

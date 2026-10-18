@@ -21,6 +21,9 @@ struct ScreencastReviewServices {
     /// read again when the window saves or copies it, and removed when it discards it. Nil indexes
     /// nothing, as in a test that doesn't ask.
     var recordings: RecordingLibrary?
+    /// Where the recording window's Move to Trash and the ⌘3 tab's Delete move a saved recording
+    /// (#494): the Trash, or a test's own.
+    var trash: RecordingTrash = .app
 
     /// The app's: its Clipboard History and recordings index.
     @MainActor
@@ -101,6 +104,23 @@ final class ScreencastReviewFlow {
         await panelForReview()?.show(input, context: context)
     }
 
+    /// The ⌘3 tab's ⌘Return on a saved recording (#494): the recording window opens on it, with Move
+    /// to Trash and Done (`ScreencastReviewMode.saved`), once the one under review is closed, which
+    /// saves it. Returns false, opening nothing, when its `meta.json` can't be read or a video is
+    /// gone, or with no services (a module test's composition).
+    @discardableResult
+    func open(_ recording: IndexedRecording) -> Bool {
+        guard let capture = recording.savedCapture(), let panel = panelForReview() else { return false }
+        // ScreenGrabs is on, or the tab wouldn't list it.
+        isOn = true
+        panel.startAccepting()
+        Task { await panel.show(.video(capture), mode: .saved) }
+        return true
+    }
+
+    /// Where a saved recording goes when the ⌘3 tab deletes it, as the window's Move to Trash does.
+    var trash: RecordingTrash { services?.trash ?? .app }
+
     /// Screencast turned off: the capture under review is saved and the panel closes; captures still
     /// waiting, including one whose context is still being read, are saved without showing.
     func close() {
@@ -141,7 +161,8 @@ final class ScreencastReviewFlow {
             repositories: services.repositories(),
             pasteboard: services.pasteboard,
             keepOutOfClipboardHistory: { [weak clipboard] in clipboard?.suppressCurrentChange() },
-            front: services.front
+            front: services.front,
+            trash: services.trash
         )
         panel.onFinish = { [weak self, weak panel] outcome in
             services.recordings?.reviewEnded(outcome)
@@ -158,7 +179,7 @@ final class ScreencastReviewFlow {
 
     /// What the notch says as a review ends. The window closes on Save, Return, Escape, or Copy, so
     /// the notice is what says where the recording was kept, or, as a warning, why it couldn't be.
-    /// Discard says nothing.
+    /// Discard says nothing, nor does a recording opened from ⌘3 that closed or went to the Trash.
     ///
     /// Where is the folder the capture's own folder is in, the Recordings folder it was recorded in
     /// (owner QA of 4030.475.4, #504): "Recording saved to Desktop", by the name Finder shows
@@ -171,7 +192,7 @@ final class ScreencastReviewFlow {
         case .saved(let input): ("Recording saved to \(folderName(input.folder.deletingLastPathComponent()))", false)
         case .copied: ("Recording copied", false)
         case .saveFailed(_, let failure): (failure.message, true)
-        case .discarded: nil
+        case .discarded, .closed, .movedToTrash: nil
         }
     }
 }
