@@ -9,8 +9,8 @@ struct ScreencastReviewServices {
     /// Where Copy writes: the app's `.keybumps`, or a test's named pasteboard. There's no default,
     /// so a test never reaches the real clipboard by leaving it out.
     var pasteboard: NSPasteboard
-    /// The notch, where "Recording saved to captures" and "Recording copied" show; nil shows
-    /// nothing, as under the unit-test host.
+    /// The notch, where "Recording saved to Desktop" (the Recordings folder's name) and "Recording
+    /// copied" show; nil shows nothing, as under the unit-test host.
     var notices: (any PaletteNoticePresenting)?
     /// Where corrected repositories are remembered: Application Support, through `ProductPaths`.
     var repositories: @MainActor () -> ScreencastRepositoryMemory = { .makeDefault() }
@@ -114,12 +114,16 @@ final class ScreencastReviewFlow {
     }
 
     /// Once a launch, as ScreenGrabs comes on: what an export of edits (#517) cut short by a quit or
-    /// a crash left in the recordings' folders is cleaned up, off the main thread
+    /// a crash left in the recordings' folders in `folders` is cleaned up, off the main thread
     /// (`ScreencastEditExporter.recoverInterruptedExports(in:)`). Counts are logged, never a name.
-    func recoverInterruptedExports(in capturesFolder: URL) {
+    func recoverInterruptedExports(in folders: [URL]) {
         guard services != nil, recovery == nil else { return }
         recovery = Task.detached(priority: .utility) {
-            let recovery = ScreencastEditExporter.recoverInterruptedExports(in: capturesFolder)
+            let recovery = folders.reduce(into: ScreencastEditExporter.Recovery()) { total, folder in
+                let found = ScreencastEditExporter.recoverInterruptedExports(in: folder)
+                total.removed += found.removed
+                total.restored += found.restored
+            }
             if recovery != ScreencastEditExporter.Recovery() {
                 Logger(subsystem: "com.serp.keybumps", category: "screencast").info(
                     "screencast export recovery removed=\(recovery.removed, privacy: .public) restored=\(recovery.restored, privacy: .public)"
@@ -156,8 +160,9 @@ final class ScreencastReviewFlow {
     /// the notice is what says where the recording was kept, or, as a warning, why it couldn't be.
     /// Discard says nothing.
     ///
-    /// Where is the folder the capture's own folder is in, the captures folder (owner QA of
-    /// 4030.475.4): "Recording saved to captures", by the name Finder shows (`folderName`).
+    /// Where is the folder the capture's own folder is in, the Recordings folder it was recorded in
+    /// (owner QA of 4030.475.4, #504): "Recording saved to Desktop", by the name Finder shows
+    /// (`folderName`).
     static func notice(
         for outcome: ScreencastReviewOutcome,
         folderName: (URL) -> String = { FileManager.default.displayName(atPath: $0.path) }

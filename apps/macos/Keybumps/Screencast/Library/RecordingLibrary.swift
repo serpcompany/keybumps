@@ -20,6 +20,41 @@ struct RecordingImportMemory {
     }
 }
 
+/// Every folder ScreenGrabs recorded into (`screencast.recordingsFolders`, #504): the Recordings
+/// folder of the time, chosen or the default, and any fallback, remembered as each recording's own
+/// folder is made there, so the launch check and a rebuild find recordings saved in a Recordings
+/// folder since changed, and ones kept without reaching `RecordingLibrary.add`. In the defaults,
+/// not the index, so it outlives a missing or corrupt index. Never logged.
+struct RecordingFolderMemory {
+    static let key = "screencast.recordingsFolders"
+
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults) {
+        self.defaults = defaults
+    }
+
+    /// In the order first saved in.
+    var folders: [URL] {
+        (defaults.stringArray(forKey: Self.key) ?? [])
+            .filter { $0.hasPrefix("/") }
+            .map { URL(fileURLWithPath: $0, isDirectory: true) }
+    }
+
+    /// Adds `folder` once, however it or one remembered is spelled, such as through a link
+    /// (`ProductPaths.canonicalPath`).
+    func remember(_ folder: URL) {
+        let path = folder.standardizedFileURL.path
+        var paths = defaults.stringArray(forKey: Self.key) ?? []
+        // The same spelling, as for each recording after the first, needs no look at the disk.
+        guard !paths.contains(path) else { return }
+        let resolved = ProductPaths.canonicalPath(folder)
+        guard !paths.contains(where: { ProductPaths.canonicalPath(URL(fileURLWithPath: $0, isDirectory: true)) == resolved }) else { return }
+        paths.append(path)
+        defaults.set(paths, forKey: Self.key)
+    }
+}
+
 /// ScreenGrabs' recordings index (#492, ADR 0010 decision 6): every recording Keybumps keeps,
 /// wherever it's saved, so the ⌘3 tab lists them (#494). It's `recordings.json` in Application
 /// Support (`RecordingIndexFile`, written 0600 by `PrivateFile`), holding each recording's folder
@@ -30,20 +65,30 @@ struct RecordingImportMemory {
 /// - **Added** when the recorder finishes writing (`add`), so a crash before Save still leaves the
 ///   recording listed. **Read again** when the recording window saves, copies, or can't save it,
 ///   and **removed** when it discards it (`reviewEnded`).
+/// - **Where it looks** (`recordingsFolders`): the old recordings folder (`ProductPaths.captures`),
+///   where recordings before #504 stay, and each folder a recording was made in since, remembered
+///   as the recorder makes the recording's own folder there (`recordingStarted(in:)`,
+///   `RecordingFolderMemory`). So a recording kept without reaching `add`, as one is when
+///   ScreenGrabs turns off or Keybumps locks while it records, is found at the next launch. A
+///   recording stays indexed wherever it is when the Recordings folder changes (#504), and a rebuild
+///   finds it in the folder remembered. A folder no recording was made in is never read, and in one
+///   that is, only the folders the recorder names (`ScreencastCaptureFolder.isFolderName`) are
+///   opened: a Recordings folder such as the Desktop holds the person's own folders too.
 /// - **Moved or deleted:** a recording whose folder, or every video in it, is gone is marked
 ///   `isMissing` each time the index looks (`load`, `refresh`, `recordingsNewestFirst`), and stays
 ///   listed until it's removed; it's unmarked if it comes back.
 /// - **The import** runs once (`RecordingImportMemory`), the first time the index loads without
-///   having run it: each recording in the recordings folder (`ProductPaths.captures`) is indexed
+///   having run it: each recording in the old recordings folder (`ProductPaths.captures`) is indexed
 ///   where it is, and each screenshot a QA build's Screencast saved there before #487 goes to the
 ///   ⌘3 tab through `ClipboardHistoryService.importScreenshot(at:capturedAt:)`. Files are never
 ///   moved or changed.
-/// - **Each launch,** once the index has loaded, the recordings folder is read again off the main
+/// - **Each launch,** once the index has loaded, the folders it looks in are read again off the main
 ///   actor (`launchCheck`): a recording there that the index lacks, such as one an older build
-///   saved after a rollback, is added, matched by resolved path so none is listed twice. Then, if
-///   the file was read and is this build's, poster frames no entry names are deleted.
-/// - **A missing or corrupt file** after the import is rebuilt from the recordings folder's
-///   recordings, without importing screenshots again; entries that can't be decoded are skipped
+///   saved in `ProductPaths.captures` after a rollback, is added, matched by resolved path so none
+///   is listed twice. Then, if the file was read and is this build's, poster frames no entry names
+///   are deleted.
+/// - **A missing or corrupt file** after the import is rebuilt from the recordings in the folders it
+///   looks in, without importing screenshots again; entries that can't be decoded are skipped
 ///   and the rest kept. A corrupt or partly read file is replaced only once its replacement is
 ///   written in full, and is then kept beside it as `recordings.unreadable.json`. If that fails,
 ///   the old file stays and the index is read-only until the next launch.
@@ -52,7 +97,7 @@ struct RecordingImportMemory {
 ///   never writes the file.
 /// - **One writer:** the index assumes one copy of Keybumps writes it, so of two at once (a Debug
 ///   build beside the installed app) the last to write drops what the other added, and the next
-///   launch's re-check adds back any recording in the recordings folder.
+///   launch's re-check adds back any recording in the folders it looks in.
 /// - **Rollback:** a build before #492 never reads or writes `recordings.json` and leaves it as it
 ///   was; the recordings it saves stay in their folders, and this build's next launch adds them.
 @MainActor
@@ -70,10 +115,12 @@ final class RecordingLibrary {
     private(set) var state: State = .notLoaded
 
     @ObservationIgnored let storageURL: URL
-    /// Where the import and a rebuild look: `ProductPaths.captures`.
+    /// The old recordings folder, `ProductPaths.captures`: where the import looks, and always one of
+    /// `recordingsFolders`.
     @ObservationIgnored let capturesFolder: URL
     @ObservationIgnored let posterFrames: RecordingPosterFrames
     @ObservationIgnored private let importMemory: RecordingImportMemory
+    @ObservationIgnored private let folderMemory: RecordingFolderMemory
     @ObservationIgnored private weak var screenshots: ClipboardHistoryService?
     @ObservationIgnored private let fileManager: FileManager
     @ObservationIgnored private let now: () -> Date
@@ -81,8 +128,8 @@ final class RecordingLibrary {
     /// The next write keeps the file it replaces as `recordings.unreadable.json`: a corrupt or
     /// partly read index.
     @ObservationIgnored private var setsAsideOnSave = false
-    /// What each load starts off the main actor: the recordings folder read again when the load
-    /// didn't read it, then the poster-frame sweep. Tests await it.
+    /// What each load starts off the main actor: the folders it looks in read again when the load
+    /// didn't read them, then the poster-frame sweep. Tests await it.
     @ObservationIgnored private(set) var launchCheck: Task<Void, Never>?
     @ObservationIgnored private let logger = Logger(subsystem: "com.serp.keybumps", category: "screencast")
 
@@ -91,6 +138,7 @@ final class RecordingLibrary {
         capturesFolder: URL,
         posterFrames: RecordingPosterFrames,
         importMemory: RecordingImportMemory,
+        folderMemory: RecordingFolderMemory,
         screenshots: ClipboardHistoryService?,
         fileManager: FileManager = .default,
         now: @escaping () -> Date = Date.init
@@ -99,6 +147,7 @@ final class RecordingLibrary {
         self.capturesFolder = capturesFolder
         self.posterFrames = posterFrames
         self.importMemory = importMemory
+        self.folderMemory = folderMemory
         self.screenshots = screenshots
         self.fileManager = fileManager
         self.now = now
@@ -106,15 +155,27 @@ final class RecordingLibrary {
 
     /// The app's: in Application Support, Caches, and the recordings folder, through `ProductPaths`,
     /// so the UI-test sandbox and the unit-test host keep theirs in their own folders.
-    static func makeDefault(importMemory: RecordingImportMemory, screenshots: ClipboardHistoryService?) -> RecordingLibrary {
+    static func makeDefault(
+        importMemory: RecordingImportMemory,
+        folderMemory: RecordingFolderMemory,
+        screenshots: ClipboardHistoryService?
+    ) -> RecordingLibrary {
         let paths = ProductPaths.keybumps()
         return RecordingLibrary(
             storageURL: paths.applicationSupport.appendingPathComponent(RecordingIndexFile.fileName),
             capturesFolder: paths.captures,
             posterFrames: RecordingPosterFrames(folder: RecordingPosterFrames.defaultFolder),
             importMemory: importMemory,
+            folderMemory: folderMemory,
             screenshots: screenshots
         )
+    }
+
+    /// The folders the index looks in for recordings: the old recordings folder, then each folder a
+    /// recording was saved in, once each however it's spelled (`ProductPaths.canonicalPath`).
+    var recordingsFolders: [URL] {
+        var seen: Set<String> = []
+        return ([capturesFolder] + folderMemory.folders).filter { seen.insert(ProductPaths.canonicalPath($0)).inserted }
     }
 
     var unreadableCopyURL: URL {
@@ -211,10 +272,18 @@ final class RecordingLibrary {
 
     // MARK: Changes
 
+    /// The recorder made a recording's own folder in `folder` (`ScreencastRecorder.onFolderMade`):
+    /// `folder` is remembered at once, before the recording is kept, so the launch check and a
+    /// rebuild look there even if the recording never reaches `add`.
+    func recordingStarted(in folder: URL) {
+        folderMemory.remember(folder)
+    }
+
     /// The recorder finished writing: the recording is indexed from its `meta.json` at once, or from
-    /// what the recorder reported if that couldn't be read.
+    /// what the recorder reported if that couldn't be read, and the folder it's in is remembered.
     func add(_ capture: ScreencastCapture) {
         load()
+        folderMemory.remember(capture.folder.deletingLastPathComponent())
         upsert(capture.folder, RecordingStructure.read(in: capture.folder) ?? RecordingStructure(capture, startedAt: now()))
     }
 
@@ -344,10 +413,12 @@ final class RecordingLibrary {
         }
     }
 
-    // MARK: The recordings folder
+    // MARK: The folders it looks in
 
-    /// Each folder in the recordings folder with a `meta.json` this build understands, by name. It
-    /// lists the folder and reads each `meta.json`, so the launch check runs it off the main actor.
+    /// Each folder in `capturesFolder` named as the recorder names a recording's
+    /// (`ScreencastCaptureFolder.isFolderName`) with a `meta.json` this build understands, by name.
+    /// Any other folder is never opened. It lists the folder and reads each `meta.json`, so the
+    /// launch check runs it off the main actor.
     nonisolated private static func recordingFolders(in capturesFolder: URL, fileManager: FileManager) -> [RecordingFolder] {
         let items = (try? fileManager.contentsOfDirectory(
             at: capturesFolder,
@@ -355,6 +426,7 @@ final class RecordingLibrary {
             options: [.skipsHiddenFiles]
         )) ?? []
         return items
+            .filter { ScreencastCaptureFolder.isFolderName($0.lastPathComponent) }
             .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
             .compactMap { folder in
@@ -364,8 +436,13 @@ final class RecordingLibrary {
             }
     }
 
+    /// The recordings in every folder it looks in.
     private func videoFolders() -> [RecordingFolder] {
-        Self.recordingFolders(in: capturesFolder, fileManager: fileManager).filter(\.structure.isVideo)
+        Self.videoFolders(in: recordingsFolders, fileManager: fileManager)
+    }
+
+    nonisolated private static func videoFolders(in folders: [URL], fileManager: FileManager) -> [RecordingFolder] {
+        folders.flatMap { recordingFolders(in: $0, fileManager: fileManager) }.filter(\.structure.isVideo)
     }
 
     /// The found folders that match no indexed folder, or one found before them, by resolved path.
@@ -374,17 +451,17 @@ final class RecordingLibrary {
         return found.filter { seen.insert($0.resolvedPath).inserted }
     }
 
-    /// Off the main actor: the recordings folder read again, adding recordings the index lacks, when
-    /// the load didn't read it; then poster frames no entry names are deleted.
+    /// Off the main actor: the folders it looks in read again, adding recordings the index lacks,
+    /// when the load didn't read them; then poster frames no entry names are deleted.
     private func startLaunchCheck(readingRecordingsFolder: Bool, sweepingPosterFrames: Bool) {
-        let capturesFolder = capturesFolder
+        let folders = recordingsFolders
         let fileManager = fileManager
         let indexed = recordings.map(\.folder)
         let indexedIDs = Set(recordings.map(\.id))
         launchCheck = Task { [weak self] in
             if readingRecordingsFolder {
                 let found = await Task.detached(priority: .utility) {
-                    Self.unindexed(Self.recordingFolders(in: capturesFolder, fileManager: fileManager).filter(\.structure.isVideo), indexed: indexed)
+                    Self.unindexed(Self.videoFolders(in: folders, fileManager: fileManager), indexed: indexed)
                 }.value
                 self?.addFound(found, indexedBefore: indexedIDs)
             }
@@ -399,7 +476,7 @@ final class RecordingLibrary {
         guard !added.isEmpty else { return }
         append(added)
         save()
-        logger.info("recordings folder checked added=\(added.count, privacy: .public)")
+        logger.info("recordings folders checked added=\(added.count, privacy: .public)")
     }
 
     /// Deletes the poster frames no entry names, off the main actor, keeping any made from now on.
@@ -464,7 +541,7 @@ final class RecordingLibrary {
     }
 }
 
-/// A recording's folder in the recordings folder: its `meta.json`'s structure, and its path resolved
+/// A recording's folder in a folder the index looks in: its `meta.json`'s structure, and its path resolved
 /// (`ProductPaths.canonicalPath`) to match it to an entry however either is spelled.
 private struct RecordingFolder: Sendable {
     let folder: URL

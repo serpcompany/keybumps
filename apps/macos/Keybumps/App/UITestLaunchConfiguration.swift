@@ -69,8 +69,8 @@ struct UITestLaunchConfiguration: Equatable {
     /// Starts a recording of the first made-up screen at launch, with no countdown, so
     /// the control bar shows (ScreenGrabs must be on). It captures nothing.
     private(set) var startsScreencastRecording = false
-    /// Opens the recording window once, at launch, on a recording made up in the sandbox's
-    /// captures folder (ScreenGrabs must be on).
+    /// Opens the recording window once, at launch, on a recording made up in the Recordings
+    /// folder, the sandbox's screenshot folder (ScreenGrabs must be on).
     private(set) var screencastReview: ScreencastReviewCapture?
 
     var isUITesting: Bool { permissions != nil }

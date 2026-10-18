@@ -33,11 +33,21 @@ final class AppPreferences {
         /// done, replacing a Record Screen shortcut cleared or changed after it, unless another
         /// Keybumps shortcut (a plugin's or a window's) holds ⇧⌘5; the old key is left in place, unread.
         static let didGiveRecordScreenShortcut = "didGiveRecordScreenShortcut"
+
+        /// A save folder chosen in Settings › ScreenGrabs (#504), as its path:
+        /// `screengrabs.screenshotsFolder` or `screengrabs.recordingsFolder`.
+        static func chosenFolder(_ kind: ScreengrabFolders.Kind) -> String {
+            "screengrabs.\(kind.rawValue)Folder"
+        }
     }
 
     private let defaults: UserDefaults
     /// Which plugins this Mac's macOS runs (#322).
     let compatibility: PluginCompatibility
+    /// The folder macOS saves screenshots to, which ScreenGrabs' save folders default to: macOS's own
+    /// (`ScreenshotLocationResolver.system`, which reads none under the unit-test host), or the
+    /// UI-test sandbox's.
+    let screenshotLocation: ScreenshotLocationResolver
 
     var showInDockAndSwitcher: Bool {
         didSet { defaults.set(showInDockAndSwitcher, forKey: Key.showInDockAndSwitcher) }
@@ -103,6 +113,26 @@ final class AppPreferences {
     /// opens System Settings on recent macOS and so must happen only once.
     var didRequestScreenRecording: Bool {
         didSet { defaults.set(didRequestScreenRecording, forKey: Key.didRequestScreenRecording) }
+    }
+
+    /// The save folders chosen in Settings › ScreenGrabs (#504), by kind. A kind with none follows
+    /// macOS's screenshot folder (`screengrabFolders`).
+    private(set) var chosenScreengrabFolders: [ScreengrabFolders.Kind: URL]
+
+    /// ScreenGrabs' Screenshots and Recordings folders as they are now.
+    var screengrabFolders: ScreengrabFolders {
+        ScreengrabFolders(location: screenshotLocation, chosen: chosenScreengrabFolders)
+    }
+
+    /// Stores the folder chosen for `kind`; nil goes back to following macOS's screenshot folder.
+    func chooseScreengrabFolder(_ folder: URL?, for kind: ScreengrabFolders.Kind) {
+        let folder = folder.map { URL(fileURLWithPath: $0.standardizedFileURL.path, isDirectory: true) }
+        chosenScreengrabFolders[kind] = folder
+        if let folder {
+            defaults.set(folder.path, forKey: Key.chosenFolder(kind))
+        } else {
+            defaults.removeObject(forKey: Key.chosenFolder(kind))
+        }
     }
 
     /// Whether each new screenshot also goes on the clipboard, ready to paste. On by default.
@@ -271,10 +301,12 @@ final class AppPreferences {
     init(
         defaults: UserDefaults = .standard,
         legacyDefaults: [UserDefaults] = [],
-        compatibility: PluginCompatibility = .current
+        compatibility: PluginCompatibility = .current,
+        screenshotLocation: ScreenshotLocationResolver = .system
     ) {
         self.defaults = defaults
         self.compatibility = compatibility
+        self.screenshotLocation = screenshotLocation
         // Before anything is read: it rewrites what Screencast saved, whose ID `Capability` no longer has.
         Self.foldScreencastIntoScreengrabs(in: defaults)
         let stored = defaults.array(forKey: Key.enabledCapabilities) as? [String]
@@ -306,6 +338,13 @@ final class AppPreferences {
         didRequestScreenRecording = defaults.bool(forKey: Key.didRequestScreenRecording)
         copiesScreenshotsToClipboard = defaults.object(forKey: Key.copiesScreenshotsToClipboard) == nil
             || defaults.bool(forKey: Key.copiesScreenshotsToClipboard)
+        var chosenFolders: [ScreengrabFolders.Kind: URL] = [:]
+        for kind in ScreengrabFolders.Kind.allCases {
+            if let path = defaults.string(forKey: Key.chosenFolder(kind)), path.hasPrefix("/") {
+                chosenFolders[kind] = URL(fileURLWithPath: path, isDirectory: true)
+            }
+        }
+        chosenScreengrabFolders = chosenFolders
         expandsSnippetKeywords = defaults.bool(forKey: Key.expandsSnippetKeywords)
         sendsCrashReports = Self.sendsCrashReports(in: defaults)
         lastLaunchedVersion = defaults.string(forKey: Key.lastLaunchedVersion)
@@ -375,6 +414,10 @@ final class AppPreferences {
 
     /// Whether the recordings index's one-time import ran (`screencast.recordingsImported`, #492).
     var recordingImportMemory: RecordingImportMemory { RecordingImportMemory(defaults: defaults) }
+
+    /// Every folder ScreenGrabs saved a recording in (`screencast.recordingsFolders`, #504), which the
+    /// recordings index reads again when it rebuilds.
+    var recordingFolderMemory: RecordingFolderMemory { RecordingFolderMemory(defaults: defaults) }
 
     /// Turns a plugin on or off. One this Mac's macOS can't run stays off.
     func setCapability(_ capability: Capability, enabled: Bool) {

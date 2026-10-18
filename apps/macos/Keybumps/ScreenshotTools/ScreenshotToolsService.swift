@@ -139,9 +139,12 @@ struct ScreenshotClipboardDelivery {
 
     /// Takes a hotkey's screenshots and adds them here once `screencapture` has exited and they're
     /// marked; the watcher leaves them alone meanwhile, as it can't see the mark land. Screenshot
-    /// Screen and Screenshot Area add only while the watcher runs, as it would have; Screen and
-    /// Edit (`forEditing`) always does, since the editor opens the item. The QA smoke test takes
-    /// its screenshots through this too. Calls `completion` with the files written, main first.
+    /// Screen and Screenshot Area add only while ScreenGrabs runs with Clipboard History
+    /// (`ScreenshotToolsStatus.addsScreenshots`), whichever folder they're saved in and whether or
+    /// not the watcher can read macOS's (#504); one the watcher also sees isn't added again
+    /// (`add`). Screen and Edit (`forEditing`) always adds, since the editor opens the item. The QA
+    /// smoke test takes its screenshots through this too. Calls `completion` with the files
+    /// written, main first.
     func capture(
         _ mode: ScreenshotCaptureMode,
         with capturer: ScreenshotCapturer,
@@ -153,12 +156,12 @@ struct ScreenshotClipboardDelivery {
         capturer.capture(mode, willWrite: { planned = $0; watcher.skip($0) }) { files in
             if forEditing {
                 _ = addForEditing(files)
-            } else if case .watching = watcher.status {
+            } else if watcher.status.addsScreenshots {
                 addCapture(files)
             }
-            // After adding, so the watcher finds them in Clipboard History; and every planned
-            // path, written or not, so a later screenshot at one of them still reaches ⌘3.
-            watcher.stopSkipping(planned)
+            // The planned paths nothing was written to go back to the watcher, so a later screenshot
+            // at one still reaches ⌘3; the files written stay skipped until it has seen them.
+            watcher.stopSkipping(planned.filter { !files.contains($0) })
             completion(files)
         }
     }
@@ -184,6 +187,15 @@ enum ScreenshotToolsStatus: Equatable {
     case watching(URL)
     case folderAccessDenied(URL)
     case folderUnavailable(URL)
+
+    /// Whether ScreenGrabs is on with Clipboard History, so the hotkeys' screenshots go there: while
+    /// the watcher watches macOS's folder, and while it can't, since the hotkeys may save elsewhere.
+    var addsScreenshots: Bool {
+        switch self {
+        case .stopped, .requiresClipboardHistory: false
+        case .watching, .folderAccessDenied, .folderUnavailable: true
+        }
+    }
 }
 
 /// Watches the macOS screenshot folder and hands new screenshot files to Clipboard History.
@@ -201,7 +213,7 @@ class ScreenshotToolsService {
     @ObservationIgnored private var startedAt = Date.distantPast
     @ObservationIgnored private var handled: Set<URL> = []
     @ObservationIgnored private var lastSeenSize: [URL: Int] = [:]
-    /// Paths of files a ScreenGrabs hotkey adds itself (`skip`).
+    /// Files a ScreenGrabs hotkey adds itself (`skip`), by resolved path (`ProductPaths.canonicalPath`).
     @ObservationIgnored private var skipped: Set<String> = []
     @ObservationIgnored private var source: DispatchSourceFileSystemObject?
     @ObservationIgnored private var locationTimer: Timer?
@@ -238,17 +250,24 @@ class ScreenshotToolsService {
 
     func scanForTesting() { scan() }
 
-    /// Leaves alone the files a ScreenGrabs hotkey is about to write; the hotkey adds them itself
-    /// once `screencapture` exits (`ScreenshotClipboardDelivery.capture`), then calls
-    /// `stopSkipping`. Otherwise the watcher could add the main display's file before the others
-    /// are written, and copy it.
+    /// Leaves alone the files a ScreenGrabs hotkey is about to write in the folder it watches; the
+    /// hotkey adds them itself once `screencapture` exits (`ScreenshotClipboardDelivery.capture`).
+    /// Otherwise the watcher could add the main display's file before the others are written, and
+    /// copy it. Each stays left alone until the watcher has seen it, or `stopSkipping` gives it
+    /// back, matched by resolved path, so one is never added twice however either spells the
+    /// folder (a Screenshots folder chosen through a link to macOS's, #504). Files the hotkey saves
+    /// in another folder are never the watcher's, so nothing is kept for them.
     func skip(_ files: [URL]) {
-        skipped.formUnion(files.map(\.standardizedFileURL.path))
+        guard let folder else { return }
+        let watched = ProductPaths.canonicalPath(folder)
+        skipped.formUnion(files.map(ProductPaths.canonicalPath).filter {
+            URL(fileURLWithPath: $0).deletingLastPathComponent().path == watched
+        })
     }
 
-    /// Ends `skip` for a finished capture's files, including any it didn't write.
+    /// Ends `skip` for files a capture planned but didn't write.
     func stopSkipping(_ files: [URL]) {
-        skipped.subtract(files.map(\.standardizedFileURL.path))
+        skipped.subtract(files.map(ProductPaths.canonicalPath))
     }
 
     private func start() {
@@ -331,7 +350,7 @@ class ScreenshotToolsService {
               let entries = try? reader.entries(in: folder) else { return }
         var needsRescan = false
         for entry in entries where !handled.contains(entry.url) && ScreenshotFileFilter.accepts(entry, since: startedAt) {
-            guard skipped.remove(entry.url.standardizedFileURL.path) == nil else {
+            guard skipped.isEmpty || skipped.remove(ProductPaths.canonicalPath(entry.url)) == nil else {
                 handled.insert(entry.url)
                 continue
             }

@@ -82,11 +82,11 @@ struct ScreencastReviewLifecycleTests {
     func launchRecoversInterruptedExports() async throws {
         defer { fixture.tearDown() }
         let preferences = AppPreferences(defaults: InMemoryDefaults())
-        // The unit-test host's own captures folder, never the person's.
+        // The unit-test host's own Recordings folder, never the person's, and a folder named as the
+        // recorder names one, since recovery opens no other.
         let captures = preferences.screencast.capturesFolder
-        let recording = captures.appendingPathComponent("recovery-\(UUID().uuidString)", isDirectory: true)
+        let recording = try ScreencastCaptureFolder.create(in: captures, startedAt: Date(), fileManager: .default)
         defer { try? FileManager.default.removeItem(at: recording) }
-        try FileManager.default.createDirectory(at: recording, withIntermediateDirectories: true)
         try Data("{}".utf8).write(to: recording.appendingPathComponent(ScreencastMetadata.fileName))
         let partial = recording.appendingPathComponent(".video-1.editing.mov")
         try Data("partial".utf8).write(to: partial)

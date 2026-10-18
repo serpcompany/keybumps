@@ -197,7 +197,7 @@ final class ScreenshotToolsModule: CapabilityModule {
 
 /// Settings › ScreenGrabs, on the plugin template: Commands, then Permissions (Screen Recording,
 /// which both kinds need, and the optional ones), then the Screenshots group in the slot above the
-/// declared preferences, then Recordings, its declared preferences, ending with the recordings
+/// declared preferences, then Recordings, its declared preferences, ending with the Recordings
 /// folder. Where ScreenGrabs can't record, Recordings says so and its preferences can't change.
 struct ScreengrabsSettingsPage: View {
     @Environment(AppModel.self) private var model
@@ -222,8 +222,9 @@ struct ScreengrabsSettingsPage: View {
 }
 
 /// ScreenGrabs' Screenshots group, in its page's slot above the declared preferences: the watcher's
-/// status, which names the screenshot folder macOS saves to, with what fixes it, and Copy new
-/// screenshots to the clipboard, which keeps its own key (`AppPreferences.copiesScreenshotsToClipboard`).
+/// status, which names the screenshot folder macOS saves to, with what fixes it; the Screenshots
+/// folder the hotkeys save in (`ScreengrabFolderRow`, #504); and Copy new screenshots to the
+/// clipboard, which keeps its own key (`AppPreferences.copiesScreenshotsToClipboard`).
 /// Each row reports itself through `Shown`, so a test can lay out the page in each of the watcher's
 /// states.
 struct ScreenshotsSettings: View {
@@ -233,6 +234,7 @@ struct ScreenshotsSettings: View {
         SettingsGroup("Screenshots") {
             // A `@ViewBuilder` property, not a view of its own, so each of its views is a row.
             status
+            ScreengrabFolderRow(kind: .screenshots)
             Toggle("Copy new screenshots to the clipboard", isOn: Binding(
                 get: { model.preferences.copiesScreenshotsToClipboard },
                 set: { model.preferences.copiesScreenshotsToClipboard = $0 }
@@ -247,7 +249,7 @@ struct ScreenshotsSettings: View {
     /// (`ScreenshotToolsModule.takeoverBindings`), so on macOS 14 the note names only ⇧⌘3 and ⇧⌘4.
     static func about(on compatibility: PluginCompatibility) -> String {
         let keys = compatibility.supportsRecording ? "⇧⌘3, ⇧⌘4, and ⇧⌘5" : "⇧⌘3 and ⇧⌘4"
-        return "Screenshots from these hotkeys, and ones you take with macOS's own tools, are saved where macOS saves screenshots and appear in Clipboard History, ready to paste. With Copy new screenshots on, each also goes on the clipboard unless you've copied something since it was saved; Screenshot Screen and Edit copies only when you Save. While ScreenGrabs is on, Keybumps uses \(keys) in place of macOS's own; turning it off gives them back."
+        return "Screenshots from these hotkeys are saved in the Screenshots folder, and ones you take with macOS's own tools where macOS saves screenshots; both appear in Clipboard History, ready to paste. With Copy new screenshots on, each also goes on the clipboard unless you've copied something since it was saved; Screenshot Screen and Edit copies only when you Save. While ScreenGrabs is on, Keybumps uses \(keys) in place of macOS's own; turning it off gives them back."
     }
 
     @ViewBuilder private var status: some View {
@@ -282,7 +284,7 @@ struct ScreenshotsSettings: View {
     }
 
     enum Row {
-        case off, watching
+        case off, watching, screenshotsFolder
         case requiresClipboardHistory, enableClipboardHistory
         case folderAccessDenied, folderAccessHelp, openPrivacyAndSecurity
         case folderUnavailable, folderUnavailableHelp

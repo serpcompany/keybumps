@@ -322,7 +322,11 @@ final class AppModel {
             seams: injectedScreencast,
             review: .app(
                 clipboard: clipboard,
-                recordings: .makeDefault(importMemory: preferences.recordingImportMemory, screenshots: clipboard)
+                recordings: .makeDefault(
+                    importMemory: preferences.recordingImportMemory,
+                    folderMemory: preferences.recordingFolderMemory,
+                    screenshots: clipboard
+                )
             )
         )
         let screenshotModule = ScreenshotToolsModule(
@@ -331,7 +335,8 @@ final class AppModel {
             clipboard: clipboard,
             preferences: preferences,
             delivery: screenshotDelivery,
-            capturer: screenshotCapturer ?? ScreenshotCapturer(),
+            // The hotkeys save in the Screenshots folder, read as each one captures (#504).
+            capturer: screenshotCapturer ?? ScreenshotCapturer(folder: { preferences.screengrabFolders.folder(for: .screenshots) }),
             systemShortcuts: SystemScreenshotShortcutTakeover(
                 preferences: symbolicHotKeys,
                 takenOver: { preferences.takenOverSystemShortcuts },
@@ -339,7 +344,7 @@ final class AppModel {
             ),
             permissions: permissions,
             recording: recording,
-            editorFallbackFolder: screenshotEditorFallbackFolder ?? { ScreenshotLocationResolver.system.resolve() },
+            editorFallbackFolder: screenshotEditorFallbackFolder ?? { preferences.screengrabFolders.folder(for: .screenshots) },
             updateSafety: CapabilityUpdateSafety(policy: updateSafetyPolicy, updater: updater, descriptor: .screenshotTools)
         )
         let dictationModule = DictationModule(

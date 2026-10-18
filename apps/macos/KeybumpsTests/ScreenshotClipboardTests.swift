@@ -190,6 +190,51 @@ struct ScreenshotClipboardTests {
         #expect(written.count == 3 && off.clipboard.entries.isEmpty)
     }
 
+    @Test("A hotkey screenshot saved in a chosen Screenshots folder reaches Clipboard History and ⌘3, and is copied, while Keybumps can't read macOS's folder")
+    func chosenFolderWithoutTheWatcher() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let chosen = fixture.root.appendingPathComponent("Chosen", isDirectory: true)
+        try FileManager.default.createDirectory(at: chosen, withIntermediateDirectories: true)
+        let capture = HotkeyCapture(fixture, savingIn: chosen, reader: DeniedScreenshotReader())
+        defer { capture.watcher.stop() }
+        guard case .folderAccessDenied = capture.watcher.status else {
+            Issue.record("the watcher can't read macOS's folder")
+            return
+        }
+        var written: [URL] = []
+        capture.delivery.capture(.screens, with: capture.capturer, watcher: capture.watcher) { written = $0 }
+        capture.runner.finish?()
+
+        #expect(written.count == 3)
+        #expect(written.allSatisfy { $0.deletingLastPathComponent().standardizedFileURL == chosen.standardizedFileURL })
+        let listed = ScreenshotPaletteContent.resolve(entries: fixture.clipboard.entries, query: "", isEnabled: true)
+        #expect(listed.entries.compactMap(\.sourceURL) == written, "⌘3, the main display's on top")
+        #expect(fixture.pasteboard.data(forType: .png) == (try Data(contentsOf: written[0])), "⌘V")
+    }
+
+    @Test("A hotkey screenshot the watcher also sees, saved where macOS saves them however that's spelled, is listed and copied once")
+    func hotkeyScreenshotTheWatcherSeesIsAddedOnce() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        // A Screenshots folder chosen through a link to macOS's.
+        let link = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsScreenshotLink-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: fixture.root)
+        defer { try? FileManager.default.removeItem(at: link) }
+        let capture = HotkeyCapture(fixture, savingIn: link)
+        defer { capture.watcher.stop() }
+        var written: [URL] = []
+        capture.delivery.capture(.screens, with: capture.capturer, watcher: capture.watcher) { written = $0 }
+        capture.runner.finish?()
+        let changeCount = fixture.pasteboard.changeCount
+
+        // The watcher's first look comes after the hotkey added them, as when it's slow to scan.
+        capture.scan()
+        #expect(written.count == 3)
+        #expect(fixture.clipboard.entries.compactMap(\.sourceURL) == written)
+        #expect(fixture.pasteboard.changeCount == changeCount, "copied once")
+    }
+
     @Test("A cancelled Area capture leaves its path to the watcher, so a macOS screenshot there still reaches ⌘3")
     func cancelledAreaFreesItsPath() throws {
         let fixture = try Fixture()
@@ -259,13 +304,17 @@ struct ScreenshotClipboardTests {
         let watcher: ScreenshotToolsService
         let delivery: ScreenshotClipboardDelivery
 
-        init(_ fixture: Fixture) {
+        /// The watcher watches the fixture's folder, macOS's; the hotkeys save in `folder`, a chosen
+        /// Screenshots folder, or there too.
+        init(_ fixture: Fixture, savingIn folder: URL? = nil, reader: (any ScreenshotDirectoryReading)? = nil) {
             let root = fixture.root
+            let saves = folder ?? root
             let delivery = ScreenshotClipboardDelivery(clipboard: fixture.clipboard, copiesToClipboard: { true })
             self.delivery = delivery
-            capturer = ScreenshotCapturer(runner: runner, folder: { root }, displayCount: { 3 })
+            capturer = ScreenshotCapturer(runner: runner, folder: { saves }, displayCount: { 3 })
             watcher = ScreenshotToolsService(
                 resolver: ScreenshotLocationResolver(preferredLocation: { root.path }, homeDirectory: root, isDirectory: { _ in true }),
+                reader: reader ?? FileSystemScreenshotDirectoryReader(),
                 now: { .distantPast },
                 ingest: { delivery.add($0) }
             )
@@ -275,6 +324,13 @@ struct ScreenshotClipboardTests {
         /// Scans as often as the watcher needs to add a settled file.
         func scan() {
             for _ in 1...3 { watcher.scanForTesting() }
+        }
+    }
+
+    /// macOS's screenshot folder as Keybumps reads it without Files & Folders access.
+    fileprivate struct DeniedScreenshotReader: ScreenshotDirectoryReading {
+        func entries(in folder: URL) throws -> [ScreenshotDirectoryEntry] {
+            throw ScreenshotFolderReadError.accessDenied
         }
     }
 

@@ -56,6 +56,10 @@ final class ScreencastRecorder {
     /// Called once when a recording ends without `stop()` or `discard()`: a stream or a file
     /// failed. The capture is what was saved, nil if nothing was. The state is then `.failed(reason)`.
     @ObservationIgnored var onEndedEarly: ((ScreencastCapture?, ScreencastFailure) -> Void)?
+    /// Called with the folder a recording's own `<timestamp>` folder was just made in: the folder
+    /// `start` was given, or `fallbackFolder`. At the start and again at each restart, before any
+    /// file is written there, so however the recording ends, its folder was reported (#504).
+    @ObservationIgnored var onFolderMade: ((URL) -> Void)?
 
     @ObservationIgnored private let system: any ScreencastCaptureSystem
     @ObservationIgnored private let writers: any ScreencastWriterFactory
@@ -120,13 +124,15 @@ final class ScreencastRecorder {
     // MARK: Starting
 
     /// Starts recording `target` with `audio` into a new `<timestamp>` folder in `capturesFolder`
-    /// (`~/Documents/Keybumps/captures/` by default), once every stream is running. Throws a
+    /// (`~/Documents/Keybumps/captures/` by default; the app passes the Recordings folder), or in
+    /// `fallbackFolder` when that folder can't be made there, once every stream is running. Throws a
     /// `ScreencastFailure` (and the state becomes `.failed`), `ScreencastRecorderError.alreadyRecording`,
     /// or `CancellationError` when `discard()` cancelled it.
     func start(
         target: ScreencastTarget,
         audio: ScreencastAudio,
         capturesFolder: URL = ProductPaths.keybumps().captures,
+        fallbackFolder: URL? = nil,
         options: ScreencastOptions = ScreencastOptions()
     ) async throws {
         switch state {
@@ -160,6 +166,7 @@ final class ScreencastRecorder {
                 audio: audio,
                 options: options,
                 capturesFolder: capturesFolder,
+                fallbackFolder: fallbackFolder,
                 streams: streams,
                 content: content,
                 router: makeRouter(generation: generation)
@@ -340,14 +347,19 @@ final class ScreencastRecorder {
     /// `switchedOffAt`, before any sample reaches them.
     private func openFiles(for session: Session, switchedOffAt host: Double?) throws {
         let startedAt = now()
+        // A chosen Recordings folder that won't take it, after all, falls back to the default.
         let folder: URL
-        do {
-            folder = try ScreencastCaptureFolder.create(in: session.capturesFolder, startedAt: startedAt, fileManager: fileManager)
-        } catch {
+        if let created = try? ScreencastCaptureFolder.create(in: session.capturesFolder, startedAt: startedAt, fileManager: fileManager) {
+            folder = created
+        } else if let fallback = session.fallbackFolder,
+                  let created = try? ScreencastCaptureFolder.create(in: fallback, startedAt: startedAt, fileManager: fileManager) {
+            folder = created
+        } else {
             throw ScreencastFailure.folderUnavailable
         }
         session.folder = folder
         session.startedAt = startedAt
+        onFolderMade?(folder.deletingLastPathComponent())
         let generation = session.generation
         let take = session.take
         let sources = session.audio.sources.filter { !session.failedAudio.contains($0) }
@@ -1260,6 +1272,7 @@ extension ScreencastRecorder {
         let audio: ScreencastAudio
         let options: ScreencastOptions
         let capturesFolder: URL
+        let fallbackFolder: URL?
         let router: ScreencastSampleRouter
         var phase = Phase.live
         /// Counts restarts, so a failure from a take thrown away is ignored.
@@ -1308,6 +1321,7 @@ extension ScreencastRecorder {
             audio: ScreencastAudio,
             options: ScreencastOptions,
             capturesFolder: URL,
+            fallbackFolder: URL?,
             streams: [StreamPlan],
             content: ScreencastContent,
             router: ScreencastSampleRouter
@@ -1317,6 +1331,7 @@ extension ScreencastRecorder {
             self.audio = audio
             self.options = options
             self.capturesFolder = capturesFolder
+            self.fallbackFolder = fallbackFolder
             self.streams = streams
             self.content = content
             self.router = router
