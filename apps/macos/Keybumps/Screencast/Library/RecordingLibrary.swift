@@ -124,7 +124,8 @@ final class RecordingLibrary {
     @ObservationIgnored private weak var screenshots: ClipboardHistoryService?
     @ObservationIgnored private let fileManager: FileManager
     @ObservationIgnored private let now: () -> Date
-    @ObservationIgnored private var posterTasks: [UUID: Task<URL?, Never>] = [:]
+    /// The poster frames being made, by file name.
+    @ObservationIgnored private var posterTasks: [String: Task<URL?, Never>] = [:]
     /// The next write keeps the file it replaces as `recordings.unreadable.json`: a corrupt or
     /// partly read index.
     @ObservationIgnored private var setsAsideOnSave = false
@@ -201,14 +202,15 @@ final class RecordingLibrary {
     /// cached file is gone; nil for a missing recording or a video that can't be read.
     func posterFrame(for recording: IndexedRecording) async -> URL? {
         guard !recording.isMissing else { return nil }
-        if let task = posterTasks[recording.id] { return await task.value }
+        let name = recording.posterFrame
+        if let task = posterTasks[name] { return await task.value }
         let frames = posterFrames
         let task = Task { await frames.make(for: recording) }
-        posterTasks[recording.id] = task
+        posterTasks[name] = task
         let url = await task.value
-        posterTasks[recording.id] = nil
-        // Removed while it was being made: its frame goes with it.
-        guard recordings.contains(where: { $0.id == recording.id }) else {
+        posterTasks[name] = nil
+        // Removed, or edited and named anew, while it was being made: this frame goes.
+        guard recordings.contains(where: { $0.id == recording.id && $0.posterFrame == name }) else {
             posterFrames.remove(for: recording)
             return nil
         }
@@ -289,19 +291,25 @@ final class RecordingLibrary {
 
     /// How the recording window ended: Save, Copy, closing one opened from ⌘3, or a review that
     /// couldn't be written read the recording's entry again (adding it if it isn't there); Discard
-    /// and Move to Trash remove it.
+    /// and Move to Trash remove it. Save and Copy may have written edits over its videos (#517), and
+    /// a review that couldn't be written may follow them, so those also make its poster frame again.
     func reviewEnded(_ outcome: ScreencastReviewOutcome) {
         switch outcome {
-        case .saved(let input), .copied(let input), .saveFailed(let input, _), .closed(let input): update(input.folder)
+        case .saved(let input), .copied(let input), .saveFailed(let input, _): update(input.folder, renewingPosterFrame: true)
+        case .closed(let input): update(input.folder)
         case .discarded(let input), .movedToTrash(let input): remove(folder: input.folder)
         }
     }
 
     /// Reads the recording in `folder` again; a folder that's gone is marked missing.
-    func update(_ folder: URL) {
+    /// `renewingPosterFrame` drops its cached poster frame and names a new one, made when next
+    /// asked for, so the ⌘3 tile shows the videos as they are now.
+    func update(_ folder: URL, renewingPosterFrame: Bool = false) {
         load()
+        if renewingPosterFrame { renewPosterFrames(in: folder) }
         guard let structure = RecordingStructure.read(in: folder), structure.isVideo else {
             refresh()
+            if renewingPosterFrame { save() }
             return
         }
         upsert(folder, structure)
@@ -314,7 +322,7 @@ final class RecordingLibrary {
         let matched = Set(entries(for: folder))
         guard !matched.isEmpty else { return }
         for recording in recordings where matched.contains(recording.id) {
-            posterTasks[recording.id]?.cancel()
+            posterTasks[recording.posterFrame]?.cancel()
             posterFrames.remove(for: recording)
         }
         recordings.removeAll { matched.contains($0.id) }
@@ -518,6 +526,15 @@ final class RecordingLibrary {
         if !spelled.isEmpty { return spelled.map(\.id) }
         let resolved = ProductPaths.canonicalPath(folder)
         return recordings.filter { ProductPaths.canonicalPath($0.folder) == resolved }.map(\.id)
+    }
+
+    /// The entries for `folder` lose their cached poster frame and get a new name for the next.
+    private func renewPosterFrames(in folder: URL) {
+        let matched = Set(entries(for: folder))
+        for index in recordings.indices where matched.contains(recordings[index].id) {
+            posterFrames.remove(for: recordings[index])
+            recordings[index] = recordings[index].renewingPosterFrame()
+        }
     }
 
     private func upsert(_ folder: URL, _ structure: RecordingStructure) {

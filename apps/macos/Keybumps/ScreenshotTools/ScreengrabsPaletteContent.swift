@@ -85,6 +85,26 @@ enum Screengrab: Equatable, Identifiable {
         case .recording(let recording): recording.sharingURLs
         }
     }
+
+    /// What VoiceOver reads for the thumbnail, before the name and the age: "Recording, 42
+    /// seconds", or "Screenshot".
+    var thumbnailLabel: String {
+        guard let recording else { return "Screenshot" }
+        if recording.isMissing { return "Recording, moved or deleted" }
+        let length = IndexedRecording.spokenLength(recording.duration)
+        let displays = recording.videos.count > 1 ? ", \(recording.videos.count) displays" : ""
+        return "Recording, \(length)\(displays)"
+    }
+
+    /// What the tile loads its thumbnail for. A recording's changes with its poster frame, which an
+    /// edit saved in the recording window makes again (`RecordingLibrary.reviewEnded`), so a tile on
+    /// screen never keeps what the edit cropped, blurred, or trimmed away.
+    var thumbnailKey: String {
+        switch self {
+        case .screenshot(let entry): entry.mediaPath ?? entry.id.uuidString
+        case .recording(let recording): "\(recording.id.uuidString)-\(recording.posterFrame)-\(recording.isMissing)"
+        }
+    }
 }
 
 extension ClipboardEntry {
@@ -142,9 +162,10 @@ enum ScreengrabsTabContent: Equatable {
     case items([Screengrab])
 
     /// Screenshots while Clipboard History is on (`listsScreenshots`), and recordings where
-    /// ScreenGrabs records (`listsRecordings`), together, newest first. Each is narrowed by the
-    /// palette's filter, then the search: a screenshot's as in the Clipboard tab, a recording's by its
-    /// name and "video" (`IndexedRecording.searchableText`).
+    /// ScreenGrabs records (`listsRecordings`), together, newest first by when each was taken, not
+    /// Clipboard History's order, which puts a screenshot copied again on top. Each is narrowed by
+    /// the palette's filter, then the search: a screenshot's as in the Clipboard tab, a recording's
+    /// by its name and "video" (`IndexedRecording.searchableText`).
     static func resolve(
         screenshots: [ClipboardEntry],
         recordings: [IndexedRecording],
@@ -158,7 +179,8 @@ enum ScreengrabsTabContent: Equatable {
         guard isEnabled else { return .disabled }
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let shots = listsScreenshots
-            ? ScreenshotPaletteContent.resolve(entries: filter.apply(screenshots) { $0.matches($1, now: now) }, query: query, isEnabled: true).entries
+            ? ScreenshotPaletteContent.resolve(entries: filter.apply(screenshots) { $0.matches($1, now: now) }, query: query, isEnabled: true)
+                .entries.sorted { $0.capturedAt > $1.capturedAt }
             : []
         let videos = listsRecordings
             ? filter.apply(recordings) { $0.matches(date: $1.startedAt, now: now) }
@@ -200,7 +222,7 @@ enum ScreengrabsTabContent: Equatable {
         screenshotKeys: String?,
         recordingKeys: String?
     ) -> String {
-        guard query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return "No matching screengrabs" }
+        guard query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return "No matching screenshots or recordings" }
         let screenshot = screenshotKeys.map { "Take a screenshot with \($0)" } ?? "Take a screenshot"
         switch (listsScreenshots, listsRecordings) {
         case (true, true):
@@ -676,6 +698,8 @@ private struct ScreengrabCard: View {
     let choose: () -> Void
     let run: (ScreengrabCardAction) -> Void
     @State private var thumbnail: NSImage?
+    /// The `Screengrab.thumbnailKey` `thumbnail` was loaded for.
+    @State private var thumbnailKey: String?
     @State private var isHovering = false
 
     var body: some View {
@@ -720,7 +744,7 @@ private struct ScreengrabCard: View {
             }
             .buttonStyle(.plain)
             .paletteLayoutProbe(.gridItem)
-            .accessibilityLabel(thumbnailLabel)
+            .accessibilityLabel(item.thumbnailLabel)
             .accessibilityIdentifier(item.recording == nil ? "palette.screengrabs.screenshot" : "palette.screengrabs.recording")
             .overlay(alignment: .topTrailing) {
                 if isHovering || isSelected {
@@ -753,9 +777,15 @@ private struct ScreengrabCard: View {
         .contextMenu { menu }
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .task(id: thumbnailKey) {
+        .task(id: item.thumbnailKey) {
+            let key = item.thumbnailKey
+            // A new poster frame: the old one goes at once rather than showing while it's made.
+            if thumbnailKey != key { thumbnail = nil }
             guard let url = await thumbnailURL() else { return }
-            thumbnail = await ClipboardEntryPreview.loadThumbnail(from: url, maxPixelSize: 640)
+            let image = await ClipboardEntryPreview.loadThumbnail(from: url, maxPixelSize: 640)
+            guard !Task.isCancelled else { return }
+            thumbnail = image
+            thumbnailKey = key
         }
     }
 
@@ -781,23 +811,6 @@ private struct ScreengrabCard: View {
         switch item {
         case .screenshot: "Delete"
         case .recording(let recording): recording.isMissing ? "Remove" : "Move to Trash"
-        }
-    }
-
-    /// What VoiceOver reads for the thumbnail, before the name and the age: "Screen recording, 42
-    /// seconds", or "Screenshot".
-    private var thumbnailLabel: String {
-        guard let recording = item.recording else { return "Screenshot" }
-        if recording.isMissing { return "Screen recording, moved or deleted" }
-        let length = IndexedRecording.spokenLength(recording.duration)
-        let displays = recording.videos.count > 1 ? ", \(recording.videos.count) displays" : ""
-        return "Screen recording, \(length)\(displays)"
-    }
-
-    private var thumbnailKey: String {
-        switch item {
-        case .screenshot(let entry): entry.mediaPath ?? entry.id.uuidString
-        case .recording(let recording): "\(recording.id.uuidString)-\(recording.isMissing)"
         }
     }
 

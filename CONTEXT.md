@@ -220,7 +220,7 @@ _Avoid_: Keycast, overlay, HUD, bezel (one of its two styles)
 
 **Recording**:
 A video ScreenGrabs made of an area, a window, or the screens, with the microphone and the Mac's sound (ADR 0009), kept on this Mac in a folder of its own in the recordings folder until the person deletes it, or sends it to a destination and has the copy deleted; a recording of every screen holds one video per display. Record Screen (⇧⌘5, or Quick Search) starts one. A screenshot isn't one.
-_Avoid_: Capture (Screencast's word, which also meant screenshots), screencast, video (one display's file), screen recording (macOS's permission), Dictation's audio
+_Avoid_: Capture (Screencast's word, which also meant screenshots), screencast, video (one display's file), screen recording (macOS's permission; only the ⌘3 tile's name says "Screen Recording <date>", as macOS names its own recordings), Dictation's audio
 
 **Recordings folder**:
 Where recordings are saved, each in a folder of its own: the folder chosen in Settings › ScreenGrabs, apart from the Screenshots folder, or, until one is, the folder macOS saves screenshots to (else the Desktop). A chosen folder that's gone or can't be written to falls back the same way. Recordings saved before #504 stay in `~/Documents/Keybumps/captures` (`ProductPaths.captures`), still listed.

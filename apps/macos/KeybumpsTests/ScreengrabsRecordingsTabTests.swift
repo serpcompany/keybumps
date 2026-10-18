@@ -30,6 +30,15 @@ struct ScreengrabsRecordingsTabTests {
         #expect(tie.items.map { $0.recording != nil } == [false, true], "A screenshot taken as a recording started comes first")
     }
 
+    @Test("A screenshot copied again, which Clipboard History moves to the top, is listed by when it was taken")
+    func screenshotsByWhenTaken() {
+        // Clipboard History's order after the older screenshot's bytes were copied again.
+        let shots = [Self.screenshot(at: 100), Self.screenshot(at: 300)]
+        let content = Self.resolve(shots, [Self.indexed(at: 200)])
+        #expect(content.items.map(\.date) == [300, 200, 100].map(Self.at))
+        #expect(Self.resolve(shots, [], listsRecordings: false).items.map(\.date) == [300, 100].map(Self.at))
+    }
+
     @Test("With Clipboard History off only recordings list; where ScreenGrabs can't record only screenshots; off, nothing")
     func whatEachSettingLists() {
         let shots = [Self.screenshot(at: 300)]
@@ -84,6 +93,15 @@ struct ScreengrabsRecordingsTabTests {
         #expect(IndexedRecording.lengthText(3_725) == "1:02:05")
         #expect(IndexedRecording.lengthText(.nan) == "0:00")
         #expect(IndexedRecording.spokenLength(42) == "42 seconds")
+
+        #expect(Screengrab.recording(recording).thumbnailLabel == "Recording, 42 seconds")
+        var everyScreen = recording
+        everyScreen.videos.append(.init(file: "video-2.mov"))
+        #expect(Screengrab.recording(everyScreen).thumbnailLabel == "Recording, 42 seconds, 2 displays")
+        var missing = recording
+        missing.isMissing = true
+        #expect(Screengrab.recording(missing).thumbnailLabel == "Recording, moved or deleted")
+        #expect(Screengrab.screenshot(Self.screenshot(at: 0)).thumbnailLabel == "Screenshot")
     }
 
     @Test("The empty tab names the person's own shortcuts, and says less without them")
@@ -96,7 +114,7 @@ struct ScreengrabsRecordingsTabTests {
         #expect(title(videos: false) == "Take a screenshot with ⇧⌘4 and it appears here")
         #expect(title(screenshot: nil, record: nil) == "Take a screenshot or record the screen, and it appears here")
         #expect(title(shots: false, record: nil) == "Record the screen and it appears here")
-        #expect(title("made-up") == "No matching screengrabs")
+        #expect(title("made-up") == "No matching screenshots or recordings")
     }
 
     // MARK: When the tab shows
@@ -546,6 +564,25 @@ struct ScreengrabsRecordingsTabTests {
         #expect(library.recordings.count == 1)
         library.reviewEnded(.movedToTrash(.video(capture)))
         #expect(library.recordings.isEmpty)
+    }
+
+    @Test("A tile loads its recording's thumbnail again once Save or Copy may have edited it, and not after Done only closes")
+    func tileFollowsAnEdit() async throws {
+        let fixture = RecordingLibraryFixture()
+        defer { fixture.tearDown() }
+        let library = fixture.library()
+        let capture = try await fixture.recording(at: 1_000)
+        library.add(capture)
+        func key() throws -> String { Screengrab.recording(try #require(library.recordings.first)).thumbnailKey }
+        let first = try key()
+
+        library.reviewEnded(.closed(.video(capture)))
+        #expect(try key() == first, "nothing changed")
+        library.reviewEnded(.saved(.video(capture)))
+        let saved = try key()
+        #expect(saved != first)
+        library.reviewEnded(.copied(.video(capture)))
+        #expect(try key() != saved)
     }
 
     // MARK: Helpers

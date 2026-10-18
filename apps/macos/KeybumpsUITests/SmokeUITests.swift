@@ -719,14 +719,16 @@ final class SmokeUITests: XCTestCase {
         app.typeKey(XCUIKeyboardKey.downArrow, modifierFlags: [])
         app.typeKey(XCUIKeyboardKey.delete, modifierFlags: [])
         XCTAssertTrue(question.waitForExistence(timeout: 5), "Delete asks first")
-        // The alert's buttons are also in the Touch Bar, which isn't inside a window.
-        app.windows.buttons["Cancel"].firstMatch.click()
+        // The palette is a non-activating panel, which macOS reports as a dialog, not a window, so
+        // its question's buttons are under `app.dialogs`, as the picker's are; the Touch Bar's
+        // copies of them aren't.
+        app.dialogs.buttons["Cancel"].firstMatch.click()
         XCTAssertTrue(waitForNonExistence(of: question))
         XCTAssertTrue(recording.exists, "Cancel keeps it")
 
         app.typeKey(XCUIKeyboardKey.delete, modifierFlags: [])
         XCTAssertTrue(question.waitForExistence(timeout: 5))
-        app.windows.buttons["Move to Trash"].firstMatch.click()
+        app.dialogs.buttons["Move to Trash"].firstMatch.click()
         XCTAssertTrue(waitForNonExistence(of: recording), "Move to Trash takes it out of the tab")
         XCTAssertTrue(element("palette.screengrabs.screenshot").exists, "and the screenshot stays")
     }
