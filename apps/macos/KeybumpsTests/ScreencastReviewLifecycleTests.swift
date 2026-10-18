@@ -247,8 +247,8 @@ private final class ContextGate {
 extension ScreencastReviewOutcome {
     var folder: URL? {
         switch self {
-        case .saved(let input), .copied(let input), .saveFailed(let input, _): input.folder
-        case .discarded: nil
+        case .saved(let input), .copied(let input), .saveFailed(let input, _), .closed(let input): input.folder
+        case .discarded, .movedToTrash: nil
         }
     }
 }

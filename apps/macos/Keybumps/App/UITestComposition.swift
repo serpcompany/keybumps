@@ -36,6 +36,14 @@ extension AppModel {
         }
         if let capture = configuration.screencastReview {
             Self.didPerformUITestLaunchActions = true
+            if let tab = configuration.openPalette {
+                // With `-KBOpenPalette`, the made-up recording is indexed, as the recorder would, and
+                // the palette opens on `tab` instead of the window (#494).
+                DispatchQueue.main.async { [weak self] in
+                    self?.indexScreencastRecordingForUITesting(capture) { self?.openPaletteForUITesting(tab, configuration) }
+                }
+                return
+            }
             // The next turn, once the main window has appeared, so the panel opens over it.
             DispatchQueue.main.async { [weak self] in self?.showScreencastReviewForUITesting(capture) }
             return
@@ -43,6 +51,11 @@ extension AppModel {
         #endif
         guard let tab = configuration.openPalette else { return }
         Self.didPerformUITestLaunchActions = true
+        openPaletteForUITesting(tab, configuration)
+    }
+
+    /// `-KBOpenPalette`: the palette on `tab`, after closing Settings with `-KBCloseSettings`.
+    private func openPaletteForUITesting(_ tab: CommandPaletteTab, _ configuration: UITestLaunchConfiguration) {
         NSApplication.shared.activate(ignoringOtherApps: true)
         guard configuration.closesSettings else {
             showCommandPalette(tab)

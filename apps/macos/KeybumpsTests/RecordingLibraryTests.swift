@@ -715,6 +715,43 @@ struct RecordingLibraryTests {
         #expect(library.recordings.isEmpty)
         #expect(!FileManager.default.fileExists(atPath: url.path))
     }
+
+    @Test("Save and Copy, which may have written edits, drop the poster frame and name a new one; closing only keeps it")
+    func posterFrameAfterAnEdit() async throws {
+        defer { fixture.tearDown() }
+        let library = fixture.library()
+        library.load()
+        let capture = try await fixture.recording(at: 100)
+        library.add(capture)
+        let first = try #require(library.recordings.first)
+        let kept = try #require(await library.posterFrame(for: first))
+
+        library.reviewEnded(.closed(.video(capture)))
+        #expect(library.recordings.first?.posterFrame == first.posterFrame)
+        #expect(FileManager.default.fileExists(atPath: kept.path))
+
+        for outcome in [ScreencastReviewOutcome.saved(.video(capture)), .copied(.video(capture))] {
+            let before = try #require(library.recordings.first)
+            let cached = try #require(await library.posterFrame(for: before))
+            library.reviewEnded(outcome)
+            let after = try #require(library.recordings.first)
+            #expect(after.id == first.id)
+            #expect(after.posterFrame != before.posterFrame)
+            #expect(fixture.savedRecordings()?.first?.posterFrame == after.posterFrame)
+            #expect(!FileManager.default.fileExists(atPath: cached.path), "the old frame is gone")
+            let made = try #require(await library.posterFrame(for: after))
+            #expect(made != cached)
+            #expect(NSImage(contentsOf: made) != nil, "and the new one is made from the videos as they are")
+        }
+
+        // A frame still being made under the old name is dropped when it's done.
+        let stale = try #require(library.recordings.first)
+        async let making = library.posterFrame(for: stale)
+        library.reviewEnded(.saved(.video(capture)))
+        #expect(await making == nil)
+        let staleURL = try #require(library.posterFrames.url(for: stale))
+        #expect(!FileManager.default.fileExists(atPath: staleURL.path))
+    }
 }
 
 /// A temporary recordings folder, Application Support, and poster cache for one test, with

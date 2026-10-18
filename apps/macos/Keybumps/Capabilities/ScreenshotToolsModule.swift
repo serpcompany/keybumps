@@ -19,7 +19,9 @@ extension CapabilityDescriptor {
             prompt: "Search ScreenGrabs",
             primaryActionTitle: "Copy",
             secondaryActions: [.paste(), .edit],
-            dataSource: .clipboardHistory
+            // Its screenshots; its recordings need neither (#494).
+            dataSource: .clipboardHistory,
+            listsRecordings: true
         ),
         settingsPage: CapabilitySettingsPage(
             section: .screenshotTools,
@@ -61,8 +63,9 @@ extension CapabilityDescriptor {
 
 /// Owns ScreenGrabs: the screenshot watcher and the Screenshot Editor, which run only while Clipboard
 /// History, its dependency, is enabled, and contribute the edit action to Clipboard tab image rows;
-/// the ScreenGrabs tab's rows (`ScreengrabsPaletteContent`); and its recording (`recording`), which
-/// doesn't need Clipboard History and runs only where `PluginCompatibility.supportsRecording`.
+/// the ScreenGrabs tab's rows (`ScreengrabsPaletteContent`), its screenshots and recordings; and its
+/// recording (`recording`), which doesn't need Clipboard History and runs only where
+/// `PluginCompatibility.supportsRecording`.
 @MainActor
 final class ScreenshotToolsModule: CapabilityModule {
     let descriptor = CapabilityDescriptor.screenshotTools
@@ -110,9 +113,13 @@ final class ScreenshotToolsModule: CapabilityModule {
         self.systemShortcuts = systemShortcuts
         self.permissions = permissions
         self.recording = recording
+        let review = recording.review
         paletteContent = ScreengrabsPaletteContent(
             clipboard: clipboard,
             preferences: preferences,
+            recordings: recording.recordings,
+            openRecording: { [weak review] recording in review?.open(recording) ?? false },
+            trash: review.trash,
             filter: { [weak palette] in palette?.state.filter }
         )
         editor = ScreenshotEditorPresenter(

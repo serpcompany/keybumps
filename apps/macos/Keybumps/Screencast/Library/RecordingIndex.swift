@@ -19,7 +19,7 @@ struct IndexedRecording: Codable, Equatable, Identifiable, Sendable {
         }
     }
 
-    /// Made when the recording is indexed. It names the poster frame, so it's kept as long as the entry.
+    /// Made when the recording is indexed, and kept as long as the entry. It names its first poster frame.
     let id: UUID
     /// The recording's own folder, `<recordings folder>/<timestamp>/`, wherever it's saved.
     var folder: URL
@@ -30,10 +30,12 @@ struct IndexedRecording: Codable, Equatable, Identifiable, Sendable {
     /// `display`, `everyDisplay`, `window`, or `area`.
     var target: String
     var videos: [Video]
-    /// The poster frame's file name in the poster cache (`RecordingPosterFrames`), made when first asked for.
+    /// The poster frame's file name in the poster cache (`RecordingPosterFrames`), made when first
+    /// asked for. Named anew when an edit may have changed the videos (`renewingPosterFrame()`).
     var posterFrame: String
-    /// Its folder, or every video in it, was gone when the index last looked: moved or deleted
-    /// outside Keybumps. Worked out each time the index looks, never stored.
+    /// Its folder, or a display's full video in it, was gone when the index last looked: moved or
+    /// deleted outside Keybumps, so the recording window can't open it either (`savedCapture()`).
+    /// Worked out each time the index looks, never stored.
     var isMissing = false
 
     /// The full recordings, one per display.
@@ -88,6 +90,14 @@ struct IndexedRecording: Codable, Equatable, Identifiable, Sendable {
     func updated(with metadata: RecordingStructure) -> IndexedRecording {
         var next = IndexedRecording(id: id, folder: folder, metadata: metadata)
         next.posterFrame = posterFrame
+        return next
+    }
+
+    /// The same entry with a new poster frame name, for videos an edit may have changed, so the old
+    /// frame is never shown or handed out again for them.
+    func renewingPosterFrame() -> IndexedRecording {
+        var next = self
+        next.posterFrame = "\(UUID().uuidString).jpg"
         return next
     }
 

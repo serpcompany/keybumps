@@ -6,7 +6,8 @@ import UniformTypeIdentifiers
 /// A still for each indexed recording, for the ⌘3 tab (#494): its first video's opening frame,
 /// made by `AVAssetImageGenerator` off the main actor (#325's lesson: decoding video on the main
 /// thread froze the palette), cached as a JPEG in Keybumps's Caches folder, and made again when the
-/// cached file is gone. It's a picture of the screen, so it's written readable only by the person
+/// cached file is gone, or under a new name once the recording window's Save or Copy may have edited
+/// the videos (`RecordingLibrary.reviewEnded`). It's a picture of the screen, so it's written readable only by the person
 /// (`PrivateFile`), and removed with its entry. A frame no entry names is swept when the index loads.
 struct RecordingPosterFrames: Sendable {
     /// `~/Library/Caches/Keybumps/RecordingPosters`, through `ProductPaths` so tests keep theirs in

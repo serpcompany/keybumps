@@ -107,13 +107,13 @@ struct ScreengrabsPaletteContentTests {
         #expect(log.calls == [.copy(ids[0]), .edit(ids[0])])
     }
 
-    @Test("Space does nothing, and the footer names Copy ↵, Paste ⌘P, and Edit ⌘↵")
+    @Test("Space opens Quick Look (#494), and the footer names Copy ↵, Paste ⌘P, and Edit ⌘↵")
     func spaceAndFooter() throws {
         let fixture = ScreengrabsTabFixture()
         defer { fixture.tearDown() }
         try fixture.addScreenshots(["First"])
 
-        #expect(fixture.content.playback(row: 0, query: "") == nil)
+        #expect(fixture.content.playback(row: 0, query: "")?.title == "Quick Look")
         let footer = fixture.content.footerActions(row: 0, query: "")
         #expect(footer.primary == "Copy")
         #expect(footer.secondary.map(\.description) == ["Paste ⌘P", "Edit ⌘↵"])

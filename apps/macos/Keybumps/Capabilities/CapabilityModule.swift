@@ -47,7 +47,7 @@ struct CapabilityDescriptor: Identifiable {
 }
 
 /// A Command Palette tab a module owns. `dataSource` names another module when the tab lists that
-/// module's data (the Screenshots tab filters Clipboard History entries).
+/// module's data (the ScreenGrabs tab lists Clipboard History's screenshot entries).
 struct CapabilityPaletteTab {
     let tab: CommandPaletteTab
     let name: String
@@ -60,6 +60,9 @@ struct CapabilityPaletteTab {
     /// The other keys the footer names after Return, with their keys, such as Paste ⌘P.
     let secondaryActions: [PaletteKeyAction]
     let dataSource: Capability?
+    /// Whether the tab also lists the module's own recordings, as the ScreenGrabs tab does (#494), so
+    /// it shows without `dataSource` wherever the module records.
+    var listsRecordings = false
 }
 
 /// A module's Settings destination. The section title is the capability title.

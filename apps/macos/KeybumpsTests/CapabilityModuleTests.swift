@@ -137,17 +137,26 @@ struct CapabilityModuleTests {
     @Test("A plugin that's off has no tab in the bar, and its Command-number does nothing, unless its tab is on screen")
     func offPluginsHaveNoTab() {
         let enabled = Set(Capability.allCases).subtracting([.emojiPicker, .clipboardHistory])
-        let tabs = CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .search, enabled: enabled)
-        #expect(tabs == [.search, .dictation, .snippets, .timers, .translate], "Screenshots lists Clipboard History, so it goes too")
+        // On macOS 14, where ScreenGrabs can't record, its tab lists only Clipboard History's screenshots.
+        let macOS14 = PluginCompatibility(macOSMajorVersion: 14)
+        let tabs = CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .search, enabled: enabled, compatibility: macOS14)
+        #expect(tabs == [.search, .dictation, .snippets, .timers, .translate], "ScreenGrabs lists Clipboard History, so it goes too")
         #expect(CommandPaletteTab.matchingCommandKey("7", in: tabs) == nil)
         #expect(CommandPaletteTab.matchingCommandKey("6", in: tabs) == .timers, "Numbers stay fixed")
         #expect(CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .emoji, enabled: enabled).contains(.emoji))
+        // Where it records, its recordings keep it in the bar (#494).
+        let recording = CommandPaletteTab.visibleTabs(
+            showsHotkeys: false, selected: .search, enabled: enabled, compatibility: PluginCompatibility(macOSMajorVersion: 15)
+        )
+        #expect(recording == [.search, .screenshots, .dictation, .snippets, .timers, .translate])
     }
 
     @Test("Left and Right go to the tab beside this one in the bar, skipping plugins that are off")
     func adjacentTabsSkipOffPlugins() {
         let enabled = Set(Capability.allCases).subtracting([.emojiPicker, .clipboardHistory])
-        let tabs = CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .search, enabled: enabled)
+        let tabs = CommandPaletteTab.visibleTabs(
+            showsHotkeys: false, selected: .search, enabled: enabled, compatibility: PluginCompatibility(macOSMajorVersion: 14)
+        )
         #expect(CommandPaletteTab.adjacent(to: .search, offset: 1, in: tabs) == .dictation)
         #expect(CommandPaletteTab.adjacent(to: .dictation, offset: -1, in: tabs) == .search)
         #expect(CommandPaletteTab.adjacent(to: .search, offset: -1, in: tabs) == nil, "No wrap at the first tab")

@@ -671,6 +671,68 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(waitForReviewOutcome("saved; folder kept; note empty"))
     }
 
+    // MARK: The ScreenGrabs tab's recordings (#494)
+
+    /// A made-up recording, indexed beside a made-up screenshot a minute older: both tiles show, the
+    /// recording first, and Return copies the recording as its video file, read here from the
+    /// UI-test pasteboard (`NSPasteboard.keybumps`).
+    func testScreengrabsTabListsARecordingBesideAScreenshotAndReturnCopiesIt() {
+        launchScreengrabsTab()
+        let recording = element("palette.screengrabs.recording")
+        let screenshot = element("palette.screengrabs.screenshot")
+        XCTAssertTrue(screenshot.waitForExistence(timeout: 10), "the screenshot's tile")
+        XCTAssertLessThan(recording.frame.minX, screenshot.frame.minX, "the recording, newer, comes first")
+
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("com.serp.keybumps.uitests.clipboard"))
+        let before = pasteboard.changeCount
+        app.typeKey(XCUIKeyboardKey.downArrow, modifierFlags: [])
+        app.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
+        XCTAssertTrue(waitForNonExistence(of: recording), "Return copies, which closes the palette")
+        let copied = expectation(for: NSPredicate { _, _ in pasteboard.changeCount != before }, evaluatedWith: nil)
+        XCTAssertEqual(XCTWaiter().wait(for: [copied], timeout: 5), .completed, "something was copied")
+        let files = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        XCTAssertEqual(files.map(\.lastPathComponent), ["video-1.mov"], "the recording's video, as a file")
+    }
+
+    /// ⌘Return opens the recording window on the saved recording, with Move to Trash and Done in
+    /// Discard's and Save's places; Done only closes it.
+    func testScreengrabsTabCommandReturnOpensTheRecordingWindow() {
+        launchScreengrabsTab()
+        app.typeKey(XCUIKeyboardKey.downArrow, modifierFlags: [])
+        app.typeKey(XCUIKeyboardKey.return, modifierFlags: .command)
+        let done = element("screencast.review.done")
+        XCTAssertTrue(done.waitForExistence(timeout: 10), "⌘Return opens the recording window, with Done in Save's place")
+        XCTAssertTrue(element("screencast.review.moveToTrash").exists, "and Move to Trash in Discard's")
+        XCTAssertFalse(element("screencast.review.save").exists)
+        XCTAssertFalse(element("screencast.review.discard").exists)
+        done.click()
+        XCTAssertTrue(reviewPanel.waitForNonExistence(timeout: 10), "Done closes it")
+        XCTAssertTrue(waitForReviewOutcome("closed; folder kept"), "and writes nothing")
+    }
+
+    /// Delete on a recording asks first; Cancel keeps it, and Move to Trash takes it out of the tab
+    /// (in UI test mode, into the sandbox's own Trash folder) and leaves the screenshot.
+    func testScreengrabsTabDeleteAsksBeforeMovingARecordingToTheTrash() {
+        launchScreengrabsTab()
+        let recording = element("palette.screengrabs.recording")
+        let question = app.staticTexts["Move this recording to the Trash?"]
+        app.typeKey(XCUIKeyboardKey.downArrow, modifierFlags: [])
+        app.typeKey(XCUIKeyboardKey.delete, modifierFlags: [])
+        XCTAssertTrue(question.waitForExistence(timeout: 5), "Delete asks first")
+        // The palette is a non-activating panel, which macOS reports as a dialog, not a window, so
+        // its question's buttons are under `app.dialogs`, as the picker's are; the Touch Bar's
+        // copies of them aren't.
+        app.dialogs.buttons["Cancel"].firstMatch.click()
+        XCTAssertTrue(waitForNonExistence(of: question))
+        XCTAssertTrue(recording.exists, "Cancel keeps it")
+
+        app.typeKey(XCUIKeyboardKey.delete, modifierFlags: [])
+        XCTAssertTrue(question.waitForExistence(timeout: 5))
+        app.dialogs.buttons["Move to Trash"].firstMatch.click()
+        XCTAssertTrue(waitForNonExistence(of: recording), "Move to Trash takes it out of the tab")
+        XCTAssertTrue(element("palette.screengrabs.screenshot").exists, "and the screenshot stays")
+    }
+
     func testHotkeysTabShowsShortcutCoachHistory() {
         // Its rows come from Shortcut Coach's module (`KeyboardShortcutterPaletteContent`).
         launch(permissions: "granted", ["-KBOpenPalette", "keyboardShortcutter", "-KBCloseSettings", "YES"])
@@ -987,6 +1049,14 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(element("screencast.review.save").waitForExistence(timeout: 20))
         // So a later check that it closed is about the review, not a query that finds nothing.
         XCTAssertTrue(reviewPanel.waitForExistence(timeout: 5), "the window itself is found")
+    }
+
+    /// The palette on the ScreenGrabs tab, with the made-up recording indexed beside a made-up
+    /// screenshot (`-KBUITestScreencastReview video` with `-KBOpenPalette`, #494).
+    private func launchScreengrabsTab() {
+        launch(permissions: "granted", ["-KBUITestScreencastReview", "video", "-KBOpenPalette", "screenshots", "-KBCloseSettings", "YES"])
+        XCTAssertTrue(paletteField("Search ScreenGrabs").waitForExistence(timeout: 20))
+        XCTAssertTrue(element("palette.screengrabs.recording").waitForExistence(timeout: 10), "the made-up recording's tile")
     }
 
     /// The review: a standard window (#475), which macOS reports as a window.

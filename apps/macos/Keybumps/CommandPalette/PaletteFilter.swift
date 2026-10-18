@@ -104,7 +104,8 @@ enum PaletteFilter: String, CaseIterable, Identifiable, Equatable {
         }
     }
 
-    private func matches(date: Date, now: Date, calendar: Calendar) -> Bool {
+    /// Today and This Week, for any dated row, such as a ScreenGrabs recording.
+    func matches(date: Date, now: Date = Date(), calendar: Calendar = .current) -> Bool {
         switch self {
         case .today: calendar.isDate(date, inSameDayAs: now)
         case .thisWeek: calendar.isDate(date, equalTo: now, toGranularity: .weekOfYear)

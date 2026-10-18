@@ -74,9 +74,9 @@ struct RecordingFolderMemory {
 ///   finds it in the folder remembered. A folder no recording was made in is never read, and in one
 ///   that is, only the folders the recorder names (`ScreencastCaptureFolder.isFolderName`) are
 ///   opened: a Recordings folder such as the Desktop holds the person's own folders too.
-/// - **Moved or deleted:** a recording whose folder, or every video in it, is gone is marked
-///   `isMissing` each time the index looks (`load`, `refresh`, `recordingsNewestFirst`), and stays
-///   listed until it's removed; it's unmarked if it comes back.
+/// - **Moved or deleted:** a recording whose folder, or a display's full video in it, is gone is
+///   marked `isMissing` each time the index looks (`load`, `refresh`, `recordingsNewestFirst`),
+///   and stays listed until it's removed; it's unmarked if it comes back.
 /// - **The import** runs once (`RecordingImportMemory`), the first time the index loads without
 ///   having run it: each recording in the old recordings folder (`ProductPaths.captures`) is indexed
 ///   where it is, and each screenshot a QA build's Screencast saved there before #487 goes to the
@@ -124,7 +124,8 @@ final class RecordingLibrary {
     @ObservationIgnored private weak var screenshots: ClipboardHistoryService?
     @ObservationIgnored private let fileManager: FileManager
     @ObservationIgnored private let now: () -> Date
-    @ObservationIgnored private var posterTasks: [UUID: Task<URL?, Never>] = [:]
+    /// The poster frames being made, by file name.
+    @ObservationIgnored private var posterTasks: [String: Task<URL?, Never>] = [:]
     /// The next write keeps the file it replaces as `recordings.unreadable.json`: a corrupt or
     /// partly read index.
     @ObservationIgnored private var setsAsideOnSave = false
@@ -201,14 +202,15 @@ final class RecordingLibrary {
     /// cached file is gone; nil for a missing recording or a video that can't be read.
     func posterFrame(for recording: IndexedRecording) async -> URL? {
         guard !recording.isMissing else { return nil }
-        if let task = posterTasks[recording.id] { return await task.value }
+        let name = recording.posterFrame
+        if let task = posterTasks[name] { return await task.value }
         let frames = posterFrames
         let task = Task { await frames.make(for: recording) }
-        posterTasks[recording.id] = task
+        posterTasks[name] = task
         let url = await task.value
-        posterTasks[recording.id] = nil
-        // Removed while it was being made: its frame goes with it.
-        guard recordings.contains(where: { $0.id == recording.id }) else {
+        posterTasks[name] = nil
+        // Removed, or edited and named anew, while it was being made: this frame goes.
+        guard recordings.contains(where: { $0.id == recording.id && $0.posterFrame == name }) else {
             posterFrames.remove(for: recording)
             return nil
         }
@@ -287,20 +289,27 @@ final class RecordingLibrary {
         upsert(capture.folder, RecordingStructure.read(in: capture.folder) ?? RecordingStructure(capture, startedAt: now()))
     }
 
-    /// How the recording window ended: Save, Copy, or a review that couldn't be written read the
-    /// recording's entry again (adding it if it isn't there); Discard removes it.
+    /// How the recording window ended: Save, Copy, closing one opened from ⌘3, or a review that
+    /// couldn't be written read the recording's entry again (adding it if it isn't there); Discard
+    /// and Move to Trash remove it. Save and Copy may have written edits over its videos (#517), and
+    /// a review that couldn't be written may follow them, so those also make its poster frame again.
     func reviewEnded(_ outcome: ScreencastReviewOutcome) {
         switch outcome {
-        case .saved(let input), .copied(let input), .saveFailed(let input, _): update(input.folder)
-        case .discarded(let input): remove(folder: input.folder)
+        case .saved(let input), .copied(let input), .saveFailed(let input, _): update(input.folder, renewingPosterFrame: true)
+        case .closed(let input): update(input.folder)
+        case .discarded(let input), .movedToTrash(let input): remove(folder: input.folder)
         }
     }
 
     /// Reads the recording in `folder` again; a folder that's gone is marked missing.
-    func update(_ folder: URL) {
+    /// `renewingPosterFrame` drops its cached poster frame and names a new one, made when next
+    /// asked for, so the ⌘3 tile shows the videos as they are now.
+    func update(_ folder: URL, renewingPosterFrame: Bool = false) {
         load()
+        if renewingPosterFrame { renewPosterFrames(in: folder) }
         guard let structure = RecordingStructure.read(in: folder), structure.isVideo else {
             refresh()
+            if renewingPosterFrame { save() }
             return
         }
         upsert(folder, structure)
@@ -313,7 +322,7 @@ final class RecordingLibrary {
         let matched = Set(entries(for: folder))
         guard !matched.isEmpty else { return }
         for recording in recordings where matched.contains(recording.id) {
-            posterTasks[recording.id]?.cancel()
+            posterTasks[recording.posterFrame]?.cancel()
             posterFrames.remove(for: recording)
         }
         recordings.removeAll { matched.contains($0.id) }
@@ -519,6 +528,15 @@ final class RecordingLibrary {
         return recordings.filter { ProductPaths.canonicalPath($0.folder) == resolved }.map(\.id)
     }
 
+    /// The entries for `folder` lose their cached poster frame and get a new name for the next.
+    private func renewPosterFrames(in folder: URL) {
+        let matched = Set(entries(for: folder))
+        for index in recordings.indices where matched.contains(recordings[index].id) {
+            posterFrames.remove(for: recordings[index])
+            recordings[index] = recordings[index].renewingPosterFrame()
+        }
+    }
+
     private func upsert(_ folder: URL, _ structure: RecordingStructure) {
         if let id = entries(for: folder).first, let index = recordings.firstIndex(where: { $0.id == id }) {
             recordings[index] = recordings[index].updated(with: structure)
@@ -537,7 +555,8 @@ final class RecordingLibrary {
     private func isPresent(_ recording: IndexedRecording) -> Bool {
         var isFolder: ObjCBool = false
         guard fileManager.fileExists(atPath: recording.folder.path, isDirectory: &isFolder), isFolder.boolValue else { return false }
-        return recording.videoURLs.contains { fileManager.fileExists(atPath: $0.path) }
+        let videos = recording.videoURLs
+        return !videos.isEmpty && videos.allSatisfy { fileManager.fileExists(atPath: $0.path) }
     }
 }
 
