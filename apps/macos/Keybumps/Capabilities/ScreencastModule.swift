@@ -155,8 +155,9 @@ final class ScreencastModule {
     }
 
     /// ScreenGrabs turned off, or Keybumps Locked: the picker closes and a countdown is cancelled,
-    /// but a recording stops and is kept. It opens nothing; it stays in the recordings folder
-    /// (`ScreencastController.shutDown`).
+    /// but a recording stops and is kept. It opens nothing; it stays in the Recordings folder it was
+    /// made in, which the index already remembers, so the next launch lists it
+    /// (`ScreencastController.shutDown`, `RecordingLibrary.recordingStarted(in:)`).
     func deactivate(_ context: CapabilityContext) {
         isOn = false
         recordingControls.deactivate()
@@ -218,6 +219,9 @@ final class ScreencastModule {
                 return MainActor.assumeIsolated { permissions.microphoneGranted }
             }
         )
+        // As each recording's folder is made, before it's kept: one kept as ScreenGrabs turns off
+        // never reaches the recording window or `add`, and the index still finds it (#504).
+        recorder.onFolderMade = { [recordings] folder in recordings?.recordingStarted(in: folder) }
         let controller = Self.wiredController(
             recorder: recorder,
             captureSystem: seams.captureSystem ?? ScreenCaptureKitCaptureSystem.current,

@@ -4,8 +4,9 @@ import AVFoundation
 import SwiftUI
 
 // UI test mode's `-KBUITestScreencastReview video`: Screencast's review panel on a recording made
-// up in the sandbox's captures folder, as the flow controller would save one, since UI tests can't
-// record the screen. Debug builds only, like the rest of UI test mode.
+// up in the Recordings folder (`preferences.screencast.capturesFolder`, which defaults to the
+// sandbox's screenshot folder), as the flow controller would save one, since UI tests can't record
+// the screen. Debug builds only, like the rest of UI test mode.
 
 extension AppModel {
     /// Opens the review panel on a made-up capture, through the same flow a saved capture takes

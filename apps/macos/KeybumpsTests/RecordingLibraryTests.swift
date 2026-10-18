@@ -485,6 +485,107 @@ struct RecordingLibraryTests {
         #expect(FileManager.default.fileExists(atPath: saved.videos[0].file.path))
     }
 
+    @available(macOS 15, *)
+    @Test("A recording kept as ScreenGrabs turns off mid-recording, in a Recordings folder nothing remembered, is listed at the next launch")
+    func shutDownMidRecordingIsListedNextLaunch() async throws {
+        defer { fixture.tearDown() }
+        let fresh = fixture.root.url.appendingPathComponent("Fresh", isDirectory: true)
+        try FileManager.default.createDirectory(at: fresh, withIntermediateDirectories: true)
+        let library = fixture.library()
+        let preferences = AppPreferences(defaults: InMemoryDefaults())
+        preferences.set(.choice("0"), of: .screencastCountdown, for: .screenshotTools)
+        preferences.chooseScreengrabFolder(fresh, for: .recordings)
+        let module = ScreencastModule(
+            preferences: preferences,
+            permissions: PermissionCoordinator(screenRecordingAuthorized: { true }),
+            openSettings: { _ in },
+            seams: ScreencastSeams(
+                captureSystem: FakeCaptureSystem(content: ScreencastScreens.content()),
+                writers: FakeWriterFactory(),
+                pickerSystem: FakePickerSystem(content: ScreencastScreens.content()),
+                presenter: FakeOverlays(),
+                screens: { PickerScreens.both },
+                sleep: { _ in },
+                contextReader: .inert
+            ),
+            review: fixture.reviewServices(recordings: library)
+        )
+        module.apply(fixture.context([.screenshotTools], preferences: preferences))
+        #expect(fixture.folderMemory.folders.isEmpty)
+
+        module.start()
+        let controller = try #require(module.controller)
+        let picker = try #require(controller.picker)
+        picker.target = .screen
+        picker.clickScreen(PickerScreens.left)
+        controller.confirm()
+        #expect(await eventually { controller.phase == .recording })
+        #expect(fixture.folderMemory.folders == [fresh.standardizedFileURL], "remembered as the recording starts")
+
+        // Locked, or ScreenGrabs turned off: the recording is kept, and nothing opens or adds it.
+        module.deactivate(fixture.context([], preferences: preferences))
+        #expect(await eventually { controller.phase == .idle && controller.recorder.state == .idle })
+        let kept = try #require(try FileManager.default.contentsOfDirectory(at: fresh, includingPropertiesForKeys: nil).first)
+        #expect(FileManager.default.fileExists(atPath: kept.appendingPathComponent(ScreencastMetadata.fileName).path))
+        #expect(library.recordings.isEmpty)
+
+        let next = fixture.library()
+        next.load()
+        await next.launchCheck?.value
+        #expect(next.recordings.map { ProductPaths.canonicalPath($0.folder) } == [ProductPaths.canonicalPath(kept)])
+    }
+
+    @Test("A folder is remembered once, however it's spelled, such as through a link")
+    func remembersEachFolderOnce() throws {
+        defer { fixture.tearDown() }
+        let folder = fixture.root.url.appendingPathComponent("Chosen", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let link = fixture.root.url.appendingPathComponent("link", isDirectory: true)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: folder)
+        let library = fixture.library()
+
+        library.recordingStarted(in: folder)
+        library.recordingStarted(in: link)
+        library.recordingStarted(in: folder)
+        #expect(fixture.folderMemory.folders == [folder.standardizedFileURL])
+    }
+
+    @Test("In a remembered folder such as the Desktop, a folder of the person's own is never listed or changed, even with a meta.json and an export's file names")
+    func ownFoldersAreLeftAlone() async throws {
+        defer { fixture.tearDown() }
+        let desktop = fixture.root.url.appendingPathComponent("Desktop", isDirectory: true)
+        let library = fixture.library()
+        library.load()
+        let saved = try await fixture.recording(at: 100, in: desktop)
+        library.add(saved)
+        // What a recording and an export cut short leave, in a folder Keybumps never made.
+        let own = desktop.appendingPathComponent("Project", isDirectory: true)
+        try FileManager.default.moveItem(at: try await fixture.recording(at: 200, in: desktop).folder, to: own)
+        try Data("theirs".utf8).write(to: own.appendingPathComponent(".video-1.editing.mov"))
+        try Data("theirs too".utf8).write(to: own.appendingPathComponent(".video-2.original.mov"))
+        try Data("partial".utf8).write(to: saved.folder.appendingPathComponent(".video-1.editing.mov"))
+        let before = fixture.snapshot(of: own)
+
+        let next = fixture.library()
+        next.load()
+        await next.launchCheck?.value
+        #expect(next.recordings.map(\.startedAt) == [Self.date(100)])
+        try FileManager.default.removeItem(at: fixture.indexURL)
+        let rebuilt = fixture.library()
+        rebuilt.load()
+        #expect(rebuilt.recordings.map(\.startedAt) == [Self.date(100)])
+
+        #expect(ScreencastEditExporter.recoverInterruptedExports(in: desktop) == .init(removed: 1, restored: 0))
+        #expect(fixture.snapshot(of: own) == before, "never renamed or deleted")
+    }
+
+    @Test("Only the names the recorder gives a recording's folder count as one")
+    func recordingFolderNames() {
+        #expect(["1791000000", "1791000000-2", "1791000000-12", "0"].allSatisfy(ScreencastCaptureFolder.isFolderName))
+        #expect(!["", "-", "1791000000-", "-2", "1791000000-2-3", "Project", "1791000000 copy", "12a", "\u{FF11}\u{FF12}"]
+            .contains(where: ScreencastCaptureFolder.isFolderName))
+    }
+
     @Test("A recording is read again and removed through any spelling of its folder, such as a link")
     func changesMatchResolvedPaths() async throws {
         defer { fixture.tearDown() }
@@ -744,9 +845,9 @@ final class RecordingLibraryFixture {
         return url
     }
 
-    /// Every file under the recordings folder, by path, with its bytes.
-    func snapshot() -> [String: Data] {
-        let files = FileManager.default.enumerator(at: captures, includingPropertiesForKeys: nil)?.allObjects as? [URL] ?? []
+    /// Every file under `folder`, the old recordings folder unless given, by path, with its bytes.
+    func snapshot(of folder: URL? = nil) -> [String: Data] {
+        let files = FileManager.default.enumerator(at: folder ?? captures, includingPropertiesForKeys: nil)?.allObjects as? [URL] ?? []
         return Dictionary(uniqueKeysWithValues: files.compactMap { url in
             (try? Data(contentsOf: url)).map { (url.path, $0) }
         })

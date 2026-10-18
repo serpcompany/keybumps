@@ -56,6 +56,10 @@ final class ScreencastRecorder {
     /// Called once when a recording ends without `stop()` or `discard()`: a stream or a file
     /// failed. The capture is what was saved, nil if nothing was. The state is then `.failed(reason)`.
     @ObservationIgnored var onEndedEarly: ((ScreencastCapture?, ScreencastFailure) -> Void)?
+    /// Called with the folder a recording's own `<timestamp>` folder was just made in: the folder
+    /// `start` was given, or `fallbackFolder`. At the start and again at each restart, before any
+    /// file is written there, so however the recording ends, its folder was reported (#504).
+    @ObservationIgnored var onFolderMade: ((URL) -> Void)?
 
     @ObservationIgnored private let system: any ScreencastCaptureSystem
     @ObservationIgnored private let writers: any ScreencastWriterFactory
@@ -355,6 +359,7 @@ final class ScreencastRecorder {
         }
         session.folder = folder
         session.startedAt = startedAt
+        onFolderMade?(folder.deletingLastPathComponent())
         let generation = session.generation
         let take = session.take
         let sources = session.audio.sources.filter { !session.failedAudio.contains($0) }

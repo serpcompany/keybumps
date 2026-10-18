@@ -79,8 +79,9 @@ extension AppModel {
         let defaults = UserDefaults(suiteName: uiTestDefaultsSuite) ?? .standard
         defaults.removePersistentDomain(forName: uiTestDefaultsSuite)
         defaults.set(true, forKey: "didCompleteOnboarding")
-        // The sandbox's screenshot folder stands in for macOS's, for the watcher and for ScreenGrabs'
-        // save folders' default, so screenshots and recordings stay in the sandbox.
+        // The sandbox's screenshot folder stands in for macOS's, for the watcher and as the
+        // Screenshots and Recordings folders' default, so screenshots and recordings, the recording
+        // window's made-up one too (`ScreencastReviewUITesting`), stay in the sandbox.
         let screenshotLocation = ScreenshotLocationResolver(
             preferredLocation: { sandbox.screenshots.path },
             homeDirectory: sandbox.root,

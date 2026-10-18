@@ -30,11 +30,11 @@ struct ScreencastPhaseObservation: Hashable, Sendable {
     let id: Int
 }
 
-/// A capture saved in the captures folder, for the review panel (#450).
+/// A capture saved in the Recordings folder, for the review panel (#450).
 enum ScreencastCaptureResult: Equatable, Sendable {
     case video(ScreencastCapture)
 
-    /// Its `<captures folder>/<timestamp>/` folder.
+    /// Its `<Recordings folder>/<timestamp>/` folder.
     var folder: URL {
         switch self {
         case .video(let capture): capture.folder
@@ -182,7 +182,7 @@ final class ScreencastController {
     /// Where the displays changing is heard, while the picker is open.
     @ObservationIgnored private let screenChanges: NotificationCenter
     @ObservationIgnored private var screenObserver: (any NSObjectProtocol)?
-    /// False after `shutDown()`: what's saved stays in the captures folder and nothing opens.
+    /// False after `shutDown()`: what's saved stays in the Recordings folder and nothing opens.
     @ObservationIgnored private var opensFinishedCaptures = true
 
     /// - Parameters:
@@ -604,7 +604,9 @@ final class ScreencastController {
 
     /// Screencast turned off, or Keybumps Locked: the picker closes, and a countdown or a start is
     /// cancelled. A recording stops and is kept, and a capture being saved finishes; neither opens
-    /// anything: they stay in the captures folder. Footage is never thrown away here.
+    /// anything: they stay in the Recordings folder they were made in, which the recordings index
+    /// remembered as the recorder made each one's folder (`ScreencastRecorder.onFolderMade`), so the
+    /// next launch lists them. Footage is never thrown away here.
     func shutDown() async {
         opensFinishedCaptures = false
         switch phase {

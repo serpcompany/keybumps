@@ -376,14 +376,17 @@ enum ScreencastEditExporter {
     /// copy was still to be placed, the originals set aside (`.video-1.original.mov`) go back, over any
     /// edited one already placed; once every edited copy was placed, only the originals' deleting was
     /// left, so that's finished. An original with nothing in its place always goes back. Only
-    /// recordings' folders (with a `meta.json`), and only the names an export makes, are touched.
+    /// recordings' folders (named as the recorder names them, `ScreencastCaptureFolder.isFolderName`,
+    /// with a `meta.json`), and only the names an export makes, are touched; any other folder in
+    /// `capturesFolder`, such as the person's own on the Desktop, is never opened (#504).
     @discardableResult
     static func recoverInterruptedExports(in capturesFolder: URL, fileManager: FileManager = .default) -> Recovery {
         var recovery = Recovery()
         let folders = (try? fileManager.contentsOfDirectory(
             at: capturesFolder, includingPropertiesForKeys: [.isDirectoryKey], options: []
         )) ?? []
-        for folder in folders where (try? folder.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+        for folder in folders where ScreencastCaptureFolder.isFolderName(folder.lastPathComponent)
+            && (try? folder.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
             guard let names = try? fileManager.contentsOfDirectory(atPath: folder.path),
                   names.contains(ScreencastMetadata.fileName) else { continue }
             let marked = names.compactMap(MarkedFile.init)

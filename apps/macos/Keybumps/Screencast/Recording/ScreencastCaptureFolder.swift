@@ -1,8 +1,17 @@
 import Foundation
 
-/// A capture's own folder, `<captures folder>/<timestamp>/`, named like Dictation's recordings:
+/// A recording's own folder, `<Recordings folder>/<timestamp>/`, named like Dictation's recordings:
 /// the start time in Unix seconds, with `-2`, `-3`, … when two start in the same second.
 enum ScreencastCaptureFolder {
+    /// Whether `name` is one `create` makes: Unix seconds, alone or with `-2`, `-3`, …. The
+    /// recordings index and export recovery open only folders named so, since a Recordings folder
+    /// such as the Desktop holds the person's own folders too (#504).
+    static func isFolderName(_ name: String) -> Bool {
+        let parts = name.split(separator: "-", omittingEmptySubsequences: false)
+        return (1...2).contains(parts.count)
+            && parts.allSatisfy { !$0.isEmpty && $0.utf8.allSatisfy { (UInt8(ascii: "0")...UInt8(ascii: "9")).contains($0) } }
+    }
+
     static func create(in capturesFolder: URL, startedAt: Date, fileManager: FileManager) throws -> URL {
         // A clock that isn't a real time names the folder 0 rather than trapping.
         let baseName = String(ScreencastNumbers.int(startedAt.timeIntervalSince1970, in: 0...Int.max, fallback: 0))
