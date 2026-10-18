@@ -33,8 +33,9 @@ struct IndexedRecording: Codable, Equatable, Identifiable, Sendable {
     /// The poster frame's file name in the poster cache (`RecordingPosterFrames`), made when first
     /// asked for. Named anew when an edit may have changed the videos (`renewingPosterFrame()`).
     var posterFrame: String
-    /// Its folder, or every video in it, was gone when the index last looked: moved or deleted
-    /// outside Keybumps. Worked out each time the index looks, never stored.
+    /// Its folder, or a display's full video in it, was gone when the index last looked: moved or
+    /// deleted outside Keybumps, so the recording window can't open it either (`savedCapture()`).
+    /// Worked out each time the index looks, never stored.
     var isMissing = false
 
     /// The full recordings, one per display.

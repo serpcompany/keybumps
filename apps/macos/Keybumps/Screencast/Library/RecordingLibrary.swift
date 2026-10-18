@@ -74,9 +74,9 @@ struct RecordingFolderMemory {
 ///   finds it in the folder remembered. A folder no recording was made in is never read, and in one
 ///   that is, only the folders the recorder names (`ScreencastCaptureFolder.isFolderName`) are
 ///   opened: a Recordings folder such as the Desktop holds the person's own folders too.
-/// - **Moved or deleted:** a recording whose folder, or every video in it, is gone is marked
-///   `isMissing` each time the index looks (`load`, `refresh`, `recordingsNewestFirst`), and stays
-///   listed until it's removed; it's unmarked if it comes back.
+/// - **Moved or deleted:** a recording whose folder, or a display's full video in it, is gone is
+///   marked `isMissing` each time the index looks (`load`, `refresh`, `recordingsNewestFirst`),
+///   and stays listed until it's removed; it's unmarked if it comes back.
 /// - **The import** runs once (`RecordingImportMemory`), the first time the index loads without
 ///   having run it: each recording in the old recordings folder (`ProductPaths.captures`) is indexed
 ///   where it is, and each screenshot a QA build's Screencast saved there before #487 goes to the
@@ -555,7 +555,8 @@ final class RecordingLibrary {
     private func isPresent(_ recording: IndexedRecording) -> Bool {
         var isFolder: ObjCBool = false
         guard fileManager.fileExists(atPath: recording.folder.path, isDirectory: &isFolder), isFolder.boolValue else { return false }
-        return recording.videoURLs.contains { fileManager.fileExists(atPath: $0.path) }
+        let videos = recording.videoURLs
+        return !videos.isEmpty && videos.allSatisfy { fileManager.fileExists(atPath: $0.path) }
     }
 }
 

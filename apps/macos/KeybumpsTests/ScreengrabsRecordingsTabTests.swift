@@ -399,6 +399,64 @@ struct ScreengrabsRecordingsTabTests {
         #expect(fixture.content.item(at: 0, query: "")?.isMissing == true)
     }
 
+    @Test("A recording of every screen with one display's video deleted can't be copied, pasted, previewed, or opened, as the recording window can't, and is marked missing")
+    func oneDisplaysVideoGone() throws {
+        let fixture = RecordingsTabFixture()
+        defer { fixture.tearDown() }
+        let recording = try fixture.addRecording(at: Self.start, displays: 2)
+        let content = fixture.content
+        content.didShow(palette: fixture.log.actions)
+        try FileManager.default.removeItem(at: recording.videoURLs[1])
+        #expect(recording.savedCapture() == nil, "The recording window refuses it")
+
+        content.activate(row: 0, query: "", palette: fixture.log.actions)
+        #expect(content.item(at: 0, query: "")?.isMissing == true, "Marked as soon as it's used")
+        content.copy(row: 0, query: "", palette: fixture.log.actions)
+        content.paste(row: 0, query: "", palette: fixture.log.actions)
+        content.commandActivate(row: 0, query: "", palette: fixture.log.actions)
+        try #require(content.playback(row: 0, query: "")).toggle()
+        #expect(fixture.log.warnings == Array(repeating: ScreengrabsPaletteContent.missingMessage, count: 5))
+        #expect(fixture.log.calls.filter { $0 != .warn }.isEmpty, "Nothing copied, pasted, or opened")
+        #expect(fixture.opened.isEmpty && fixture.quickLook.previews.isEmpty)
+
+        content.didShow(palette: fixture.log.actions)
+        #expect(content.item(at: 0, query: "")?.isMissing == true, "Still marked when the tab shows again")
+        #expect(content.footerActions(row: 0, query: "").secondary.map(\.description) == ["Remove ⌫"])
+    }
+
+    @Test("Return through the palette on a recording with one display's video deleted puts nothing on the pasteboard and says it can't open")
+    func oneDisplaysVideoGoneThroughThePalette() throws {
+        let fixture = RecordingsTabFixture()
+        defer { fixture.tearDown() }
+        let recording = try fixture.addRecording(at: Self.start, displays: 2)
+        let palette = fixture.palette
+        palette.selectOnOpening(.screenshots)
+        try FileManager.default.removeItem(at: recording.videoURLs[1])
+        let changeCount = fixture.library.pasteboard.changeCount
+
+        #expect(palette.handleKeyDown(Self.key(kVK_DownArrow)) == nil)
+        #expect(palette.handleKeyDown(Self.key(kVK_Return, "\r")) == nil)
+        #expect(palette.handleKeyDown(Self.key(kVK_ANSI_P, "p", modifiers: .command)) == nil)
+        #expect(fixture.library.pasteboard.changeCount == changeCount, "Nothing put on the pasteboard")
+        let copied = fixture.library.pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL]
+        #expect(copied?.isEmpty ?? true)
+        #expect(fixture.notices.messages == Array(repeating: ScreengrabsPaletteContent.missingMessage, count: 2))
+    }
+
+    @Test("A display whose mixdown is deleted copies its full video instead, as the recording window's Copy does")
+    func mixdownGone() throws {
+        let fixture = RecordingsTabFixture()
+        defer { fixture.tearDown() }
+        let recording = try fixture.addRecording(at: Self.start, displays: 2)
+        try FileManager.default.removeItem(at: recording.sharingURLs[1])
+        fixture.content.didShow(palette: fixture.log.actions)
+        #expect(fixture.content.item(at: 0, query: "")?.isMissing == false)
+
+        fixture.content.activate(row: 0, query: "", palette: fixture.log.actions)
+        #expect(fixture.log.calls == [.copyFiles([recording.sharingURLs[0], recording.videoURLs[1]])])
+        #expect(fixture.log.warnings.isEmpty)
+    }
+
     @Test("Comes back unmarked when its folder is back")
     func folderBack() throws {
         let fixture = RecordingsTabFixture()
@@ -523,6 +581,77 @@ struct ScreengrabsRecordingsTabTests {
         let copied = review.pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL]
         #expect(copied?.map(\.lastPathComponent) == ["video-1-mixdown.mp4", "video-2-mixdown.mp4"])
         #expect(window.suppressions == 1)
+        #expect(try Data(contentsOf: input.metadataURL) == before)
+    }
+
+    @Test("Opened from ⌘3 with a trim, Done and Copy write it and the tile's poster frame is made again; Keep Original only closes; the review in meta.json stays")
+    func savedWithAnEdit() async throws {
+        let review = ReviewFixture()
+        let index = RecordingLibraryFixture()
+        defer {
+            review.tearDown()
+            index.tearDown()
+        }
+        let input = try review.video()
+        try ScreencastReview.write(
+            ScreencastReview(note: "made-up note", type: .feature, repository: "serpcompany/keybumps", context: .none, reviewedAt: ReviewFixture.reviewDate),
+            to: input.metadataURL
+        )
+        let before = try Data(contentsOf: input.metadataURL)
+        let library = index.library()
+        guard case .video(let capture) = input else { return }
+        library.add(capture)
+        func posterFrame() throws -> String { try #require(library.recordings.first).posterFrame }
+        let trim = ScreencastTimeRange(start: 1, end: 3)
+
+        // Done with an edit writes it (the owner is deciding whether Done should), and ends saved.
+        let doneExport = FakeEditExport()
+        let done = SavedWindow(input, review, export: doneExport.export)
+        done.model.edit { $0.setTrim(start: 1, end: 3) }
+        await done.model.save()
+        #expect(doneExport.runs.map(\.trim) == [trim])
+        guard case .saved(.video(let saved))? = done.outcomes.first, done.outcomes.count == 1 else {
+            Issue.record("saved: \(done.outcomes)")
+            return
+        }
+        #expect(saved.duration == 2, "the edited recording")
+        let first = try posterFrame()
+        library.reviewEnded(try #require(done.outcomes.first))
+        let afterDone = try posterFrame()
+        #expect(afterDone != first, "made again: the files changed")
+        #expect(try Data(contentsOf: input.metadataURL) == before, "The review isn't written again")
+
+        // Copy with an edit writes it, copies it, and ends copied.
+        let copyExport = FakeEditExport()
+        let copying = SavedWindow(input, review, export: copyExport.export)
+        copying.model.edit { $0.setTrim(start: 1, end: 3) }
+        await copying.model.copy()
+        #expect(copyExport.runs.map(\.trim) == [trim])
+        guard case .copied? = copying.outcomes.first, copying.outcomes.count == 1 else {
+            Issue.record("copied: \(copying.outcomes)")
+            return
+        }
+        let copied = review.pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL]
+        #expect(copied?.map(\.lastPathComponent) == ["video-1-mixdown.mp4"])
+        #expect(copying.suppressions == 1)
+        library.reviewEnded(try #require(copying.outcomes.first))
+        let afterCopy = try posterFrame()
+        #expect(afterCopy != afterDone, "made again: the files changed")
+        #expect(try Data(contentsOf: input.metadataURL) == before)
+
+        // Closing with an edit asks "Save your edits?"; Keep Original writes nothing and only closes.
+        let keepExport = FakeEditExport()
+        let keeping = SavedWindow(input, review, export: keepExport.export)
+        keeping.model.edit { $0.setTrim(start: 1, end: 3) }
+        keeping.model.askToSaveEdits()
+        #expect(keeping.model.isAskingToSaveEdits)
+        #expect(ScreencastRecordingReviewBar.question(for: keeping.model) == "Save your edits?")
+        #expect(ScreencastRecordingReviewBar.actions(for: keeping.model).map(\.title) == ["Keep Original", "Save Edited"])
+        await keeping.model.keepOriginal()
+        #expect(keepExport.runs.isEmpty, "Nothing exported")
+        #expect(keeping.outcomes == [.closed(input)])
+        library.reviewEnded(try #require(keeping.outcomes.first))
+        #expect(try posterFrame() == afterCopy, "Kept: the files didn't change")
         #expect(try Data(contentsOf: input.metadataURL) == before)
     }
 
@@ -761,7 +890,8 @@ private final class RecordingNotices: PaletteNoticePresenting {
 }
 
 /// A recording window's model opened from ⌘3 on `input` (`ScreencastReviewMode.saved`), with a Trash
-/// that records what it's given, and the outcomes and Clipboard History skips it asks for.
+/// that records what it's given, an export (a test's stand-in, `FakeEditExport`, or the movies),
+/// and the outcomes and Clipboard History skips it asks for.
 @MainActor
 private final class SavedWindow {
     private final class Log {
@@ -776,7 +906,7 @@ private final class SavedWindow {
     var trashed: [URL] { log.trashed }
     var suppressions: Int { log.suppressions }
 
-    init(_ input: ScreencastReviewInput, _ review: ReviewFixture, trashFails: Bool = false) {
+    init(_ input: ScreencastReviewInput, _ review: ReviewFixture, trashFails: Bool = false, export: ScreencastEditExport = .movies) {
         let log = Log()
         self.log = log
         model = ScreencastReviewModel(
@@ -785,6 +915,7 @@ private final class SavedWindow {
             pasteboard: review.pasteboard,
             keepOutOfClipboardHistory: { log.suppressions += 1 },
             now: { ReviewFixture.reviewDate },
+            export: export,
             mode: .saved,
             trash: RecordingTrash { folder in
                 if trashFails { throw CocoaError(.fileWriteNoPermission) }

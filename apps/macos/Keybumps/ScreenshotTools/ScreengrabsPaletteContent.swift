@@ -65,7 +65,7 @@ enum Screengrab: Equatable, Identifiable {
         return recording
     }
 
-    /// A recording whose folder, or every video in it, was moved or deleted outside Keybumps.
+    /// A recording whose folder, or a display's video in it, was moved or deleted outside Keybumps.
     var isMissing: Bool { recording?.isMissing == true }
 
     /// What Space shows in Quick Look: a screenshot's file where it was saved, else Clipboard
@@ -248,9 +248,10 @@ enum ScreengrabsTabContent: Equatable {
 /// - **Space** opens it in Quick Look (`ScreengrabsQuickLooking`).
 /// - **Delete** removes a screenshot from the tab and leaves its file. On a recording it asks, then
 ///   moves its folder to the Trash (`RecordingTrash`). Clear All clears screenshots only.
-/// - A recording moved or deleted outside Keybumps stays, dimmed, marked "Moved or deleted"
-///   (`IndexedRecording.isMissing`, looked at again each time the tab shows): its keys say it
-///   couldn't open, and Delete removes it at once, with no question.
+/// - A recording moved or deleted outside Keybumps, its folder or a display's video, stays, dimmed,
+///   marked "Moved or deleted" (`IndexedRecording.isMissing`, looked at again each time the tab
+///   shows): its keys say it couldn't open, as the recording window can't, and Delete removes it
+///   from the tab at once, with no question.
 /// - The context menu has Show in Finder too.
 @MainActor
 final class ScreengrabsPaletteContent: CapabilityPaletteContent {
@@ -351,8 +352,8 @@ final class ScreengrabsPaletteContent: CapabilityPaletteContent {
         switch item {
         case .screenshot(let entry): palette.pasteClipboardEntry(entry)
         case .recording(let recording):
-            guard isAvailable(recording, palette: palette) else { return }
-            palette.pasteFiles(recording.sharingURLs)
+            guard let files = sharingFiles(of: recording, palette: palette) else { return }
+            palette.pasteFiles(files)
         }
     }
 
@@ -458,12 +459,12 @@ final class ScreengrabsPaletteContent: CapabilityPaletteContent {
         case .screenshot(let entry):
             Self.choose(entry, withCommand: withCommand, palette: palette)
         case .recording(let recording):
-            guard isAvailable(recording, palette: palette) else { return }
+            guard let files = sharingFiles(of: recording, palette: palette) else { return }
             if withCommand {
                 palette.dismiss()
                 if !openRecording(recording) { palette.warn(Self.openFailedMessage) }
             } else {
-                palette.copyFiles(recording.sharingURLs)
+                palette.copyFiles(files)
             }
         }
     }
@@ -479,11 +480,13 @@ final class ScreengrabsPaletteContent: CapabilityPaletteContent {
     /// Space, and the context menu's Quick Look: the palette closes first, so Quick Look has the
     /// keyboard.
     func preview(_ item: Screengrab) {
-        if item.isMissing {
-            palette?.warn(Self.missingMessage)
-            return
+        let files: [URL]
+        if let recording = item.recording {
+            guard let shared = sharingFiles(of: recording, palette: palette) else { return }
+            files = shared
+        } else {
+            files = item.previewFiles
         }
-        let files = item.previewFiles
         guard !files.isEmpty else { return }
         palette?.dismiss()
         quickLook.preview(files)
@@ -511,14 +514,17 @@ final class ScreengrabsPaletteContent: CapabilityPaletteContent {
         recordings?.remove(folder: recording.folder)
     }
 
-    /// Whether the recording is still there to open or copy. One gone since the tab showed is
-    /// marked missing now, and the notch says so.
-    private func isAvailable(_ recording: IndexedRecording, palette: PaletteContentActions) -> Bool {
-        let present = !recording.isMissing && recording.videoURLs.contains { FileManager.default.fileExists(atPath: $0.path) }
-        guard !present else { return true }
+    /// The one check before Return, ⌘P, Space, and ⌘Return use a recording: it's taken as the
+    /// recording window opens it (`IndexedRecording.savedCapture()`), and what's copied, pasted, or
+    /// previewed is each display's mixdown, else its full video, as the window's Copy does. Nil when
+    /// it can't open, and the notch says why: moved or deleted (its folder or a display's video,
+    /// marked missing now if that happened since the tab showed), or else that it couldn't open.
+    private func sharingFiles(of recording: IndexedRecording, palette: PaletteContentActions?) -> [URL]? {
+        if !recording.isMissing, let capture = recording.savedCapture() { return capture.videos.map(\.forSharing) }
         recordings?.refresh()
-        palette.warn(Self.missingMessage)
-        return false
+        let missing = recording.isMissing || recordings?.recordings.first { $0.id == recording.id }?.isMissing == true
+        palette?.warn(missing ? Self.missingMessage : Self.openFailedMessage)
+        return nil
     }
 
     func item(at row: Int, query: String) -> Screengrab? {
