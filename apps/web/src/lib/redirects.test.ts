@@ -1,7 +1,7 @@
 import { buildCustomRoute } from 'next/dist/lib/build-custom-route'
 import { compile, match } from 'path-to-regexp'
 import { describe, expect, it } from 'vitest'
-import { sitePages } from './pages'
+import { indexablePages } from './pages'
 import { siteRedirects, smokeTestHeader } from './redirects'
 
 type Request = { host?: string; path: string; headers?: Record<string, string> }
@@ -42,7 +42,8 @@ const staging = siteRedirects({ production: false })
 describe('site redirects', () => {
   it('serves every canonical page, file, and framework asset directly', () => {
     for (const path of [
-      ...sitePages.map(page => page.path),
+      // The static pages and each plugin's page.
+      ...indexablePages.map(page => page.path),
       // Its route handler answers with a temporary redirect to the current DMG, not a config one.
       '/download/',
       '/thanks/',
@@ -91,6 +92,23 @@ describe('site redirects', () => {
     expect(resolve(production, { path: '/sitemap.xml' })).toBe('/sitemap-index.xml')
   })
 
+  it("sends ScreenGrabs' old page, Screenshot Tools', to its new one in one 308", () => {
+    for (const path of ['/plugins/screenshot-tools', '/plugins/screenshot-tools/']) {
+      expect(resolve(production, { path }), path).toBe('/plugins/screengrabs/')
+      expect(resolve(staging, { path }), path).toBe('/plugins/screengrabs/')
+    }
+    // Permanent, so a 308: on keybumps.app, and from www and workers.dev straight to it.
+    const rules = production.filter(redirect => redirect.source === '/plugins/screenshot-tools')
+    expect(rules.map(rule => [rule.destination, rule.permanent])).toEqual([
+      ['https://keybumps.app/plugins/screengrabs/', true],
+      ['https://keybumps.app/plugins/screengrabs/', true],
+      ['/plugins/screengrabs/', true]
+    ])
+    // Only that slug: the new page, and a slug that starts the same, aren't moved.
+    expect(resolve(production, { path: '/plugins/screengrabs/' })).toBeNull()
+    expect(resolve(production, { path: '/plugins/screenshot-tools-x/' })).toBeNull()
+  })
+
   it('lands every non-canonical URL on a directly served URL in one hop', () => {
     for (const path of [
       '/pricing',
@@ -108,6 +126,9 @@ describe('site redirects', () => {
       '/terms/',
       '/refunds',
       '/refunds/',
+      '/plugins/screengrabs',
+      '/plugins/screenshot-tools',
+      '/plugins/screenshot-tools/',
       '/sitemap.xml',
       '/robots.txt/',
       '/sitemap-index.xml/',
@@ -129,6 +150,7 @@ describe('site redirects', () => {
     expect(www('/pricing')).toBe('https://keybumps.app/pricing/')
     expect(www('/pricing/')).toBe('https://keybumps.app/pricing/')
     expect(www('/privacy')).toBe('https://keybumps.app/legal/privacy/')
+    expect(www('/plugins/screenshot-tools/')).toBe('https://keybumps.app/plugins/screengrabs/')
     expect(www('/robots.txt')).toBe('https://keybumps.app/robots.txt')
     expect(www('/sitemaps/pages.xml/')).toBe('https://keybumps.app/sitemaps/pages.xml')
   })

@@ -9,7 +9,9 @@
  *   permissions, dependencies, search keywords, and `minimumMacOS`; Timer's, Emoji Picker's,
  *   Translation's, and Keystrokes' preferences; Clipboard History's, ScreenGrabs', Snippets', Emoji
  *   Picker's, and Translation's optional permissions. ScreenGrabs is `ScreenshotToolsModule.swift`:
- *   it took Screenshot Tools' ID, so its slug stays `screenshot-tools` (ADR 0010).
+ *   it took Screenshot Tools' ID, `screenshotTools`, and its page moved from
+ *   /plugins/screenshot-tools/, which redirects to /plugins/screengrabs/ (ADR 0010; `legacyRedirects`
+ *   in src/lib/pages.ts).
  * - `apps/macos/Keybumps/Screencast/ScreencastPreferences.swift`: ScreenGrabs' recording settings;
  *   `PluginCompatibility.recordingMacOS` (`PluginManifest.swift`): the macOS it records on.
  * - `apps/macos/Keybumps/EmojiPicker/*.swift` and `emoji.json` (its `sources`): what the Emoji tab
@@ -109,6 +111,12 @@ export type Plugin = {
   tint: IconTint
   /** The descriptor's `searchKeywords`: other words the search on /plugins/ matches. */
   keywords: readonly string[]
+  /**
+   * Names it had in earlier releases, which the search on /plugins/ still matches, so a search for
+   * an old name finds it. Older release notes use them too, so each is in `pluginAliases` in
+   * src/lib/changelog.ts.
+   */
+  formerNames?: readonly string[]
   /** Its Command Palette tab and the Command-number that selects it, if it has one. */
   paletteTab: {
     name: string
@@ -261,7 +269,7 @@ export const plugins: readonly Plugin[] = [
     ]
   },
   {
-    slug: 'screenshot-tools',
+    slug: 'screengrabs',
     capability: 'screenshotTools',
     name: 'ScreenGrabs',
     summary:
@@ -285,6 +293,7 @@ export const plugins: readonly Plugin[] = [
       'video',
       'screencast'
     ],
+    formerNames: ['Screenshot Tools'],
     paletteTab: { name: 'ScreenGrabs', commandKey: 3 },
     shortcuts: [
       { title: 'Screenshot Screen', keys: '⇧⌘2' },
@@ -566,6 +575,7 @@ export const plugins: readonly Plugin[] = [
     systemImage: 'keyboard',
     tint: 'gray',
     keywords: ['hotkeys', 'hotkey', 'shortcuts', 'keyboard', 'history'],
+    formerNames: ['Keyboard Shortcutter'],
     paletteTab: {
       name: 'Hotkeys',
       commandKey: 9,
@@ -986,7 +996,14 @@ export function commandCount(plugin: Plugin): number {
 
 /** The words the search on /plugins/ matches, in lowercase. */
 export function searchTerms(plugin: Plugin): string {
-  return [plugin.name, plugin.summary, plugin.category, plugin.paletteTab?.name, ...plugin.keywords]
+  return [
+    plugin.name,
+    plugin.summary,
+    plugin.category,
+    plugin.paletteTab?.name,
+    ...plugin.keywords,
+    ...(plugin.formerNames ?? [])
+  ]
     .filter(Boolean)
     .join(' ')
     .toLowerCase()

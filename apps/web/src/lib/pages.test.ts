@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { legacyRedirects, sitePages } from './pages'
+import { indexablePages, legacyRedirects, sitePages } from './pages'
 
 describe('site pages', () => {
   it('uses the trailing-slash form for every page URL', () => {
@@ -11,11 +11,13 @@ describe('site pages', () => {
     expect(new Set(paths).size).toBe(paths.length)
   })
 
-  it('sends every legacy URL to a listed page', () => {
-    const paths: string[] = sitePages.map(page => page.path)
+  it('sends every legacy URL to a listed page, and lists no legacy URL as a page', () => {
+    // A plugin's page counts: ScreenGrabs' moved from /plugins/screenshot-tools/.
+    const paths: string[] = indexablePages.map(page => page.path)
     for (const { from, to } of legacyRedirects) {
       expect(from).not.toMatch(/\/$/)
       expect(paths).toContain(to)
+      expect(paths, from).not.toContain(`${from}/`)
     }
   })
 })

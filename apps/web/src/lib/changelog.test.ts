@@ -12,6 +12,7 @@ import {
   searchReleases,
   searchSummary
 } from './changelog'
+import { plugins } from './plugins'
 
 const changelog = `# Changelog
 
@@ -210,9 +211,22 @@ describe('released versions', () => {
     expect(searchReleases(releases, 'ScreenGrabs').terms).toEqual([
       'screengrabs',
       'screenshot tools',
+      'screencast',
       'screenshots tab',
       'screenshot editor'
     ])
+  })
+
+  it('tags a plugin wherever the notes use one of its former names', () => {
+    expect(pluginsNamed('Screencast records video only.').map(p => p.slug)).toEqual(['screengrabs'])
+    for (const plugin of plugins) {
+      for (const name of plugin.formerNames ?? []) {
+        expect(
+          pluginsNamed(`${name} gets faster.`).map(p => p.slug),
+          name
+        ).toEqual([plugin.slug])
+      }
+    }
   })
 
   it("reads a plugin's name as that plugin, highlighting every word that tagged it", () => {
