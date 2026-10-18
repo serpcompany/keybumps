@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.3-beta.27](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.26...v0.0.3-beta.27) (2026-10-18)
+
+
+### Features
+
+* **screengrabs:** choose the Screenshots and Recordings folders ([#536](https://github.com/serpcompany/keybumps/issues/536)) ([05bafa6](https://github.com/serpcompany/keybumps/commit/05bafa656693f1048b8eac813f5ff6b30c8abb85))
+* **screengrabs:** the ⌘3 tab lists recordings beside screenshots ([#540](https://github.com/serpcompany/keybumps/issues/540)) ([52644ed](https://github.com/serpcompany/keybumps/commit/52644ede91dd72bc4cffad2d06902380fc6469b3))
+
 ## [0.0.3-beta.26](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.25...v0.0.3-beta.26) (2026-10-17)
 
 
