@@ -69,7 +69,7 @@ describe('cardShortcut', () => {
     expect(cardShortcut(pluginFor('window-manager'))?.label).toBe(
       'Window Manager: Left, from any app'
     )
-    expect(cardShortcut(pluginFor('screenshot-tools'))?.label).toBe(
+    expect(cardShortcut(pluginFor('screengrabs'))?.label).toBe(
       'ScreenGrabs: Screenshot Screen, from any app'
     )
   })
@@ -179,7 +179,7 @@ describe('plugins', () => {
   })
 
   it('counts a plugin’s palette tab and shortcuts as its commands', () => {
-    expect(commandCount(pluginFor('screenshot-tools'))).toBe(9)
+    expect(commandCount(pluginFor('screengrabs'))).toBe(9)
     expect(commandCount(pluginFor('shortcut-coach'))).toBe(1)
     expect(commandCount(pluginFor('timer'))).toBe(2)
   })
@@ -190,6 +190,31 @@ describe('plugins', () => {
     expect(searchTerms(pluginFor('dictation'))).toContain('writing')
     for (const plugin of plugins) {
       expect(searchTerms(plugin)).toBe(searchTerms(plugin).toLowerCase())
+    }
+  })
+
+  it('finds a plugin by a name it had before', () => {
+    // As src/components/plugin-browser.tsx matches: every word typed, anywhere in the terms.
+    const found = (query: string) =>
+      plugins
+        .filter(plugin =>
+          query
+            .toLowerCase()
+            .split(/\s+/)
+            .every(word => searchTerms(plugin).includes(word))
+        )
+        .map(plugin => plugin.slug)
+    expect(pluginFor('screengrabs').formerNames).toEqual(['Screenshot Tools'])
+    expect(found('Screenshot Tools')).toEqual(['screengrabs'])
+    expect(found('Keyboard Shortcutter')).toEqual(['shortcut-coach'])
+    // A former name is no plugin's name now.
+    for (const plugin of plugins) {
+      for (const name of plugin.formerNames ?? []) {
+        expect(
+          plugins.map(other => other.name),
+          name
+        ).not.toContain(name)
+      }
     }
   })
 
@@ -293,9 +318,7 @@ describe('plugin pages', () => {
   })
 
   it('lists Requires only when a plugin needs another one', () => {
-    expect(renderPage(pluginFor('screenshot-tools'))).toContain(
-      'href="/plugins/clipboard-history/"'
-    )
+    expect(renderPage(pluginFor('screengrabs'))).toContain('href="/plugins/clipboard-history/"')
     expect(renderPage(pluginFor('timer'))).not.toContain('>Requires<')
   })
 
@@ -343,7 +366,7 @@ describe('plugin page guides', () => {
     expect(text.filter(line => /whisper|apple speech|model/i.test(line))).toEqual([])
   })
 
-  it('pastes with ⌘P, never ⌘Return, which only edits in Screenshots and reveals in Finder in Search (#370)', () => {
+  it('pastes with ⌘P, never ⌘Return, which only edits in ScreenGrabs and reveals in Finder in Search (#370)', () => {
     const pluginText = plugins.flatMap(plugin => [
       ...plugin.overview,
       ...plugin.features,
@@ -363,7 +386,7 @@ describe('plugin page guides', () => {
     // Each tab where ⌘P pastes lists Accessibility, which the paste uses.
     for (const slug of [
       'clipboard-history',
-      'screenshot-tools',
+      'screengrabs',
       'dictation',
       'snippets',
       'emoji-picker',

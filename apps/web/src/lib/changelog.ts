@@ -68,12 +68,12 @@ const MONTHS = [
 
 /**
  * Other words the notes use for a plugin, so its tag shows on the releases that change it: a tab's
- * name, a part's, or a former name, such as Screenshot Tools and its Screenshots tab, which
- * ScreenGrabs replaced in beta.26 (ADR 0010).
+ * name, a part's, or a former name (each of its `formerNames`), such as Screenshot Tools and its
+ * Screenshots tab, and Screencast, which ScreenGrabs replaced in beta.26 (ADR 0010).
  */
 const pluginAliases: Record<string, readonly string[]> = {
   'clipboard-history': ['Clipboard tab'],
-  'screenshot-tools': ['Screenshot Tools', 'Screenshots tab', 'Screenshot Editor'],
+  screengrabs: ['Screenshot Tools', 'Screencast', 'Screenshots tab', 'Screenshot Editor'],
   'shortcut-coach': ['Keyboard Shortcutter'],
   snippets: ['Snippet', 'Snippets tab'],
   'emoji-picker': ['Emoji'],

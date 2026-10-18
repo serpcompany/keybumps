@@ -3,13 +3,13 @@
 # shellcheck disable=SC2329
 # Checks a running keybumps.app website: key pages, robots.txt, and the sitemaps respond; every
 # plugin page in the pages sitemap responds, canonical to itself and linked from /plugins/; the
-# trailing-slash and legacy redirects take one 308 hop; /download/ sends a 302 to the current DMG,
-# which the Download buttons link to directly; /buy/ sends a 302 to Polar's checkout, and Polar's
-# webhook refuses an unsigned delivery; search-engine rules and analytics match the
-# environment (only production may be indexed or load GTM, which it does on /, /thanks/, and
-# /license/); /thanks/ and /license/ redirect a query away before rendering and are never served to
-# client-side navigation; and the non-canonical hosts (www and workers.dev) redirect to the branded
-# domain in one 308.
+# trailing-slash and legacy redirects (the old legal URLs and ScreenGrabs' old page) take one 308
+# hop; /download/ sends a 302 to the current DMG, which the Download buttons link to directly;
+# /buy/ sends a 302 to Polar's checkout, and Polar's webhook refuses an unsigned delivery;
+# search-engine rules and analytics match the environment (only production may be indexed or load
+# GTM, which it does on /, /thanks/, and /license/); /thanks/ and /license/ redirect a query away
+# before rendering and are never served to client-side navigation; and the non-canonical hosts (www
+# and workers.dev) redirect to the branded domain in one 308.
 # Requests carry the smoke-test header so a workers.dev URL serves the site instead of redirecting.
 #
 # Every check retries for a short time: right after a deploy, some requests can still reach the
@@ -189,6 +189,11 @@ for legacy in privacy terms refunds; do
   expect_redirect "/$legacy/" "/legal/$legacy/"
 done
 expect_redirect /sitemap.xml /sitemap-index.xml
+# ScreenGrabs' page was /plugins/screenshot-tools/ until beta.26 (ADR 0010). Both forms of the old
+# URL go straight to the new page, which serves; the plugin-page checks above check it in full.
+expect_redirect /plugins/screenshot-tools /plugins/screengrabs/
+expect_redirect /plugins/screenshot-tools/ /plugins/screengrabs/
+eventually '200 /plugins/screengrabs/' status_is "$base/plugins/screengrabs/" 200 "${smoke[@]}"
 
 # /download/ has no page: it sends a temporary 302 (never a 308, which browsers keep) to the
 # current DMG from latest.json, with no-store, so it always gives the latest build. The Download

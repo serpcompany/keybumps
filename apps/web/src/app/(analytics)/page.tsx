@@ -87,7 +87,7 @@ const featured: readonly {
     visual: <WindowsVisual />
   },
   {
-    slug: 'screenshot-tools',
+    slug: 'screengrabs',
     headline: 'Capture, mark up, and paste in seconds.',
     lede: 'Take a screenshot, cover what shouldn’t be seen, and paste it anywhere.',
     features: [
@@ -124,12 +124,12 @@ const useCases: readonly { title: string; text: string; plugins: readonly string
   {
     title: 'Software development',
     text: 'Paste the command you copied an hour ago, put the editor and browser side by side, and grab a screenshot of the bug with the secrets blurred.',
-    plugins: ['clipboard-history', 'window-manager', 'screenshot-tools']
+    plugins: ['clipboard-history', 'window-manager', 'screengrabs']
   },
   {
     title: 'Customer support',
     text: 'Answer common questions with saved snippets, and send marked-up screenshots that show exactly where to click.',
-    plugins: ['snippets', 'screenshot-tools', 'emoji-picker']
+    plugins: ['snippets', 'screengrabs', 'emoji-picker']
   },
   {
     title: 'Studying and research',

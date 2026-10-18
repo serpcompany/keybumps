@@ -42,7 +42,7 @@ const heroIcons: readonly (readonly [string, number, number])[][] = [
     ['dictation', 68, 0.75],
     ['keystrokes', 80, 1],
     ['translation', 80, 1],
-    ['screenshot-tools', 68, 0.75],
+    ['screengrabs', 68, 0.75],
     ['shortcut-coach', 52, 0.35]
   ]
 ]

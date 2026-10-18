@@ -96,14 +96,17 @@ export function pageFor(path: SitePagePath): SitePage {
 }
 
 /**
- * Legacy URLs that shipped before the /legal/ section. Polar checkout review and older links use
- * them, so each one permanently redirects to its page in one hop.
+ * Legacy URLs: the legal pages from before the /legal/ section, which Polar checkout review and
+ * older links use, and ScreenGrabs' page, /plugins/screenshot-tools/ until Screenshot Tools became
+ * ScreenGrabs in beta.26 (ADR 0010). Each one permanently redirects to its page in one hop, with or
+ * without its trailing slash.
  */
 export const legacyRedirects = [
   { from: '/privacy', to: '/legal/privacy/' },
   { from: '/terms', to: '/legal/terms/' },
-  { from: '/refunds', to: '/legal/refunds/' }
-] as const satisfies readonly { from: string; to: SitePagePath }[]
+  { from: '/refunds', to: '/legal/refunds/' },
+  { from: '/plugins/screenshot-tools', to: '/plugins/screengrabs/' }
+] as const satisfies readonly { from: string; to: SitePagePath | `/plugins/${string}/` }[]
 
 /**
  * Pages whose URLs can carry checkout, session, or license data. Polar sends buyers to /thanks/
