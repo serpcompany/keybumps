@@ -552,12 +552,17 @@ struct ScreencastRealValueTests {
         #expect(hugeScale.sourceRect == CGRect(x: 0, y: 0, width: 1920, height: 1080))
     }
 
-    @Test("A clock that isn't a real time names the capture folder 0")
+    @Test("A clock that isn't a real time, or reads before 2001, names the recording's folder 0, so the index still opens it")
     func folderName() throws {
         let folder = TemporaryCapturesFolder()
         defer { folder.remove() }
         let made = try ScreencastCaptureFolder.create(in: folder.url, startedAt: Date(timeIntervalSince1970: .nan), fileManager: .default)
         #expect(made.lastPathComponent == "0")
+        let early = try ScreencastCaptureFolder.create(in: folder.url, startedAt: Date(timeIntervalSince1970: 999_999_999), fileManager: .default)
+        #expect(early.lastPathComponent == "0-2", "never a short number like a year")
+        let first = try ScreencastCaptureFolder.create(in: folder.url, startedAt: Date(timeIntervalSince1970: 1_000_000_000), fileManager: .default)
+        #expect(first.lastPathComponent == "1000000000")
+        #expect([made, early, first].allSatisfy { ScreencastCaptureFolder.isFolderName($0.lastPathComponent) })
     }
 
     @Test("Encoding sizes and frame rates can't overflow")

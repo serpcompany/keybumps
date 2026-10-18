@@ -97,7 +97,7 @@ enum ScreencastFailure: String, Error, Equatable, Codable, Sendable {
     case stoppedByMacOS
     /// A file couldn't be written: a full disk or a failed encoder.
     case writerFailed
-    /// The captures folder couldn't be created.
+    /// The recording's folder couldn't be made in the Recordings folder, or in the default one.
     case folderUnavailable
     /// The recording ended before any picture was written, so there's nothing to keep.
     case noFootage
@@ -142,9 +142,9 @@ struct ScreencastOptions: Equatable, Sendable {
     }
 }
 
-/// A finished recording, saved in its own folder in the captures folder.
+/// A finished recording, saved in its own folder in the Recordings folder.
 struct ScreencastCapture: Equatable, Sendable {
-    /// `<captures folder>/<timestamp>/`.
+    /// `<Recordings folder>/<timestamp>/`.
     let folder: URL
     /// One per display, in display order.
     let videos: [ScreencastVideo]

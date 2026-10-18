@@ -28,7 +28,7 @@ enum ScreencastSmokeTest {
     /// Its own defaults, so the area it draws and the mode and screen it picks never replace the
     /// person's last ones. Emptied before and after it runs.
     static let defaultsSuite = "com.serp.keybumps.screencast-smoke-test"
-    /// Its captures folder, in the temporary folder: emptied before it runs, deleted after, and
+    /// Its Recordings folder, in the temporary folder: emptied before it runs, deleted after, and
     /// deleted by the script too, so a run that crashed leaves nothing for long. Recordings are
     /// saved in it, and the screenshots and their Clipboard History in folders inside it.
     nonisolated static let capturesFolderName = "Keybumps-screengrabs-smoke-test"

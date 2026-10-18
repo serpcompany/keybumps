@@ -379,7 +379,7 @@ struct RecordingLibraryTests {
         let alias = fixture.root.url.appendingPathComponent("alias", isDirectory: true)
         try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: fixture.captures)
         let capture = try await fixture.recording(at: 200)
-        let linked = alias.appendingPathComponent("200", isDirectory: true)
+        let linked = alias.appendingPathComponent(RecordingLibraryFixture.folderName(200), isDirectory: true)
         library.add(ScreencastCapture(folder: linked, videos: capture.videos, duration: capture.duration, endedEarly: nil))
         #expect(library.recordings.map(\.folder.path).contains(linked.path))
         let index = try fixture.indexText()
@@ -406,7 +406,8 @@ struct RecordingLibraryTests {
 
         library.add(try await fixture.recording(at: 200, in: chosen))
         #expect(library.recordings.map(\.folder.path) == [
-            chosen.appendingPathComponent("200").path, fixture.captures.appendingPathComponent("100").path,
+            chosen.appendingPathComponent(RecordingLibraryFixture.folderName(200)).path,
+            fixture.captures.appendingPathComponent(RecordingLibraryFixture.folderName(100)).path,
         ])
         #expect(fixture.folderMemory.folders == [chosen.standardizedFileURL])
         #expect(library.recordingsFolders.map(\.standardizedFileURL) == [fixture.captures, chosen].map(\.standardizedFileURL))
@@ -558,8 +559,8 @@ struct RecordingLibraryTests {
         library.load()
         let saved = try await fixture.recording(at: 100, in: desktop)
         library.add(saved)
-        // What a recording and an export cut short leave, in a folder Keybumps never made.
-        let own = desktop.appendingPathComponent("Project", isDirectory: true)
+        // What a recording and an export cut short leave, in a folder Keybumps never made: a year's.
+        let own = desktop.appendingPathComponent("2024", isDirectory: true)
         try FileManager.default.moveItem(at: try await fixture.recording(at: 200, in: desktop).folder, to: own)
         try Data("theirs".utf8).write(to: own.appendingPathComponent(".video-1.editing.mov"))
         try Data("theirs too".utf8).write(to: own.appendingPathComponent(".video-2.original.mov"))
@@ -581,8 +582,11 @@ struct RecordingLibraryTests {
 
     @Test("Only the names the recorder gives a recording's folder count as one")
     func recordingFolderNames() {
-        #expect(["1791000000", "1791000000-2", "1791000000-12", "0"].allSatisfy(ScreencastCaptureFolder.isFolderName))
-        #expect(!["", "-", "1791000000-", "-2", "1791000000-2-3", "Project", "1791000000 copy", "12a", "\u{FF11}\u{FF12}"]
+        #expect(["1791000000", "1000000000", "1791000000-2", "1791000000-12", "0", "0-2"].allSatisfy(ScreencastCaptureFolder.isFolderName))
+        // A year, or any number shorter than a real clock's 10 digits, is the person's own.
+        #expect(!["2024", "2024-1", "999999999", "0123456789", "00", "Project", "Project-2"]
+            .contains(where: ScreencastCaptureFolder.isFolderName))
+        #expect(!["", "-", "1791000000-", "-2", "1791000000-2-3", "1791000000 copy", "12a", "\u{FF11}\u{FF12}"]
             .contains(where: ScreencastCaptureFolder.isFolderName))
     }
 
@@ -599,7 +603,7 @@ struct RecordingLibraryTests {
         try Data("a cached frame".utf8).write(to: frame)
         let alias = fixture.root.url.appendingPathComponent("alias", isDirectory: true)
         try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: fixture.captures)
-        let linked = alias.appendingPathComponent("100", isDirectory: true)
+        let linked = alias.appendingPathComponent(RecordingLibraryFixture.folderName(100), isDirectory: true)
 
         try fixture.setDuration(5, of: capture)
         library.update(linked)
@@ -725,6 +729,12 @@ final class RecordingLibraryFixture {
     let defaults = InMemoryDefaults()
     let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsRecordingLibrary-\(UUID().uuidString)"))
     var captures: URL { root.url.appendingPathComponent("captures", isDirectory: true) }
+
+    /// The name of the folder made for a recording or screenshot at `seconds`: a real timestamp,
+    /// as the recorder names one, so the index opens it. Its `meta.json` still says `seconds`.
+    static func folderName(_ seconds: TimeInterval) -> String {
+        String(1_791_000_000 + Int(seconds))
+    }
     var support: URL { root.url.appendingPathComponent("support", isDirectory: true) }
     var indexURL: URL { support.appendingPathComponent(RecordingIndexFile.fileName) }
     var posters: URL { root.url.appendingPathComponent("posters", isDirectory: true) }
@@ -786,7 +796,7 @@ final class RecordingLibraryFixture {
     @discardableResult
     func recording(at seconds: TimeInterval, displays: Int = 1, review: Bool = false, in parent: URL? = nil) async throws -> ScreencastCapture {
         let source = try await generatedMovie()
-        let folder = (parent ?? captures).appendingPathComponent(String(Int(seconds)), isDirectory: true)
+        let folder = (parent ?? captures).appendingPathComponent(Self.folderName(seconds), isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let videos = try (0..<displays).map { index in
             let file = folder.appendingPathComponent(ScreencastCaptureFolder.videoName(index: index))
@@ -814,7 +824,7 @@ final class RecordingLibraryFixture {
     /// `edited`, its marked-up copy and the review naming it.
     @discardableResult
     func legacyScreenshot(at seconds: TimeInterval, edited: Bool) throws -> URL {
-        let folder = captures.appendingPathComponent(String(Int(seconds)), isDirectory: true)
+        let folder = captures.appendingPathComponent(Self.folderName(seconds), isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         try writePNG(seed: Int(seconds), to: folder.appendingPathComponent("screenshot-1.png"))
         var meta: [String: Any] = [

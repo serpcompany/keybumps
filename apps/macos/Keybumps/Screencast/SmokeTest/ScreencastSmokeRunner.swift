@@ -73,7 +73,7 @@ struct ScreencastSmokeRig {
     let defaults: UserDefaults
 
     /// Settings › ScreenGrabs for the smoke test: no microphone, no Mac's sound, no countdown, no
-    /// shortcuts or click highlights, and its own captures folder.
+    /// shortcuts or click highlights, and its own Recordings folder.
     static func preferences(capturesFolder: URL) -> ScreencastPreferences {
         ScreencastPreferences(
             recordsMicrophone: false,
@@ -159,9 +159,9 @@ struct ScreencastSmokeRig {
 ///
 /// Every step has a time limit, so a hang fails the capture at the stage it reached instead of
 /// holding the app. After each capture the controller is brought back to idle (a start cancelled,
-/// a recording discarded, a late capture waited for) and everything in the captures folder is
+/// a recording discarded, a late capture waited for) and everything in its Recordings folder is
 /// deleted, whichever way the capture ended; if the controller can't be brought back, the rest are
-/// skipped. The captures folder is deleted at the end whatever happened, and the result is written
+/// skipped. Its Recordings folder is deleted at the end whatever happened, and the result is written
 /// after every stage.
 @available(macOS 15, *)
 @MainActor
@@ -455,8 +455,8 @@ final class ScreencastSmokeRunner {
     // MARK: Winding down
 
     /// Brings the controller back to idle after a capture: a picker or a start is cancelled, a
-    /// recording discarded, and a capture still being saved waited for. Then everything in the
-    /// captures folder is deleted, whichever way the capture ended, so nothing it saved waits for
+    /// recording discarded, and a capture still being saved waited for. Then everything in its
+    /// Recordings folder is deleted, whichever way the capture ended, so nothing it saved waits for
     /// the end. False when the controller doesn't get back in time.
     private func windDown() async -> Bool {
         let controller = rig.controller

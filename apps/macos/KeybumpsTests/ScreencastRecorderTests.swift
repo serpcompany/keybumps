@@ -112,20 +112,25 @@ struct ScreencastRecorderTests {
         let fallback = captures.url.appendingPathComponent("Default", isDirectory: true)
 
         let recorder = makeRecorder()
+        var made: [String] = []
+        recorder.onFolderMade = { made.append($0.path) }
         try await recorder.start(
             target: .display(1), audio: ScreencastAudio(microphone: true, systemAudio: true),
             capturesFolder: blocked, fallbackFolder: fallback
         )
         let writer = try #require(writers.writers.first)
         #expect(writer.fileURL == fallback.appendingPathComponent("1791000000").appendingPathComponent("video-1.mov"))
+        #expect(made == [fallback.path], "the folder it fell back to is reported, so the index finds it there")
         clock.advance(2)
         let capture = try await recorder.stop()
         #expect(capture.folder == fallback.appendingPathComponent("1791000000", isDirectory: true))
 
         let alone = makeRecorder()
+        alone.onFolderMade = { made.append($0.path) }
         await #expect(throws: ScreencastFailure.folderUnavailable) {
             try await alone.start(target: .display(1), audio: .none, capturesFolder: blocked)
         }
+        #expect(made == [fallback.path], "no folder made, none reported")
     }
 
     @available(macOS 15, *)
@@ -503,12 +508,15 @@ struct ScreencastRecorderTests {
     func restart() async throws {
         defer { captures.remove() }
         let recorder = makeRecorder()
+        var made: [String] = []
+        recorder.onFolderMade = { made.append($0.path) }
         try await start(recorder)
         system.videoStreams[0].deliverFrame(at: 1_000.5)
         recorder.setAudio(.microphone, on: false)
         clock.advance(4)
         try await recorder.restart()
 
+        #expect(made == [captures.url.path, captures.url.path], "the new take's folder is reported too")
         #expect(recorder.state == .recording && recorder.elapsed == 0)
         #expect(writers.writers.count == 2)
         #expect(writers.writers[0].calls.last == .cancel)
