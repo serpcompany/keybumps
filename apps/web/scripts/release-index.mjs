@@ -4,11 +4,13 @@
 // build, typecheck, and dev server, and the output isn't committed.
 //
 // Where the list comes from (RELEASE_INDEX):
-//   live    https://updates.keybumps.app/releases.json, the list publish-release.sh keeps
-//           (docs/releases/cloudflare.md). build:staging and build:production read this one.
+//   <path>  that file. web-deploy.yml reads releases.json, the list publish-release.sh keeps
+//           (docs/releases/cloudflare.md), from R2 and passes its copy to build:staging and
+//           build:production, because GitHub-hosted runners get HTTP 403 from updates.keybumps.app.
+//   live    https://updates.keybumps.app/releases.json, what build:staging and build:production
+//           read when RELEASE_INDEX isn't set (from a normal network; on a runner it stops).
 //   unset   scripts/release-index.fixture.json, a copy of the live list, so `pnpm check`, the
 //           tests, and local runs never depend on the network.
-//   <path>  that file.
 // RELEASE_INDEX_OUTPUT writes somewhere else (the tests use it).
 //
 // It accepts only a list in the format the release tooling writes (apps/macos/scripts/lib/
@@ -106,7 +108,8 @@ try {
   const entries = checkedIndex(live ? await fetchLive() : readFile(resolve(source)))
   mkdirSync(dirname(output), { recursive: true })
   writeFileSync(output, `${JSON.stringify(entries, null, 2)}\n`)
-  const from = live ? RELEASE_INDEX_URL : relative(web, resolve(source))
+  const path = relative(web, resolve(source))
+  const from = live ? RELEASE_INDEX_URL : path.startsWith('..') ? resolve(source) : path
   console.log(`release-index: ${entries.length} releases from ${from}`)
 } catch (error) {
   if (!(error instanceof ReleaseIndexError)) throw error

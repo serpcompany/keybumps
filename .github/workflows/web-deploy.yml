@@ -17,6 +17,12 @@ name: Web deploy
 # CLOUDFLARE_API_TOKEN is account-wide (Cloudflare can't scope it to one Worker), so only the two
 # Deploy steps get it. Use it only for keybumps-web-staging and keybumps-web-production. If a
 # deploy fails with an authorization error, ask the owner; don't widen the token.
+#
+# /changelog/ links each release's DMG from the release index, releases.json, which the runners
+# can't fetch from updates.keybumps.app (bot protection). So each deploy job reads it from R2 with
+# CLOUDFLARE_R2_TOKEN, the Release Keybumps workflow's bucket-scoped token, in a step of its own
+# before any site code runs; only that step gets the token. The build checks the file and stops
+# if it's unusable (apps/web/scripts/release-index.mjs).
 on:
   push:
     branches: [main]
@@ -101,14 +107,26 @@ jobs:
           cache: pnpm
           cache-dependency-path: apps/web/pnpm-lock.yaml
 
+      # Before pnpm install, in the runner's temp folder, so no repository code or config runs with
+      # the token. The account ID and wrangler version are release.yml's.
+      - name: Read the release index from R2
+        working-directory: ${{ runner.temp }}
+        env:
+          CLOUDFLARE_ACCOUNT_ID: cec5f04e1d18bcc65f2be0aefb04f059
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_TOKEN }}
+          WRANGLER_VERSION: 4.142.0
+        run: npx --yes "wrangler@${WRANGLER_VERSION}" r2 object get keybumps-updates/releases.json --remote --file "$RUNNER_TEMP/releases.json"
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       # Builds with SITE_ENV=staging; --env staging's vars set it at runtime. The placeholder GTM ID
-      # makes the smoke test's "no GTM on /" check the SITE_ENV gate itself.
+      # makes the smoke test's "no GTM on /" check the SITE_ENV gate itself. RELEASE_INDEX is the
+      # list read from R2 above.
       - name: Build
         env:
           NEXT_PUBLIC_GTM_ID: GTM-STAGING0
+          RELEASE_INDEX: ${{ runner.temp }}/releases.json
         run: pnpm build:staging
 
       # Deploy only the newest website: skip when main has newer website changes, whose own run
@@ -163,6 +181,16 @@ jobs:
           cache: pnpm
           cache-dependency-path: apps/web/pnpm-lock.yaml
 
+      # Before pnpm install, in the runner's temp folder, so no repository code or config runs with
+      # the token. The account ID and wrangler version are release.yml's.
+      - name: Read the release index from R2
+        working-directory: ${{ runner.temp }}
+        env:
+          CLOUDFLARE_ACCOUNT_ID: cec5f04e1d18bcc65f2be0aefb04f059
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_TOKEN }}
+          WRANGLER_VERSION: 4.142.0
+        run: npx --yes "wrangler@${WRANGLER_VERSION}" r2 object get keybumps-updates/releases.json --remote --file "$RUNNER_TEMP/releases.json"
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -178,10 +206,11 @@ jobs:
 
       # Builds with SITE_ENV=production; --env production's vars set it at runtime. Only the public
       # GTM ID is passed: NEXT_PUBLIC_CF_BEACON_TOKEN stays unset until the privacy policy covers
-      # Cloudflare Web Analytics.
+      # Cloudflare Web Analytics. RELEASE_INDEX is the list read from R2 above.
       - name: Build
         env:
           NEXT_PUBLIC_GTM_ID: ${{ vars.NEXT_PUBLIC_GTM_ID }}
+          RELEASE_INDEX: ${{ runner.temp }}/releases.json
         run: pnpm build:production
 
       - name: Check main's tip

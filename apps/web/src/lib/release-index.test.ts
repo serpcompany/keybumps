@@ -180,20 +180,48 @@ describe('scripts/release-index.mjs', () => {
     expect(result.stderr).toContain('entry 1: url')
   })
 
-  it('reads the live list in the deployed builds only', () => {
+  it('reads the real list in the deployed builds only', () => {
     const { scripts } = JSON.parse(readFileSync(join(web, 'package.json'), 'utf8'))
     expect(scripts['changelog:sources']).toContain('node scripts/release-index.mjs')
     for (const name of ['build', 'dev', 'typecheck'])
       expect(scripts[name], name).toContain('pnpm changelog:sources')
+    // The deployed builds take the workflow's copy, or the live list when none is passed: never
+    // the fixture.
     for (const [name, command] of Object.entries<string>(scripts))
-      expect(command.includes('RELEASE_INDEX=live'), name).toBe(
+      expect(command.includes('RELEASE_INDEX=${RELEASE_INDEX:-live} '), name).toBe(
         name === 'build:staging' || name === 'build:production'
       )
+  })
+
+  it('has web-deploy.yml read the list from R2, with the token in that step only', () => {
     const deploy = readFileSync(
       join(web, '..', '..', '.github', 'workflows', 'web-deploy.yml'),
       'utf8'
     )
-    expect(deploy).toContain('run: pnpm build:staging')
-    expect(deploy).toContain('run: pnpm build:production')
+    const steps = deploy.split(/\n(?=\s+- name: )/)
+    const named = (name: string) => steps.filter(step => step.includes(`- name: ${name}\n`))
+    const reads = named('Read the release index from R2')
+    expect(reads).toHaveLength(2)
+    for (const step of reads) {
+      expect(step).toContain('working-directory: ${{ runner.temp }}')
+      expect(step).toContain(
+        'r2 object get keybumps-updates/releases.json --remote --file "$RUNNER_TEMP/releases.json"'
+      )
+      expect(step).not.toMatch(/pnpm|node |scripts\//)
+    }
+    // Only those steps get the token, each before the job installs or builds anything.
+    expect(steps.filter(step => step.includes('secrets.CLOUDFLARE_R2_TOKEN'))).toEqual(reads)
+    expect(deploy).not.toMatch(/^env:/m)
+    for (const job of deploy
+      .split(/\n(?=  [a-z]+:\n)/)
+      .filter(job => job.includes('pnpm build:'))) {
+      const read = job.indexOf('- name: Read the release index from R2')
+      expect(read).toBeGreaterThan(0)
+      expect(read).toBeLessThan(job.indexOf('- name: Install dependencies'))
+    }
+    for (const build of ['build:staging', 'build:production']) {
+      const step = named('Build').find(step => step.includes(`run: pnpm ${build}`))
+      expect(step, build).toContain('RELEASE_INDEX: ${{ runner.temp }}/releases.json')
+    }
   })
 })
