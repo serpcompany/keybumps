@@ -257,7 +257,7 @@ enum DefaultShortcut {
     static let cancelDictation = ShortcutBinding(keyCode: UInt32(kVK_Escape), modifiers: 0, displayName: "Escape")
     static let screenshotScreen = ShortcutBinding(keyCode: UInt32(kVK_ANSI_2), modifiers: UInt32(cmdKey | shiftKey), displayName: "⇧⌘2")
     static let screenshotScreenAndEdit = ShortcutBinding(keyCode: UInt32(kVK_ANSI_3), modifiers: UInt32(cmdKey | shiftKey), displayName: "⇧⌘3")
-    static let screenshotArea = ShortcutBinding(keyCode: UInt32(kVK_ANSI_4), modifiers: UInt32(cmdKey | shiftKey), displayName: "⇧⌘4")
+    static let screenshotAreaAndEdit = ShortcutBinding(keyCode: UInt32(kVK_ANSI_4), modifiers: UInt32(cmdKey | shiftKey), displayName: "⇧⌘4")
     static let recordScreen = ShortcutBinding(keyCode: UInt32(kVK_ANSI_5), modifiers: UInt32(cmdKey | shiftKey), displayName: "⇧⌘5")
 }
 
@@ -270,7 +270,9 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
     case cancelDictation
     case screenshotScreen
     case screenshotScreenAndEdit
-    case screenshotArea
+    /// Screenshot Area and Edit (#545), which was Screenshot Area: the raw value keeps that name,
+    /// as stored bindings do.
+    case screenshotAreaAndEdit = "screenshotArea"
     case snippets
     case timer
     case emojiPicker
@@ -298,7 +300,7 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         case .quickSearch: .quickSearch
         case .clipboardHistory: .clipboardHistory
         case .dictation, .cancelDictation: .dictation
-        case .screenshotScreen, .screenshotScreenAndEdit, .screenshotArea,
+        case .screenshotScreen, .screenshotScreenAndEdit, .screenshotAreaAndEdit,
              .screencast, .screencastPause, .screencastStop, .screencastDiscard, .screencastDraw: .screenshotTools
         case .snippets: .snippets
         case .timer: .timer
@@ -316,7 +318,7 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         case .cancelDictation: "Cancel Dictation"
         case .screenshotScreen: "Screenshot Screen"
         case .screenshotScreenAndEdit: "Screenshot Screen and Edit"
-        case .screenshotArea: "Screenshot Area"
+        case .screenshotAreaAndEdit: "Screenshot Area and Edit"
         case .snippets: "Open Snippets"
         case .timer: "Open Timers"
         case .emojiPicker: "Open Emoji Picker"
@@ -379,7 +381,7 @@ enum CapabilityShortcut: String, CaseIterable, Codable, Identifiable {
         case .cancelDictation: DefaultShortcut.cancelDictation
         case .screenshotScreen: DefaultShortcut.screenshotScreen
         case .screenshotScreenAndEdit: DefaultShortcut.screenshotScreenAndEdit
-        case .screenshotArea: DefaultShortcut.screenshotArea
+        case .screenshotAreaAndEdit: DefaultShortcut.screenshotAreaAndEdit
         case .screencast: DefaultShortcut.recordScreen
         case .snippets, .timer, .emojiPicker, .translation, .keystrokes,
              .screencastPause, .screencastStop, .screencastDiscard, .screencastDraw: nil

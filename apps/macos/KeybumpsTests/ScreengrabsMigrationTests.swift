@@ -142,7 +142,7 @@ struct ScreengrabsMigrationTests {
         #expect(preferences.enabledCapabilities.contains(.screenshotTools))
         #expect(preferences.capabilityShortcut(for: .screenshotScreen) == nil)
         #expect(preferences.capabilityShortcut(for: .screenshotScreenAndEdit) == nil)
-        #expect(preferences.capabilityShortcut(for: .screenshotArea) == nil)
+        #expect(preferences.capabilityShortcut(for: .screenshotAreaAndEdit) == nil)
         #expect(preferences.capabilityShortcut(for: .screencast) == DefaultShortcut.recordScreen, "Launch's one-time step then gives Record Screen ⇧⌘5 in place of its own (#513)")
         #expect(!preferences.copiesScreenshotsToClipboard)
     }
@@ -179,7 +179,7 @@ struct ScreengrabsMigrationTests {
         #expect(saved?.keys.contains("screenshotScreenAndEdit") == false)
         #expect(saved?.keys.contains("screenshotScreen") == false)
         let preferences = AppPreferences(defaults: defaults)
-        #expect(preferences.capabilityShortcut(for: .screenshotArea) == Self.custom)
+        #expect(preferences.capabilityShortcut(for: .screenshotAreaAndEdit) == Self.custom)
         #expect(preferences.capabilityShortcut(for: .screenshotScreen) == nil)
         #expect(preferences.capabilityShortcut(for: .screenshotScreenAndEdit) == nil)
     }
@@ -342,15 +342,15 @@ struct ScreengrabsMigrationTests {
         #expect(first.enabledCapabilities == [.clipboardHistory, .screenshotTools])
         #expect(defaults.stringArray(forKey: "enabledCapabilities") == ["clipboardHistory", "screenshotTools"])
         #expect(defaults.stringArray(forKey: "knownCapabilities")?.contains("screencast") == false)
-        #expect(first.capabilityShortcut(for: .screenshotArea) == nil)
+        #expect(first.capabilityShortcut(for: .screenshotAreaAndEdit) == nil)
         #expect(first.capabilityShortcut(for: .screencast) == DefaultShortcut.recordScreen, "Launch's one-time step then gives Record Screen ⇧⌘5 in place of its own (#513)")
         #expect(!first.copiesScreenshotsToClipboard)
 
         // The person takes back ⇧⌘4 and the clipboard copy; the next launch leaves them.
-        first.setCapabilityShortcut(DefaultShortcut.screenshotArea, for: .screenshotArea)
+        first.setCapabilityShortcut(DefaultShortcut.screenshotAreaAndEdit, for: .screenshotAreaAndEdit)
         first.copiesScreenshotsToClipboard = true
         let second = AppPreferences(defaults: defaults)
-        #expect(second.capabilityShortcut(for: .screenshotArea) == DefaultShortcut.screenshotArea)
+        #expect(second.capabilityShortcut(for: .screenshotAreaAndEdit) == DefaultShortcut.screenshotAreaAndEdit)
         #expect(second.copiesScreenshotsToClipboard)
         #expect(second.enabledCapabilities == [.clipboardHistory, .screenshotTools])
     }

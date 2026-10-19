@@ -671,7 +671,7 @@ struct KeystrokesTests {
         let off: [String: Any] = ["enabled": false]
         var hotKeys: [String: Any] = ["28": off, "30": off]
         display.symbolicHotKeys = { hotKeys }
-        var registered = [DefaultShortcut.screenshotScreenAndEdit, DefaultShortcut.screenshotArea]
+        var registered = [DefaultShortcut.screenshotScreenAndEdit, DefaultShortcut.screenshotAreaAndEdit]
         display.keybumpsScreenshotBindings = { registered }
         display.acquire(.keystrokes, configuration: KeyDisplayConfiguration())
         harness.keys.press(press(kVK_ANSI_C, [.command]))

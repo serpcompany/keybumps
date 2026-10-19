@@ -34,7 +34,7 @@ struct ScreencastTests {
         #expect(CapabilityCatalog.defaultCapabilities.contains(.screenshotTools))
         #expect(Capability(rawValue: "screencast") == nil, "Retired (ADR 0010)")
         #expect(descriptor.shortcuts == [
-            .screenshotScreen, .screenshotScreenAndEdit, .screenshotArea,
+            .screenshotScreen, .screenshotScreenAndEdit, .screenshotAreaAndEdit,
             .screencast, .screencastPause, .screencastStop, .screencastDiscard, .screencastDraw,
         ])
         #expect(descriptor.actions == [.startScreencast])
@@ -464,7 +464,7 @@ struct ScreencastTests {
 
         let old = harness(enabled: [.screenshotTools], on: Self.macOS14)
         #expect(old.shortcuts()[owner] == nil, "Never before macOS 15, so macOS keeps ⇧⌘5")
-        #expect(old.shortcuts()[CapabilityShortcut.screenshotArea.ownerID] != nil, "Screenshots work as today")
+        #expect(old.shortcuts()[CapabilityShortcut.screenshotAreaAndEdit.ownerID] != nil, "Screenshots work as today")
     }
 
     @Test("Record Screen opens ScreenGrabs' page while it's off")
@@ -732,7 +732,7 @@ struct ScreencastTests {
         #expect(harness.model.preferences.capabilityShortcut(for: .screencast) != nil, "Record Screen is still on ⇧⌘5")
         #expect(harness.model.settingsAttentionCount(for: .screenshotTools) == 0, "Only recording")
 
-        harness.model.preferences.setCapabilityShortcut(DefaultShortcut.screenshotArea, for: .screenshotArea)
+        harness.model.preferences.setCapabilityShortcut(DefaultShortcut.screenshotAreaAndEdit, for: .screenshotAreaAndEdit)
         #expect(harness.model.settingsAttentionCount(for: .screenshotTools) == 1)
     }
 }

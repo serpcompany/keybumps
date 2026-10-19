@@ -70,10 +70,11 @@ extension CapabilityDescriptor {
 final class ScreenshotToolsModule: CapabilityModule {
     let descriptor = CapabilityDescriptor.screenshotTools
     let paletteContent: (any CapabilityPaletteContent)?
-    static let captureShortcuts: [(shortcut: CapabilityShortcut, mode: ScreenshotCaptureMode)] = [
-        (.screenshotScreen, .screens),
-        (.screenshotScreenAndEdit, .screens),
-        (.screenshotArea, .area)
+    /// The screenshot hotkeys: what each captures, and whether it then opens the Screenshot Editor.
+    static let captureShortcuts: [(shortcut: CapabilityShortcut, mode: ScreenshotCaptureMode, opensEditor: Bool)] = [
+        (.screenshotScreen, .screens, false),
+        (.screenshotScreenAndEdit, .screens, true),
+        (.screenshotAreaAndEdit, .area, true)
     ]
 
     private let service: ScreenshotToolsService
@@ -139,10 +140,10 @@ final class ScreenshotToolsModule: CapabilityModule {
         palette.editImage = isEnabled
             ? { [weak editor] entry in editor?.edit(entry) ?? false }
             : nil
-        for (shortcut, mode) in Self.captureShortcuts {
+        for (shortcut, mode, opensEditor) in Self.captureShortcuts {
             let binding = context.preferences.capabilityShortcut(for: shortcut)
             context.configureShortcut(owner: shortcut.ownerID, for: capability, binding: binding) { [weak self] in
-                self?.capture(mode, opensEditor: shortcut == .screenshotScreenAndEdit)
+                self?.capture(mode, opensEditor: opensEditor)
             }
         }
         systemShortcuts.apply(bindings: Self.takeoverBindings(context.preferences), isEnabled: isEnabled)
@@ -256,7 +257,7 @@ struct ScreenshotsSettings: View {
     /// (`ScreenshotToolsModule.takeoverBindings`), so on macOS 14 the note names only ⇧⌘3 and ⇧⌘4.
     static func about(on compatibility: PluginCompatibility) -> String {
         let keys = compatibility.supportsRecording ? "⇧⌘3, ⇧⌘4, and ⇧⌘5" : "⇧⌘3 and ⇧⌘4"
-        return "Screenshots from these hotkeys are saved in the Screenshots folder, and ones you take with macOS's own tools where macOS saves screenshots; both appear in Clipboard History, ready to paste. With Copy new screenshots on, each also goes on the clipboard unless you've copied something since it was saved; Screenshot Screen and Edit copies only when you Save. While ScreenGrabs is on, Keybumps uses \(keys) in place of macOS's own; turning it off gives them back."
+        return "Screenshots from these hotkeys are saved in the Screenshots folder, and ones you take with macOS's own tools where macOS saves screenshots; both appear in Clipboard History, ready to paste. With Copy new screenshots on, each also goes on the clipboard unless you've copied something since it was saved; Screenshot Screen and Edit and Screenshot Area and Edit copy only when you Save. While ScreenGrabs is on, Keybumps uses \(keys) in place of macOS's own; turning it off gives them back."
     }
 
     @ViewBuilder private var status: some View {

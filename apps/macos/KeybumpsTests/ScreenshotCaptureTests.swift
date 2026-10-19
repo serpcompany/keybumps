@@ -84,7 +84,7 @@ struct ScreenshotCaptureTests {
         let takeover = SystemScreenshotShortcutTakeover(preferences: store, takenOver: { owned }, setTakenOver: { owned = $0 })
         var changes = 0
         takeover.didChange = { changes += 1 }
-        let keybumps = [DefaultShortcut.screenshotScreen, DefaultShortcut.screenshotScreenAndEdit, DefaultShortcut.screenshotArea]
+        let keybumps = [DefaultShortcut.screenshotScreen, DefaultShortcut.screenshotScreenAndEdit, DefaultShortcut.screenshotAreaAndEdit]
 
         takeover.apply(bindings: keybumps, isEnabled: true)
         #expect(store.isEnabled("28") == false)
@@ -120,15 +120,28 @@ struct ScreenshotCaptureTests {
         #expect(owned.isEmpty)
     }
 
+    @Test("The screenshot hotkeys: ⇧⌘2 every screen; ⇧⌘3 every screen and ⇧⌘4 an area, each then opening the editor (#545), ⇧⌘4 still stored as Screenshot Area")
+    func captureShortcutsOpenTheEditor() {
+        let hotkeys = ScreenshotToolsModule.captureShortcuts.map { "\($0.shortcut.title): \($0.mode == .area ? "area" : "screens")\($0.opensEditor ? ", edit" : "")" }
+        #expect(hotkeys == [
+            "Screenshot Screen: screens",
+            "Screenshot Screen and Edit: screens, edit",
+            "Screenshot Area and Edit: area, edit",
+        ])
+        #expect(CapabilityShortcut.screenshotAreaAndEdit.defaultBinding == DefaultShortcut.screenshotAreaAndEdit)
+        #expect(DefaultShortcut.screenshotAreaAndEdit.displayName == "⇧⌘4")
+        #expect(CapabilityShortcut.screenshotAreaAndEdit.rawValue == "screenshotArea", "a key someone set or cleared carries over")
+    }
+
     @Test("ScreenGrabs takes over ⇧⌘3, ⇧⌘4, and ⇧⌘5 with its keys on macOS 15, and leaves ⇧⌘5 to macOS 14 (#490)")
     func takeoverBindingsFollowSupportsRecording() {
         let current = AppPreferences(defaults: InMemoryDefaults(), compatibility: PluginCompatibility(macOSMajorVersion: 15))
         #expect(ScreenshotToolsModule.takeoverBindings(current) == [
-            DefaultShortcut.screenshotScreen, DefaultShortcut.screenshotScreenAndEdit, DefaultShortcut.screenshotArea, DefaultShortcut.recordScreen,
+            DefaultShortcut.screenshotScreen, DefaultShortcut.screenshotScreenAndEdit, DefaultShortcut.screenshotAreaAndEdit, DefaultShortcut.recordScreen,
         ])
         let old = AppPreferences(defaults: InMemoryDefaults(), compatibility: PluginCompatibility(macOSMajorVersion: 14))
         #expect(ScreenshotToolsModule.takeoverBindings(old) == [
-            DefaultShortcut.screenshotScreen, DefaultShortcut.screenshotScreenAndEdit, DefaultShortcut.screenshotArea,
+            DefaultShortcut.screenshotScreen, DefaultShortcut.screenshotScreenAndEdit, DefaultShortcut.screenshotAreaAndEdit,
         ])
         #expect(SystemScreenshotShortcutTakeover.managed.map(\.id) == ["28", "30", "184"])
 
@@ -141,10 +154,10 @@ struct ScreenshotCaptureTests {
         let store = FakeSymbolicHotKeys(hotKeys: [:])
         var owned: Set<String> = []
         let takeover = SystemScreenshotShortcutTakeover(preferences: store, takenOver: { owned }, setTakenOver: { owned = $0 })
-        takeover.apply(bindings: [DefaultShortcut.screenshotScreenAndEdit, DefaultShortcut.screenshotArea], isEnabled: true)
+        takeover.apply(bindings: [DefaultShortcut.screenshotScreenAndEdit, DefaultShortcut.screenshotAreaAndEdit], isEnabled: true)
 
         let moved = ShortcutBinding(keyCode: UInt32(kVK_ANSI_3), modifiers: UInt32(cmdKey | optionKey), displayName: "⌥⌘3")
-        takeover.apply(bindings: [moved, DefaultShortcut.screenshotArea], isEnabled: true)
+        takeover.apply(bindings: [moved, DefaultShortcut.screenshotAreaAndEdit], isEnabled: true)
         #expect(store.isEnabled("28") == true)
         #expect(store.isEnabled("30") == false)
         #expect(owned == ["30"])
@@ -170,16 +183,16 @@ struct ScreenshotCaptureTests {
         let fresh = AppPreferences(defaults: InMemoryDefaults())
         #expect(fresh.capabilityShortcut(for: .screenshotScreen) == DefaultShortcut.screenshotScreen)
         #expect(fresh.capabilityShortcut(for: .screenshotScreenAndEdit) == DefaultShortcut.screenshotScreenAndEdit)
-        #expect(fresh.capabilityShortcut(for: .screenshotArea) == DefaultShortcut.screenshotArea)
+        #expect(fresh.capabilityShortcut(for: .screenshotAreaAndEdit) == DefaultShortcut.screenshotAreaAndEdit)
 
         let existing = InMemoryDefaults()
         let original = Dictionary(uniqueKeysWithValues: CapabilityShortcut.originalShortcuts.map { ($0.rawValue, $0.defaultBinding) })
         existing.set(try JSONEncoder().encode(original), forKey: "capabilityShortcuts")
         let upgraded = AppPreferences(defaults: existing)
-        #expect(upgraded.capabilityShortcut(for: .screenshotArea) == DefaultShortcut.screenshotArea)
+        #expect(upgraded.capabilityShortcut(for: .screenshotAreaAndEdit) == DefaultShortcut.screenshotAreaAndEdit)
 
-        upgraded.setCapabilityShortcut(nil, for: .screenshotArea)
-        #expect(AppPreferences(defaults: existing).capabilityShortcut(for: .screenshotArea) == nil)
+        upgraded.setCapabilityShortcut(nil, for: .screenshotAreaAndEdit)
+        #expect(AppPreferences(defaults: existing).capabilityShortcut(for: .screenshotAreaAndEdit) == nil)
         #expect(AppPreferences(defaults: existing).capabilityShortcut(for: .screenshotScreen) == DefaultShortcut.screenshotScreen)
     }
 }

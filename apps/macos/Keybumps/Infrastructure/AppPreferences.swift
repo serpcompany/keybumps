@@ -261,7 +261,7 @@ final class AppPreferences {
             var shortcuts = defaults.data(forKey: Key.capabilityShortcuts)
                 .flatMap { try? JSONDecoder().decode([String: ShortcutBinding].self, from: $0) }
                 ?? defaultCapabilityShortcuts
-            for shortcut in [CapabilityShortcut.screenshotScreen, .screenshotScreenAndEdit, .screenshotArea] {
+            for shortcut in [CapabilityShortcut.screenshotScreen, .screenshotScreenAndEdit, .screenshotAreaAndEdit] {
                 guard let binding = shortcut.defaultBinding,
                       shortcuts[shortcut.rawValue]?.usesSameKeys(as: binding) == true else { continue }
                 shortcuts[shortcut.rawValue] = nil

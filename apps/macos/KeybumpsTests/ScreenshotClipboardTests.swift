@@ -190,6 +190,35 @@ struct ScreenshotClipboardTests {
         #expect(written.count == 3 && off.clipboard.entries.isEmpty)
     }
 
+    @Test("Area and Edit (⇧⌘4, #545) adds its one file without copying it; a selection cancelled with Escape adds nothing and opens nothing")
+    func areaAndEditCapture() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let capture = HotkeyCapture(fixture)
+        defer { capture.watcher.stop() }
+        let changeCount = fixture.pasteboard.changeCount
+        var written: [URL] = []
+        capture.delivery.capture(.area, with: capture.capturer, watcher: capture.watcher, forEditing: true) { written = $0 }
+        capture.scan()
+        #expect(fixture.clipboard.entries.isEmpty, "the watcher leaves the hotkey's file alone")
+        capture.runner.finish?()
+        #expect(written.count == 1)
+        #expect(fixture.clipboard.entries.compactMap(\.sourceURL) == written, "the file the editor opens")
+        #expect(fixture.pasteboard.changeCount == changeCount, "copied only when the editor saves")
+        capture.scan()
+        #expect(fixture.clipboard.entries.count == 1, "the watcher doesn't add it again")
+
+        let cancelled = try Fixture()
+        defer { cancelled.tearDown() }
+        let cancel = HotkeyCapture(cancelled)
+        defer { cancel.watcher.stop() }
+        cancel.runner.writes = false
+        written = [URL(fileURLWithPath: "/not-called")]
+        cancel.delivery.capture(.area, with: cancel.capturer, watcher: cancel.watcher, forEditing: true) { written = $0 }
+        cancel.runner.finish?()
+        #expect(written.isEmpty && cancelled.clipboard.entries.isEmpty)
+    }
+
     @Test("A hotkey screenshot saved in a chosen Screenshots folder reaches Clipboard History and ⌘3, and is copied, while Keybumps can't read macOS's folder")
     func chosenFolderWithoutTheWatcher() throws {
         let fixture = try Fixture()
