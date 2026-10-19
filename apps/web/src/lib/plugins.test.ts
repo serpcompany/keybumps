@@ -424,6 +424,19 @@ describe('plugin page guides', () => {
   })
 })
 
+describe('site text', () => {
+  // ⌘V pastes where ⌘P did until beta.29 (#552). Older release notes on /changelog/ still name ⌘P,
+  // as the builds they describe did; the page reads them from docs/releases/, not from src/.
+  it('never names ⌘P, which no longer pastes (#551, #580)', () => {
+    // Every source file under src/: plugins.ts, every page (the legal pages too), and components.
+    const srcDir = fileURLToPath(new URL('../', import.meta.url))
+    const offenders = readdirSync(srcDir, { recursive: true, encoding: 'utf8' })
+      .filter(file => /\.tsx?$/.test(file) && !/\.test\.tsx?$/.test(file))
+      .filter(file => /⌘ ?P(?!\p{L})/u.test(readFileSync(join(srcDir, file), 'utf8')))
+    expect(offenders).toEqual([])
+  })
+})
+
 describe('plugin page at a glance', () => {
   const glance = (slug: string) =>
     renderPage(pluginFor(slug)).split('class="at-a-glance"')[1]?.split('</dl>')[0] ?? ''
