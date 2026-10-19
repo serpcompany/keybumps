@@ -93,13 +93,13 @@ export default function PrivacyPage() {
         country in Polar to provide support and handle refunds. We never see your full card number.
       </p>
       <p>
-        When you buy, our website tells Google Analytics about the purchase, and about a full refund
-        of it, so we can see which pages lead to purchases: the order number, product, amount, tax,
-        currency, and any discount code. It also adds the anonymous IDs Google Analytics gave your
-        browser, which travel to Polar with your checkout to make the link. If you declined
-        analytics, or you’re in the EU, the EEA, the UK, or Switzerland and didn’t allow them, it
-        sends nothing about your purchase. It never sends your name, email, address, or payment
-        details.
+        When you buy, our website tells Google Analytics about the purchase, any renewal of it, and
+        a full refund of it, so we can see which pages lead to purchases: the order number, product,
+        amount, tax, currency, and any discount code. It also adds the anonymous IDs Google
+        Analytics gave your browser, which travel to Polar with your checkout to make the link. If
+        you declined analytics, or you’re in the EU, the EEA, the UK, or Switzerland and didn’t
+        allow them, it sends nothing about your purchase. It never sends your name, email, address,
+        or payment details.
       </p>
       <p>
         If a partner’s or another tracked link brought you to our website, it also tells Dub, which
@@ -120,15 +120,16 @@ export default function PrivacyPage() {
         the live keybumps.app site loads analytics and advertising tools through Google Tag Manager,
         such as Google Analytics and Meta’s pixel. These tools receive standard request details,
         such as your IP address, browser, the page you visit, and the page that linked you there,
-        and they may set cookies. Each handles that data under its own privacy policy. Analytics run
-        only on the live website: never in the Keybumps app, and never on test or staging versions
-        of the site.
+        and they may set cookies. Each handles that data under its own privacy policy. These tools
+        run only on the live website: never in the Keybumps app, and never on test or staging
+        versions of the site.
       </p>
       <p>
         If you’re in the EU, the EEA, the UK, or Switzerland, the site asks before these tools set
-        cookies, and you can accept or decline. To change your choice, clear keybumps.app’s site
-        data in your browser, and the site asks again. Elsewhere, they run by default, and you can
-        block or delete their cookies in your browser.
+        cookies, and you can accept or decline. The site remembers your choice in a cookie of its
+        own for a year. To change your choice, clear keybumps.app’s site data in your browser, and
+        the site asks again. Elsewhere, they run by default, and you can block or delete their
+        cookies in your browser.
       </p>
       <p>
         If you arrive through a partner’s or another tracked link, Dub’s script, also loaded through
