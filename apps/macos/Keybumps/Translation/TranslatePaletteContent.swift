@@ -15,7 +15,7 @@ import SwiftUI
 /// Dictation tab (#377): a compact row each on the left, and the highlighted one in full on the right
 /// (`detail(row:query:)`), its translation and source text selectable and scrolling, its languages
 /// and when it was saved, and a button for each key. Return or ⌘C copies one, kept out of Clipboard
-/// History; ⌘V pastes it; Delete asks, then deletes it. Read Aloud, or Space, reads it aloud
+/// History; its Paste button pastes it (⌘V is the search field's here); Delete asks, then deletes it. Read Aloud, or Space, reads it aloud
 /// (`TranslationSpeaking`) until the palette closes, the tab or the text changes, another is read,
 /// or it's deleted. Text selected with the pointer is Edit › Copy's, so ⌘C copies just that.
 @MainActor
@@ -388,8 +388,9 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
         palette.copy(record.translatedText)
     }
 
-    /// ⌘V pastes a saved translation, then puts the clipboard back. While you type, ⌘V is the
-    /// search field's (`pastes(row:query:)`), and ⌘Return saves and pastes (`commandActivate`).
+    /// The detail pane's Paste pastes a saved translation, then puts the clipboard back. ⌘V is the
+    /// search field's here (`pastes(row:query:)`); while you type, ⌘Return saves and pastes
+    /// (`commandActivate`).
     func paste(row: Int, query: String, palette: PaletteContentActions) {
         guard let record = record(row: row, query: query) else { return }
         palette.paste(record.translatedText, true)

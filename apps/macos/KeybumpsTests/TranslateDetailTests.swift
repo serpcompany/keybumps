@@ -156,7 +156,7 @@ struct TranslateDetailTests {
         #expect(await ax.waitFor { inDetail("made-up first transcript") } != nil, "The detail follows the highlight")
     }
 
-    @Test("The Dictation detail's buttons show their keys as a saved translation's do: Copy ↵ ⌘C, Paste ⌘V, Show in Finder, then Delete ⌫; the footer reads Paste, Command V (#552)")
+    @Test("The Dictation detail's buttons show their keys: Copy ↵ ⌘C, Paste ⌘V, Show in Finder, then Delete ⌫; the footer reads Paste, Command V (#552)")
     func dictationDetailButtonsAndFooter() async throws {
         let fixture = TranslatePaletteFixture()
         defer { fixture.tearDown() }
@@ -255,7 +255,8 @@ struct TranslateDetailTests {
         #expect(fixture.clipboard.entries.isEmpty, "Kept out of Clipboard History")
         ax.close()
 
-        // Paste: as ⌘V does. Without Accessibility, it copies instead and offers setup.
+        // Paste: the button (⌘V is the search field's here). Without Accessibility, it copies
+        // instead and offers setup.
         fixture.pasteboard.clearContents()
         ax = try await PaletteAccessibility.layOut(palette)
         palette.rememberPasteTarget()

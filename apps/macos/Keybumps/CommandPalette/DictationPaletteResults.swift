@@ -17,6 +17,8 @@ struct DictationPaletteResults: View {
     let audioPlayer: DictationAudioPlayer
     /// Delete, from the detail's button or the Delete key: asks first.
     let requestDelete: (DictationHistoryEntry) -> Void
+    /// Delete's keys as the footer names them: ⌫, or ⌘⌫ while the search field has text or a filter.
+    let deleteKeys: [String]
     /// The confirmation's Delete.
     let delete: (DictationHistoryEntry) -> Void
     /// The recording whose Delete confirmation is showing.
@@ -118,6 +120,7 @@ struct DictationPaletteResults: View {
             paste: { paste(entry.text) },
             transcribe: { transcribe(entry) },
             reveal: { NSWorkspace.shared.activateFileViewerSelecting([entry.directoryURL]) },
+            deleteKeys: deleteKeys,
             delete: { requestDelete(entry) }
         )
         .id(entry.id)
@@ -174,6 +177,7 @@ private struct DictationPaletteDetail: View {
     let paste: () -> Void
     let transcribe: () -> Void
     let reveal: () -> Void
+    let deleteKeys: [String]
     let delete: () -> Void
     @State private var showsTranslation = false
 
@@ -250,7 +254,7 @@ private struct DictationPaletteDetail: View {
             PaletteActionButton(title: "Show in Finder", systemImage: "folder", shortcuts: [], action: reveal)
                 .accessibilityIdentifier("palette.dictation.detail.showInFinder")
             Spacer(minLength: 0)
-            PaletteActionButton(title: "Delete", systemImage: "trash", shortcuts: [PaletteKeyAction.delete().keys], role: .destructive, action: delete)
+            PaletteActionButton(title: "Delete", systemImage: "trash", shortcuts: [deleteKeys], role: .destructive, action: delete)
                 .accessibilityIdentifier("palette.dictation.detail.delete")
         }
     }

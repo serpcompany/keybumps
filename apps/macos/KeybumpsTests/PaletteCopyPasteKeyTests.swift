@@ -396,6 +396,10 @@ struct PaletteCopyPasteKeyTests {
         // Translate's ⌘V is the search field's, to paste text to translate; a saved one's Paste is a button.
         #expect(footer(.translate) == ["Copy ↵", "Delete ⌫"])
         #expect(footer(.keyboardShortcutter).isEmpty)
+        // While ⌫ edits the search text or removes a filter, Delete is ⌘⌫, in any tab.
+        let typing = PaletteFooterActions.resolve(tab: .screenshots, searchItem: nil, content: nil, deleteNeedsCommand: true)
+        #expect(typing.secondary.map(\.description) == ["Paste ⌘V", "Edit ⌘E", "Delete ⌘⌫"])
+        #expect(PaletteKeyAction.accessibilityLabel(title: "Delete", keys: ["⌘", "⌫"]) == "Delete, Command Delete")
         // Nothing names ⌘P, or ⌘Return for Edit, any more.
         for tab in CommandPaletteTab.allCases {
             #expect(!footer(tab).contains { $0.hasSuffix("⌘P") || $0 == "Edit ⌘↵" || $0 == "Open ⌘↵" }, "\(tab)")
@@ -441,7 +445,7 @@ struct PaletteCopyPasteKeyTests {
         try fixture.untranscribedRecording()
         fixture.palette.state.select(.dictation)
         #expect(fixture.palette.state.selection == 0)
-        #expect(!footer().contains("Paste ⌘V"), "A recording with no transcript has nothing to paste")
+        #expect(!footer().contains("Paste ⌘V") && !footer().contains("Copy ↵"), "A recording with no transcript has nothing to copy or paste")
         #expect(fixture.palette.handleKeyDown(Self.commandV) != nil, "so ⌘V is the search field's")
         #expect(fixture.paster.pasted.isEmpty)
 

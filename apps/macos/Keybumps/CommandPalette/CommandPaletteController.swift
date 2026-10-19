@@ -763,8 +763,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     ///
     /// On the highlighted row (#370), ⌘C copies it and ⌘V pastes it into the app you were using
     /// (`PalettePasteRoute`, #552): a Clipboard History or Screenshots item, a snippet, or a transcript
-    /// stays on the clipboard; an emoji or a translation puts the clipboard back. On a row that doesn't
-    /// paste, ⌘V pastes into the search field, as in any text field, and ⌘P does nothing. ⌘E edits a
+    /// stays on the clipboard; an emoji puts the clipboard back. On a row that doesn't paste, and in
+    /// the Translate tab, ⌘V pastes into the search field, as in any text field, and ⌘P does nothing. ⌘E edits a
     /// screenshot, an image, a recording, or a snippet. With the search field empty, Space plays or
     /// pauses the row's audio. ⌘Return does what Return does, except Reveal in Quick Search, Edit in
     /// Screenshots, and Save and Paste in Translate. Text selected where the keys go, and an input
@@ -1294,8 +1294,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     }
 
     /// Whether ⌘V pastes the highlighted row (#552): a Clipboard History item, a screengrab, a
-    /// transcript, a snippet, an emoji, a saved translation, or Quick Search's snippet or emoji. On any
-    /// other row, or with none highlighted, ⌘V is the search field's.
+    /// transcript, a snippet, an emoji, or Quick Search's snippet or emoji. On any other row, with none
+    /// highlighted, or in the Translate tab, ⌘V is the search field's.
     private var selectionPastes: Bool {
         guard hasHighlightedRow else { return false }
         if let tabContent { return tabContent.pastes(row: state.selection, query: state.historyQuery) }
@@ -1383,8 +1383,9 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
 
     /// The footer's actions where a tab the palette draws names them by row: Remove ⌫ on a Recent
     /// Item, which only takes it off the list, Edit ⌘E on a Clipboard History image while
-    /// ScreenGrabs is on, and no Paste on a recording with no transcript, where ⌘V is the search
-    /// field's. Nil keeps Quick Search's result's, or the tab's registered ones.
+    /// ScreenGrabs is on, and neither Copy nor Paste on a recording with no transcript, where Return
+    /// does nothing and ⌘V is the search field's. Nil keeps Quick Search's result's, or the tab's
+    /// registered ones.
     private var drawnTabFooterActions: PaletteFooterActions? {
         switch state.tab {
         case .search:
@@ -1399,7 +1400,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         case .dictation:
             guard filteredDictations.indices.contains(state.selection),
                   filteredDictations[state.selection].text.isEmpty else { return nil }
-            return PaletteFooterActions(primary: CommandPaletteTab.dictation.primaryActionTitle, secondary: [.delete()])
+            return PaletteFooterActions(primary: nil, secondary: [.delete()])
         default:
             return nil
         }
@@ -1908,6 +1909,7 @@ private struct CommandPaletteView: View {
                 retryingEntryID: dictationService.retryingEntryID,
                 audioPlayer: dictationPlayer,
                 requestDelete: requestDictationDeletion,
+                deleteKeys: footerActions().secondary.first(where: \.isDelete)?.keys ?? PaletteKeyAction.delete().keys,
                 delete: deleteDictation,
                 pendingDeletion: $state.dictationPendingDeletion,
                 clear: dictationHistory.clear,
