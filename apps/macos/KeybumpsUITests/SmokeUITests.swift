@@ -43,6 +43,30 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(element("settings.detail.timer").waitForExistence(timeout: 5), "A Plugins row opens its page")
     }
 
+    func testSettingsSidebarSearchFiltersAndEscapeClearsIt() {
+        launch(permissions: "granted", ["-KBOpenSettings", "general"])
+        XCTAssertTrue(element("settings.detail.general").waitForExistence(timeout: 20))
+        let window = app.windows.containing(.any, identifier: "settings.detail.general").firstMatch
+        XCTAssertEqual(window.title, "General", "The toolbar names the page, as System Settings does (#559)")
+
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5), "The sidebar has the stock search field")
+        // The list has the keyboard, and the typing goes to the app, not the field, so the rows filter
+        // only if Command-F moved the keyboard to the field; otherwise typing selects a row by name.
+        element("settings.sidebar.general").click()
+        app.typeKey("f", modifierFlags: .command)
+        app.typeText("clip")
+        XCTAssertTrue(element("settings.sidebar.clipboard").waitForExistence(timeout: 5))
+        XCTAssertTrue(element("settings.sidebar.general").waitForNonExistence(timeout: 5), "Command-F focuses search, and search filters the rows")
+
+        search.typeText("zzz")
+        XCTAssertTrue(element("settings.sidebar.noResults").waitForExistence(timeout: 5), "A search that finds nothing says so")
+
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        XCTAssertTrue(element("settings.sidebar.general").waitForExistence(timeout: 5), "Escape clears the search")
+        XCTAssertTrue(element("settings.detail.general").exists, "and leaves Settings open")
+    }
+
     func testReportAProblemOpensFromGeneralSettings() {
         launch(permissions: "granted", ["-KBOpenSettings", "general"])
         XCTAssertTrue(element("settings.detail.general").waitForExistence(timeout: 20))

@@ -67,29 +67,38 @@ struct SettingsNavigationHistory: Equatable {
     }
 }
 
-extension View {
-    /// Raycast's Settings window shows no title; macOS 14 keeps the title.
-    @ViewBuilder func hidingWindowTitle() -> some View {
-        if #available(macOS 15.0, *) {
-            toolbar(removing: .title)
-        } else {
-            self
-        }
-    }
-}
-
 /// The Settings sidebar: the account row on top (outside these groups); General, Permissions,
 /// Plugins, and Changelog; then a row per plugin, the default ones (Quick Search first, then by name) and the added
 /// ones in their own group below; filtered by search, which finds a page by its title and a plugin's
-/// page also by its search keywords, as Settings › Plugins and Quick Search do.
+/// page also by its search keywords, as Settings › Plugins and Quick Search do. It's a stock sidebar
+/// list (#559), so its text and row height follow System Settings › Appearance › Sidebar icon size,
+/// as System Settings' own sidebar does.
 enum SettingsSidebar {
     static func isSearching(_ query: String) -> Bool {
         !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// What VoiceOver says for a row's attention mark.
+    /// What VoiceOver says for a row's attention badge.
     static func attentionLabel(_ count: Int, for section: SettingsSection) -> String {
         section == .permissions ? "\(count) permission items need attention" : "Needs attention"
+    }
+
+    /// A row's icon tile, which the list doesn't size itself because it isn't a symbol.
+    static func iconSize(for rowSize: SidebarRowSize) -> CGFloat {
+        switch rowSize {
+        case .small: 18
+        case .large: 24
+        default: 20
+        }
+    }
+
+    /// The account row's avatar, about a row and a half tall.
+    static func avatarSize(for rowSize: SidebarRowSize) -> CGFloat {
+        switch rowSize {
+        case .small: 26
+        case .large: 34
+        default: 30
+        }
     }
 
     static func groups(matching query: String) -> [[SettingsSection]] {
@@ -116,41 +125,48 @@ struct SettingsRootView: View {
     private var isLocked: Bool { model.preferences.didCompleteOnboarding && !model.isLicensed }
     private var visibleSelection: SettingsSection { isLocked ? .account : navigation.selection }
 
+    /// The list's selection, kept in the navigation history so Back and Forward follow it.
+    private var sidebarSelection: Binding<SettingsSection?> {
+        Binding(
+            get: { visibleSelection },
+            set: { section in
+                guard let section, !isLocked || section == .account else { return }
+                navigation.navigate(to: section)
+            }
+        )
+    }
+
     var body: some View {
+        let groups = SettingsSidebar.groups(matching: query)
         NavigationSplitView {
-            VStack(spacing: 12) {
-                SettingsSearchField(text: $query)
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        if !SettingsSidebar.isSearching(query) {
-                            SettingsAccountRow(isSelected: visibleSelection == .account) {
-                                navigation.navigate(to: .account)
-                            }
+            List(selection: sidebarSelection) {
+                if !SettingsSidebar.isSearching(query) {
+                    Section {
+                        SettingsAccountRow()
+                            .tag(SettingsSection.account)
                             .accessibilityIdentifier("settings.sidebar.account")
-                        }
-                        ForEach(SettingsSidebar.groups(matching: query), id: \.self) { group in
-                            VStack(spacing: 2) {
-                                ForEach(group) { section in
-                                    SettingsSidebarRow(
-                                        section: section,
-                                        isSelected: visibleSelection == section,
-                                        attentionCount: model.settingsAttentionCount(for: section)
-                                    ) {
-                                        navigation.navigate(to: section)
-                                    }
-                                    .disabled(isLocked)
-                                    .accessibilityIdentifier("settings.sidebar.\(section.launchToken)")
-                                }
-                            }
+                    }
+                }
+                ForEach(groups, id: \.self) { group in
+                    Section {
+                        ForEach(group) { section in
+                            SettingsSidebarRow(section: section, attentionCount: model.settingsAttentionCount(for: section))
+                                .tag(section)
+                                .disabled(isLocked)
+                                .selectionDisabled(isLocked)
+                                .accessibilityIdentifier("settings.sidebar.\(section.launchToken)")
                         }
                     }
                 }
-                .scrollIndicators(.never)
             }
-            .padding(.horizontal, 12)
-            .padding(.top, 6)
-            .frame(maxHeight: .infinity, alignment: .top)
-            .background(SettingsTheme.sidebarBackground)
+            .listStyle(.sidebar)
+            .overlay {
+                if SettingsSidebar.isSearching(query), groups.isEmpty {
+                    ContentUnavailableView.search(text: query.trimmingCharacters(in: .whitespacesAndNewlines))
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("settings.sidebar.noResults")
+                }
+            }
             .toolbar(removing: .sidebarToggle)
             .navigationSplitViewColumnWidth(min: 220, ideal: 230, max: 280)
         } detail: {
@@ -182,9 +198,11 @@ struct SettingsRootView: View {
             }
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("settings.detail.\(visibleSelection.launchToken)")
+            // The page's name beside Back and Forward, as System Settings shows it.
+            .navigationTitle(visibleSelection.rawValue)
         }
-        .navigationTitle("Keybumps")
-        .hidingWindowTitle()
+        .searchable(text: $query, placement: .sidebar, prompt: "Search")
+        .modifier(SettingsSearchShortcut())
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 ControlGroup {
@@ -232,29 +250,53 @@ extension AppModel {
     }
 }
 
+/// ⌘F puts the keyboard in the sidebar's search field, as in System Settings. `searchFocused` needs
+/// macOS 15; on macOS 14 the field is clicked instead.
+private struct SettingsSearchShortcut: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 15.0, *) {
+            content.modifier(Focusing())
+        } else {
+            content
+        }
+    }
+
+    @available(macOS 15.0, *)
+    private struct Focusing: ViewModifier {
+        @FocusState private var isFocused: Bool
+
+        func body(content: Content) -> some View {
+            content
+                .searchFocused($isFocused)
+                .background {
+                    Button("Search Settings") { isFocused = true }
+                        .keyboardShortcut("f", modifiers: .command)
+                        .opacity(0)
+                        .frame(width: 0, height: 0)
+                        .accessibilityHidden(true)
+                }
+        }
+    }
+}
+
+/// A page's row: its icon tile and name, which the list sizes and highlights, and a red count of
+/// what needs attention, such as missing permissions.
 private struct SettingsSidebarRow: View {
+    @Environment(\.sidebarRowSize) private var rowSize
     let section: SettingsSection
-    let isSelected: Bool
     let attentionCount: Int
-    let select: () -> Void
 
     var body: some View {
-        Button(action: select) {
-            HStack(spacing: 11) {
-                SettingsIconTile(systemImage: section.icon, tint: section.iconTint, size: 22)
-                Text(section.rawValue)
-                    .font(.system(size: SettingsTheme.sidebarTextSize))
-                    .foregroundStyle(.primary)
-                Spacer(minLength: 4)
-                if attentionCount > 0 {
-                    Image(systemName: "exclamationmark.circle.fill")
-                        .foregroundStyle(.red)
-                        .accessibilityLabel(SettingsSidebar.attentionLabel(attentionCount, for: section))
-                }
-            }
-            .frame(minHeight: 32)
+        Label {
+            Text(section.rawValue)
+        } icon: {
+            SettingsIconTile(systemImage: section.icon, tint: section.iconTint, size: SettingsSidebar.iconSize(for: rowSize))
         }
-        .buttonStyle(SettingsSidebarButtonStyle(isSelected: isSelected))
+        .badge(attentionCount)
+        .badgeProminence(.increased)
+        .accessibilityLabel(attentionCount > 0
+            ? "\(section.rawValue), \(SettingsSidebar.attentionLabel(attentionCount, for: section))"
+            : section.rawValue)
     }
 }
 
@@ -284,24 +326,21 @@ private struct SettingsAvatar: View {
 }
 
 private struct SettingsAccountRow: View {
-    let isSelected: Bool
-    let select: () -> Void
+    @Environment(\.sidebarRowSize) private var rowSize
 
     var body: some View {
-        Button(action: select) {
-            HStack(spacing: 10) {
-                SettingsAvatar(size: 34)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(SettingsAccount.name)
-                        .font(.system(size: SettingsTheme.sidebarTextSize, weight: .medium))
-                        .lineLimit(1)
-                    SettingsNote("Account")
-                }
-                Spacer(minLength: 0)
+        HStack(spacing: 8) {
+            SettingsAvatar(size: SettingsSidebar.avatarSize(for: rowSize))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(SettingsAccount.name)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+                Text("Account")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            .padding(.vertical, 6)
         }
-        .buttonStyle(SettingsSidebarButtonStyle(isSelected: isSelected))
+        .padding(.vertical, 4)
     }
 }
 
@@ -450,8 +489,8 @@ private struct LicenseSettingsGroup: View {
 
 struct SettingsSearchField: View {
     @Binding var text: String
-    var prompt = "Search settings…"
-    var identifier = "settings.search"
+    let prompt: String
+    let identifier: String
 
     var body: some View {
         HStack(spacing: 8) {

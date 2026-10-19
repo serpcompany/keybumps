@@ -224,7 +224,6 @@ struct ScreengrabsSettingsPage: View {
         } custom: {
             EmptyView()
         }
-        // The window's title on macOS 14, which shows it (`hidingWindowTitle`).
         .navigationTitle(Capability.screenshotTools.title)
     }
 }

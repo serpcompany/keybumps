@@ -3,7 +3,11 @@ import SwiftUI
 
 /// Colors and metrics copied from Raycast's launcher window (dark), with light equivalents.
 enum PaletteTheme {
-    static let background = SettingsTheme.sidebarBackground
+    /// The color the Settings sidebar had before it took the system's own (#559).
+    static let background = Color(
+        light: NSColor(srgbRed: 0.93, green: 0.93, blue: 0.93, alpha: 1),
+        dark: NSColor(srgbRed: 0.075, green: 0.075, blue: 0.075, alpha: 1)
+    )
     static let border = Color.primary.opacity(0.1)
     static let selection = Color.primary.opacity(0.08)
     static let keycapFill = Color.primary.opacity(0.05)
