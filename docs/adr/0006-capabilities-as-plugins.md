@@ -1,6 +1,6 @@
 # 0006: Capabilities are Keybumps's plugins: a default set, added ones, and an official-only plugin list
 
-Status: Accepted (2026-10-06). Tracked by #205, #233, #235, and #239. The third-party extensions non-goal in `AGENTS.md` stands. Partly superseded by [0010](0010-screengrabs-one-plugin.md) (2026-10-17): decision 2's Screenshot Tools is now ScreenGrabs, with the same ID (`screenshotTools`). Amended 2026-10-19 (#559): decision 3's separate Settings group for added capabilities is gone; every plugin is listed together, under one Plugins header in the sidebar and in one list on the Plugins page, Quick Search first, then by name.
+Status: Accepted (2026-10-06). Tracked by #205, #233, #235, and #239. The third-party extensions non-goal in `AGENTS.md` stands. Partly superseded by [0010](0010-screengrabs-one-plugin.md) (2026-10-17): decision 2's Screenshot Tools is now ScreenGrabs, with the same ID (`screenshotTools`). Amended 2026-10-19 (#559): decision 3's separate Settings group for added capabilities is gone; every plugin is listed together, under one Plugins header in the sidebar and in one list on the Plugins page, Quick Search first, then by name. Amended 2026-10-20 (#583): the privacy page no longer names plugins or their features, so a plugin needs a privacy-page change only if it sends data off the Mac or changes what the site collects; the Consequences line "the privacy page says so" applies to those cases only.
 
 ## Context
 
