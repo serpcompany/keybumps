@@ -14,6 +14,8 @@
  *   in src/lib/pages.ts).
  * - `apps/macos/Keybumps/Screencast/ScreencastPreferences.swift`: ScreenGrabs' recording settings;
  *   `PluginCompatibility.recordingMacOS` (`PluginManifest.swift`): the macOS it records on.
+ *   `ScreenshotTools/ScreengrabFolders.swift` and `ScreengrabFolderRow.swift`: its Screenshots and
+ *   Recordings folders; `ScreenshotTools/ScreengrabsPaletteContent.swift`: what its tab lists and does.
  * - `apps/macos/Keybumps/EmojiPicker/*.swift` and `emoji.json` (its `sources`): what the Emoji tab
  *   offers, searches, and keeps (`EmojiRecents.limit`).
  * - `apps/macos/Keybumps/Translation/*.swift`: what the Translate tab does (its header comment in
@@ -336,32 +338,34 @@ export const plugins: readonly Plugin[] = [
     requires: ['clipboard-history'],
     isDefault: true,
     overview: [
-      'ScreenGrabs takes screenshots with its own hotkeys and puts them in Clipboard History, ready to paste. ⇧⌘2 captures every screen, ⇧⌘3 captures every screen and opens the editor, and ⇧⌘4 captures an area you select. Mark up a screenshot, or any image you copied, with blur, redact, arrow, draw, and text.',
-      'On macOS 15 or later, ⇧⌘5 records an area, a window, a screen, or all your screens, with your voice and the Mac’s sound. When you stop, the recording opens in a window where you can trim, crop, and blur it before you save it.'
+      'ScreenGrabs takes screenshots with its own hotkeys, saves them in your Screenshots folder, and puts them in Clipboard History, ready to paste. ⇧⌘2 captures every screen, ⇧⌘3 captures every screen and opens the editor, and ⇧⌘4 captures an area you select. Mark up a screenshot, or any image you copied, with blur, redact, arrow, draw, and text.',
+      'On macOS 15 or later, ⇧⌘5 records an area, a window, a screen, or all your screens, with your voice and the Mac’s sound. When you stop, the recording opens in a window where you can trim, crop, and blur it before you save it in your Recordings folder. The ScreenGrabs tab (⌘3) lists your recordings beside your screenshots, newest first.'
     ],
     features: [
       'Hotkeys for every screen, every screen then edit, and a selected area; each can be changed',
+      'Choose where screenshots and recordings save in Settings › ScreenGrabs; until you do, both go where macOS saves screenshots, usually the Desktop, each recording in a folder of its own',
       'Screenshots from these hotkeys and from macOS’s own tools appear in Clipboard History and the ScreenGrabs tab, a grid of large thumbnails',
       'New screenshots also go on the clipboard, unless you turn that off or copied something since',
       'An editor with blur, redact, arrow, draw, and text; Save (Return) copies the result and saves “<name> (edited).png” beside the original',
       'Screenshot Screen and Edit copies only when you Save, so an unredacted shot never lands on the clipboard',
-      'In the ScreenGrabs tab, Return or ⌘C copies a screenshot, ⌘P pastes it into the app you were using, and ⌘Return opens it in the editor; ⌘E edits any image in Clipboard History',
+      'In the ScreenGrabs tab, Return or ⌘C copies a screenshot or a recording, ⌘P pastes it into the app you were using, and ⌘Return opens a screenshot in the editor or a recording in its window; ⌘E edits any image in Clipboard History',
       'On macOS 15 or later, Record Screen (⇧⌘5, or “record” in Quick Search) records an area, a window, a screen, or all your screens',
       'Records your voice and the Mac’s sound, each with its own switch, after a countdown you can change',
       'A small bar, never in the video, shows the time and lets you pause, draw, mute, restart, discard, or stop',
       'Draw on the screen while you record with a pen, an arrow, a highlighter, or a rectangle',
       'Shows the shortcuts you press in the video, never what you type, and can highlight each click',
       'After you stop, trim the ends, cut out a section, crop, and blur, then Save (Return) or Copy (⌘C)',
+      'The ScreenGrabs tab shows each recording with a frame, a play badge, and its length, even with Clipboard History off; with the search field empty, Space plays it in Quick Look',
       'While it’s on, Keybumps uses ⇧⌘3, ⇧⌘4, and ⇧⌘5 in place of macOS’s own, and gives them back when you turn it off'
     ],
     howTo: [
       { text: 'Press ⇧⌘4 and select an area, or ⇧⌘2 for every screen.', keys: '⇧⌘4' },
       {
-        text: 'Open the Command Palette and press ⌘3 for the ScreenGrabs tab, where ⌘Return marks a screenshot up.',
+        text: 'Open the Command Palette and press ⌘3 for the ScreenGrabs tab, which lists your screenshots and recordings. ⌘Return marks a screenshot up or opens a recording.',
         keys: '⌘3'
       },
       {
-        text: 'On macOS 15 or later, press ⇧⌘5 to record an area, a window, or a screen. Stop from the bar, then trim, crop, or blur it and save.',
+        text: 'On macOS 15 or later, press ⇧⌘5 to record an area, a window, or a screen. Stop from the bar, then trim, crop, or blur it and save it in your Recordings folder.',
         keys: '⇧⌘5'
       }
     ],
@@ -389,12 +393,16 @@ export const plugins: readonly Plugin[] = [
       },
       {
         q: 'Where are screenshots and recordings saved?',
-        a: 'Screenshots go where macOS saves screenshots, with an edited copy beside the original. Recordings go in ~/Documents/Keybumps/captures, which Show in Finder in Settings › ScreenGrabs opens.'
+        a: 'In the folders you choose in Settings › ScreenGrabs: a Screenshots folder for its hotkeys and, on macOS 15 or later, a Recordings folder, where each recording gets a folder of its own. Until you choose one, each is where macOS saves screenshots, usually the Desktop, and follows macOS’s setting. Screenshots from macOS’s own tools go where macOS saves them, and an edited copy goes beside the original. Recordings saved by earlier versions stay in ~/Documents/Keybumps/captures.'
+      },
+      {
+        q: 'Where do I find my recordings?',
+        a: 'In the ScreenGrabs tab (⌘3), beside your screenshots, newest first: every recording, wherever it’s saved. Return copies one, ⌘Return opens it in the recording window, and with the search field empty, Space plays it in Quick Look. Delete asks, then moves it to the Trash.'
       }
     ],
     keeps: [
-      'Screenshots are saved where macOS saves screenshots, and edited copies beside the original. Clipboard History keeps them on this Mac.',
-      'Recordings are kept in ~/Documents/Keybumps/captures on this Mac until you delete them.'
+      'Screenshots are saved in your Screenshots folder, or where macOS saves them when you use macOS’s own tools, and edited copies beside the original. Clipboard History keeps them on this Mac.',
+      'Recordings are kept on this Mac in your Recordings folder, each in a folder of its own, until you delete them. Ones saved by earlier versions stay in ~/Documents/Keybumps/captures.'
     ]
   },
   {

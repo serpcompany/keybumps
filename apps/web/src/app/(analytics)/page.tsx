@@ -93,7 +93,7 @@ const featured: readonly {
     features: [
       'Blur, redact, arrows, drawing, and text',
       'Screenshot Screen and Edit (⇧⌘3) copies only when you save, so nothing unredacted reaches the clipboard',
-      'Your screenshots in a grid of large thumbnails in their own tab'
+      'Your screenshots and recordings in a grid of large thumbnails in their own tab'
     ],
     options: {
       label: 'Capture',

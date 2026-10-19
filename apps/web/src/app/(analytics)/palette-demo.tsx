@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react'
 
-type Row = { icon: string; title: string; meta: string }
 /** A footer hint, as the app's footer names a tab's actions: Return's first, then the others. */
 type Hint = { keys: string; title: string }
+/** A row's own footer, where the app names other actions on it than on the rest of its tab. */
+type Row = { icon: string; title: string; meta: string; footer?: Hint[] }
 type Tab = { key: string; label: string; query: string; rows: Row[]; footer: Hint[] }
 
 const COPY: Hint = { keys: '↵', title: 'Copy' }
@@ -41,7 +42,12 @@ const TABS: Tab[] = [
     query: '',
     rows: [
       { icon: '▣', title: 'Screenshot 9:41:02', meta: 'Area · ⌘Return to edit' },
-      { icon: '▣', title: 'Screenshot 9:38:47', meta: 'All screens' },
+      {
+        icon: '▶',
+        title: 'Screen Recording 9:38:47',
+        meta: 'Recording · 0:42',
+        footer: [COPY, PASTE, { keys: '⌘↵', title: 'Open' }]
+      },
       { icon: '▣', title: 'Screenshot 9:12:10', meta: 'Edited · redacted' }
     ],
     footer: [COPY, PASTE, { keys: '⌘↵', title: 'Edit' }]
@@ -112,7 +118,7 @@ export function PaletteDemo() {
           {current.query.slice(0, typed)}
           <span className="caret" />
         </span>
-        {!current.query && <span className="palette-placeholder">Recent screenshots</span>}
+        {!current.query && <span className="palette-placeholder">Search ScreenGrabs</span>}
       </div>
       <div className="palette-tabs">
         {TABS.map((t, i) => (
@@ -137,7 +143,7 @@ export function PaletteDemo() {
         ))}
       </ul>
       <div className="palette-footer" aria-hidden="true">
-        {current.footer.map(hint => (
+        {(current.rows[selected]?.footer ?? current.footer).map(hint => (
           <span key={hint.title}>
             <kbd>{hint.keys}</kbd> {hint.title}
           </span>
