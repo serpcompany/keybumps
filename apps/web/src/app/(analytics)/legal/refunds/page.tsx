@@ -16,17 +16,12 @@ export default function RefundsPage() {
       </p>
 
       <h2>How to request a refund</h2>
-      <p>
-        Email {email} with the email address you used at checkout (or your order number). You can
-        also request a refund directly from the Polar receipt or customer portal linked in your
-        purchase email.
-      </p>
+      <p>Email {email} with the email address you used at checkout (or your order number).</p>
 
       <h2>What happens next</h2>
       <ul>
         <li>
-          Refunds are issued by Polar, our merchant of record, to the original payment method,
-          usually within 5–10 business days depending on your bank.
+          Refunds are issued by Polar, our merchant of record, to the original payment method.
         </li>
         <li>
           Once refunded, the license key is revoked and Keybumps stops working on any Mac it was
