@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.0.3-beta.29](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.28...v0.0.3-beta.29) (2026-10-19)
+
+
+### Features
+
+* **licensing:** a license's year of updates, with Renew for newer releases ([#554](https://github.com/serpcompany/keybumps/issues/554)) ([1a34a03](https://github.com/serpcompany/keybumps/commit/1a34a036ae8063e35a4ec9d485d0ac420f354b1a))
+* **palette:** ⌘V pastes, ⌘E edits, and Delete ⌫ shows last, with the same names in every tab ([#558](https://github.com/serpcompany/keybumps/issues/558)) ([3f35cbc](https://github.com/serpcompany/keybumps/commit/3f35cbc109f39a37820e4a0f85e499ee2570ec9b))
+* **palette:** one click copies an emoji or acts on a timer, and selects a ScreenGrabs tile ([#564](https://github.com/serpcompany/keybumps/issues/564)) ([33e739d](https://github.com/serpcompany/keybumps/commit/33e739d1295cb585ab393bd900b98af2e0c97cac))
+* **screengrabs:** the ⌘3 tab shows the highlighted screenshot or recording in full beside a two-column grid ([#566](https://github.com/serpcompany/keybumps/issues/566)) ([387208f](https://github.com/serpcompany/keybumps/commit/387208f99bb5f7757cf244025720dcb3013aa939))
+* **settings:** every plugin sits under one Plugins header, turned-off ones are dimmed, and a row's menu turns it on or off ([#569](https://github.com/serpcompany/keybumps/issues/569)) ([15b90df](https://github.com/serpcompany/keybumps/commit/15b90df12df59954d60b8aac9e18829f85f3e750))
+* **settings:** the sidebar is a stock list, with the system's search, row sizes, badges, and page title ([#560](https://github.com/serpcompany/keybumps/issues/560)) ([cf0217f](https://github.com/serpcompany/keybumps/commit/cf0217f7410bdcb402a3871a866a91dcb3551be5))
+
 ## [0.0.3-beta.28](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.27...v0.0.3-beta.28) (2026-10-19)
 
 
