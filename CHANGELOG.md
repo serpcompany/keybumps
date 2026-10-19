@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.0.3-beta.28](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.27...v0.0.3-beta.28) (2026-10-19)
+
+
+### Features
+
+* **screengrabs:** ⇧⌘4 opens the Screenshot Editor on the area, as Screenshot Area and Edit ([#549](https://github.com/serpcompany/keybumps/issues/549)) ([defb12e](https://github.com/serpcompany/keybumps/commit/defb12e57578457a919b5ec21150bb44c67a240b))
+* **screengrabs:** the Screenshot Editor's tools run Arrow, Text, Draw, Blur, Redact, and it opens on Arrow ([#546](https://github.com/serpcompany/keybumps/issues/546)) ([d5a8430](https://github.com/serpcompany/keybumps/commit/d5a84306ee3a9dbf3543dcfc2b638dfa24c6346c))
+
+
+### Fixes
+
+* **quick-search:** find a snippet by a word in its text, and show the text in its row ([#557](https://github.com/serpcompany/keybumps/issues/557)) ([3392b5a](https://github.com/serpcompany/keybumps/commit/3392b5ad33d84c448d2072500937e5f834572601))
+
 ## [0.0.3-beta.27](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.26...v0.0.3-beta.27) (2026-10-18)
 
 
