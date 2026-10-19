@@ -14,8 +14,9 @@
  *   in src/lib/pages.ts).
  * - `apps/macos/Keybumps/Screencast/ScreencastPreferences.swift`: ScreenGrabs' recording settings;
  *   `PluginCompatibility.recordingMacOS` (`PluginManifest.swift`): the macOS it records on.
- *   `ScreenshotTools/ScreengrabFolders.swift` and `ScreengrabFolderRow.swift`: its Screenshots and
- *   Recordings folders; `ScreenshotTools/ScreengrabsPaletteContent.swift`: what its tab lists and does.
+ * - `apps/macos/Keybumps/ScreenshotTools/ScreengrabFolders.swift` and `ScreengrabFolderRow.swift`:
+ *   ScreenGrabs' Screenshots and Recordings folders; `ScreengrabsPaletteContent.swift` (same folder):
+ *   what its tab lists and does.
  * - `apps/macos/Keybumps/EmojiPicker/*.swift` and `emoji.json` (its `sources`): what the Emoji tab
  *   offers, searches, and keeps (`EmojiRecents.limit`).
  * - `apps/macos/Keybumps/Translation/*.swift`: what the Translate tab does (its header comment in
@@ -343,7 +344,7 @@ export const plugins: readonly Plugin[] = [
     ],
     features: [
       'Hotkeys for every screen, every screen then edit, and a selected area; each can be changed',
-      'Choose where screenshots and recordings save in Settings › ScreenGrabs; until you do, both go where macOS saves screenshots, usually the Desktop, each recording in a folder of its own',
+      'Choose where screenshots and, on macOS 15 or later, recordings save in Settings › ScreenGrabs, each recording in a folder of its own; until you do, both go where macOS saves screenshots, usually the Desktop',
       'Screenshots from these hotkeys and from macOS’s own tools appear in Clipboard History and the ScreenGrabs tab, a grid of large thumbnails',
       'New screenshots also go on the clipboard, unless you turn that off or copied something since',
       'An editor with blur, redact, arrow, draw, and text; Save (Return) copies the result and saves “<name> (edited).png” beside the original',
@@ -393,7 +394,7 @@ export const plugins: readonly Plugin[] = [
       },
       {
         q: 'Where are screenshots and recordings saved?',
-        a: 'In the folders you choose in Settings › ScreenGrabs: a Screenshots folder for its hotkeys and, on macOS 15 or later, a Recordings folder, where each recording gets a folder of its own. Until you choose one, each is where macOS saves screenshots, usually the Desktop, and follows macOS’s setting. Screenshots from macOS’s own tools go where macOS saves them, and an edited copy goes beside the original. Recordings saved by earlier versions stay in ~/Documents/Keybumps/captures.'
+        a: 'In the folders you choose in Settings › ScreenGrabs: a Screenshots folder for its hotkeys and, on macOS 15 or later, a Recordings folder, where each recording gets a folder of its own. Until you choose one, each is where macOS saves screenshots, usually the Desktop, and follows macOS’s setting. Screenshots from macOS’s own tools go where macOS saves them, and an edited copy goes beside the original. Choosing another folder leaves what’s already saved where it is, and recordings saved by earlier versions stay in ~/Documents/Keybumps/captures.'
       },
       {
         q: 'Where do I find my recordings?',
