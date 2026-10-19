@@ -307,10 +307,11 @@ extension QuickSearchRanking {
     /// order, and equally good commands keep `QuickSearchCommand.allCases` order, then `actions`
     /// order: action commands rank exactly as commands do. Files and folders always come last.
     ///
-    /// Snippets (`SnippetSearch.quickSearchMatches`) match only by keyword and name. One whose whole
-    /// keyword, punctuation included, is the query comes first of all, since a keyword is typed to
-    /// find exactly it; the rest follow the apps and commands, before files. So `mail` keeps Mail
-    /// first even with a `;mail` snippet.
+    /// Snippets (`SnippetSearch.quickSearchMatches`) match by keyword, name, and text (#555). One whose
+    /// whole keyword, punctuation included, is the query comes first of all, since a keyword is typed
+    /// to find exactly it; the rest follow the apps and commands, text matches last among them, and
+    /// come before emoji and files. So `mail` keeps Mail first even with a `;mail` snippet, and
+    /// Keybumps's own results always come before Spotlight's, which only ever add rows below them.
     @MainActor
     static func items(
         matching term: String,

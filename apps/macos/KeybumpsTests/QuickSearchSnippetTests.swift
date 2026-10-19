@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Keybumps
 
-// Quick Search (⌘1) listing snippets by keyword and name. Every snippet here is made up.
+// Quick Search (⌘1) listing snippets by keyword, name, and text. Every snippet here is made up.
 
 @MainActor
 @Suite("Quick Search: snippets")
@@ -25,7 +25,7 @@ struct QuickSearchSnippetTests {
         SnippetSearch.quickSearchMatches(snippets, query: query).map(\.name)
     }
 
-    @Test("Snippets match by keyword, with or without its punctuation, and by name, but never by text")
+    @Test("Snippets match by keyword, with or without its punctuation, then by name, then by text")
     func matching() {
         let snippets = [
             Self.snippet("Release note", keyword: ";ship"),
@@ -33,10 +33,10 @@ struct QuickSearchSnippetTests {
             Self.snippet("Greeting", text: "we ship on Mondays"),
             Self.snippet("API token", keyword: "``tok", sensitive: true),
         ]
-        #expect(Self.names(snippets, "ship") == ["Release note", "Shipping address"], "Keyword first, then name")
+        #expect(Self.names(snippets, "ship") == ["Release note", "Shipping address", "Greeting"], "Keyword first, then name, then text")
         #expect(Self.names(snippets, "``tok") == ["API token"], "A sensitive snippet's keyword and name still match")
         #expect(Self.names(snippets, "tok") == ["API token"], "…with or without the keyword's punctuation")
-        #expect(Self.names(snippets, "mondays").isEmpty, "Text is never searched")
+        #expect(Self.names(snippets, "monday") == ["Greeting"], "Part of a word in the text finds it (#555)")
         #expect(Self.names(snippets, "  ").isEmpty)
     }
 
@@ -52,32 +52,41 @@ struct QuickSearchSnippetTests {
         #expect(SnippetSearch.quickSearchMatches(snippets, query: "made").count == 8)
     }
 
-    @Test("A keyword typed in full comes first; other snippets come after apps and commands, and before files")
+    @Test("Text matches only fill the room keyword and name matches leave")
+    func textFillsLeftoverRoom() {
+        let named = (1...6).map { Self.snippet("Housekeeping \($0)") }
+        let texts = (1...6).map { Self.snippet("Made-up \($0)", text: "made-up housekeeping notes") }
+        #expect(Self.names(texts + named, "house") == named.map(\.name) + ["Made-up 1", "Made-up 2"])
+    }
+
+    @Test("A keyword typed in full comes first; other snippets, text matches last, come after apps and commands, and before files")
     func ranking() {
         let typed = Self.snippet("Template", keyword: "clip")
         let bare = Self.snippet("Signature", keyword: ";clip")
         let named = Self.snippet("Clipping rules")
+        let text = Self.snippet("Greeting", text: "made-up clipboard note")
         let app = QuickSearchResult(url: URL(fileURLWithPath: "/Applications/Clipper.app"), kind: .application)
         let file = QuickSearchResult(url: URL(fileURLWithPath: "/tmp/fixture/clip.txt"), kind: .file)
         let clipboard = QuickSearchCommand.capability(.clipboardHistory)
 
         let rows = QuickSearchRanking.items(
-            matching: "clip", applications: [app], files: [file], commands: [clipboard], snippets: [named, bare, typed]
+            matching: "clip", applications: [app], files: [file], commands: [clipboard], snippets: [text, named, bare, typed]
         )
         // `;clip` without its punctuation is still a keyword match, but it doesn't jump above the
         // apps: typing "mail" should still put Mail first.
-        #expect(rows == [.snippet(typed), .result(app), .command(clipboard), .snippet(bare), .snippet(named), .result(file)])
+        // A text match is still Keybumps's own result, so it comes before Spotlight's files (#555).
+        #expect(rows == [.snippet(typed), .result(app), .command(clipboard), .snippet(bare), .snippet(named), .snippet(text), .result(file)])
         #expect(QuickSearchRanking.items(matching: ";clip", applications: [], files: [], commands: [], snippets: [named, bare]).first
             == .snippet(bare), "…and comes first when typed with it")
         #expect(QuickSearchRanking.items(matching: "clip", applications: [app], files: [file], commands: [clipboard])
             == [.result(app), .command(clipboard), .result(file)], "No snippets supplied, none listed")
     }
 
-    @Test("Quick Search's matching never reads snippet text")
-    func neverText() {
-        let snippet = Self.snippet("Greeting", text: "we ship on Mondays")
-        #expect(SnippetSearch.match(snippet, query: "mondays") == .text, "The Snippets tab searches text")
-        #expect(SnippetSearch.match(snippet, query: "mondays", includingText: false) == nil)
+    @Test("A sensitive snippet's text is never matched in Quick Search")
+    func sensitiveTextNeverMatched() {
+        let sensitive = Self.snippet("Made-up login", text: "made-up housekeeping secret", sensitive: true)
+        #expect(Self.names([sensitive], "house").isEmpty)
+        #expect(QuickSearchRanking.items(matching: "house", applications: [], files: [], commands: [], snippets: [sensitive]).isEmpty)
     }
 
     @Test("A snippet row's footer says Copy ↵ and Paste ⌘P; other rows keep the Search tab's Open ↵")

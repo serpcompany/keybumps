@@ -1173,6 +1173,18 @@ struct SnippetQuickSearchTests {
         fixture.search.query = "repl"
         #expect(fixture.search.items.contains(.snippet(snippet)))
     }
+
+    @Test("Quick Search finds a snippet by part of a word in its text, after name matches (#555)")
+    func findsByText() throws {
+        let fixture = PaletteFixture()
+        defer { fixture.tearDown() }
+        let byName = try fixture.snippets.add(SnippetDraft(name: "Made-up house rules", text: "made-up text"))
+        let byText = try fixture.snippets.add(SnippetDraft(name: "Made-up wrap-up", text: "made-up housekeeping notes"))
+        _ = try fixture.snippets.add(SnippetDraft(name: "Made-up secret", text: "made-up housekeeping secret", isSensitive: true))
+
+        fixture.search.query = "house"
+        #expect(fixture.search.items == [.snippet(byName), .snippet(byText)], "Never a sensitive snippet's text")
+    }
 }
 
 // MARK: - Plain text entry
