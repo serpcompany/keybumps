@@ -1,6 +1,6 @@
 'use client'
 
-import { CalendarDays, Check, ChevronDown, Link2, Search, X } from 'lucide-react'
+import { CalendarDays, Check, ChevronDown, Download, Link2, Search, X } from 'lucide-react'
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react'
 import { PluginIcon } from '@/components/plugin-icon'
 import {
@@ -108,10 +108,17 @@ function sectionText(section: Release['sections'][number]): string {
 
 /**
  * The client part of /changelog/: one search (versions, dates, and the notes) with a month filter,
- * over the release timeline. The notes are rendered from props the server read at build time.
+ * over the release timeline. The notes are rendered from props the server read at build time, and
+ * `downloads` holds each release's DMG by version (src/lib/release-downloads.ts).
  * Nothing typed here leaves the page: no URL, storage, or analytics.
  */
-export function ChangelogTimeline({ releases }: { releases: readonly Release[] }) {
+export function ChangelogTimeline({
+  releases,
+  downloads
+}: {
+  releases: readonly Release[]
+  downloads: Readonly<Record<string, string>>
+}) {
   const [query, setQuery] = useState('')
   const [month, setMonth] = useState('all')
   const [copied, setCopied] = useState<string | null>(null)
@@ -290,6 +297,16 @@ export function ChangelogTimeline({ releases }: { releases: readonly Release[] }
                       <time className="changelog-date" dateTime={release.date ?? undefined}>
                         {marked(release.dateLabel, words)}
                       </time>
+                    )}
+                    {downloads[release.version] && (
+                      <a
+                        className="changelog-download"
+                        href={downloads[release.version]}
+                        aria-label={`Download Keybumps ${release.version}`}
+                      >
+                        <Download aria-hidden="true" size={14} />
+                        Download
+                      </a>
                     )}
                   </div>
                   <div
