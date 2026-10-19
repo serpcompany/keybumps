@@ -22,7 +22,7 @@ extension CapabilityDescriptor {
         settingsPage: CapabilitySettingsPage(
             section: .search,
             summary: "Open apps, files, and folders from the keyboard.",
-            disableExplanation: "Turning this off closes Quick Search and releases its global shortcut.",
+            disableExplanation: "Turning this off closes the Search tab and releases its global shortcut.",
             content: { AnyView(QuickSearchSettingsView()) }
         ),
         criticalOperations: [],

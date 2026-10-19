@@ -101,7 +101,7 @@ struct SnippetsSettingsView: View {
                 } else if store.snippets.isEmpty {
                     SettingsRowLabel(
                         title: "No snippets yet",
-                        subtitle: "Click + to save text you reuse. In the Command Palette’s Snippets tab, Return copies it and ⌘V pastes it."
+                        subtitle: "Click + to save text you reuse. In Quick Search’s Snippets tab, Return copies it and ⌘V pastes it."
                     )
                 } else if rows.isEmpty {
                     SettingsNote("No matching snippets")
@@ -360,7 +360,7 @@ struct SnippetEditorSheet: View {
                 Toggle(isOn: Binding(get: { draft.isSensitive }, set: setSensitive)) {
                     SettingsRowLabel(
                         title: "Sensitive",
-                        subtitle: "Hides the text in the Command Palette and Settings, and leaves it out of search. The text is kept in the Keychain."
+                        subtitle: "Hides the text in Quick Search and Settings, and leaves it out of search. The text is kept in the Keychain."
                     )
                 }
                 .toggleStyle(SettingsSwitchToggleStyle())

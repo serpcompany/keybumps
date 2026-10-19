@@ -15,7 +15,7 @@ What people see a capability called: in Settings › Plugins, in Quick Search, a
 _Avoid_: Extension, add-on, app
 
 **Plugin manifest**:
-What a capability declares about itself, so the shell draws its Settings page, its row on the Plugins page, and its listing on the website the same way for every plugin: its name, summary, icon, and category; its commands (palette tab and shortcuts); the permissions it needs, and those it can use (optional, with why); whether it ships on; and its preferences, each a typed setting. Keybumps's version of a Raycast extension's manifest.
+What a capability declares about itself, so the shell draws its Settings page, its row on the Plugins page, and its listing on the website the same way for every plugin: its name, summary, icon, and category; its commands (its tab in Quick Search, and shortcuts); the permissions it needs, and those it can use (optional, with why); whether it ships on; and its preferences, each a typed setting. Keybumps's version of a Raycast extension's manifest.
 _Avoid_: Plist, config, schema
 
 **Plugins page**:
@@ -26,9 +26,13 @@ _Avoid_: Store, marketplace, gallery
 The internal, first-party unit that implements one Capability for the app shell.
 _Avoid_: Extension
 
-**Command Palette**:
-The single floating, keyboard-first surface whose tabs present the capabilities' searchable content. One click on a row does what Return does, except in the tabs that show the highlighted row's actions (Dictation, Translate, and ScreenGrabs), where it highlights the row and a double-click does what Return does, and in the Hotkeys tab, whose rows have no Return action, where it only highlights. Moving the pointer over a row highlights it, as in Raycast, except in those four tabs: there the highlight, and with it the detail, the footer, and the keys, follows only clicks and keys, and the row under the pointer is only outlined, so the pointer crossing a row on its way to the detail's buttons never changes which row they act on.
-_Avoid_: Quick Search panel, Clipboard panel, Alfred clone, Raycast clone
+**Quick Search**:
+The single floating, keyboard-first window whose tabs present the capabilities' searchable content: the Search tab first, then the other plugins' tabs. ⌘Space (Open Quick Search) opens it on the Search tab, and a plugin's own shortcut on that plugin's tab, such as ⇧⌘Space on the Clipboard tab. Settings › Quick Search is the page of the plugin with the same name, which owns ⌘Space and the Search tab. Its code keeps the former name, Command Palette (`CommandPaletteController`, `CommandPaletteTab`, `palette` in other types' names, its accessibility identifiers, and `-KBOpenPalette`; ADR 0012). One click on a row does what Return does, except in the tabs that show the highlighted row's actions (Dictation, Translate, and ScreenGrabs), where it highlights the row and a double-click does what Return does, and in the Hotkeys tab, whose rows have no Return action, where it only highlights. Moving the pointer over a row highlights it, as in Raycast, except in those four tabs: there the highlight, and with it the detail, the footer, and the keys, follows only clicks and keys, and the row under the pointer is only outlined, so the pointer crossing a row on its way to the detail's buttons never changes which row they act on.
+_Avoid_: Command Palette (its former name), palette, panel, launcher, Alfred clone, Raycast clone
+
+**Tab key**:
+The key that shows one of Quick Search's tabs: ⌘ and the tab's number, from ⌘1 for the Search tab to ⌘9 for the Hotkeys tab. Each tab keeps its own while its plugin is off or the tab is hidden. The tab bar shows them while ⌘ is held, and Settings › Plugins lists each plugin's, the Hotkeys tab's only while it's shown. In code, a tab's `commandKey`.
+_Avoid_: Command-number, tab shortcut
 
 **Notch notice**:
 A brief, self-dismissing message that grows out of the notch, or the top of the menu bar on screens without one.
@@ -43,7 +47,7 @@ A capability added after the default set, starting with Timer. Since #559, Setti
 _Avoid_: Plugin, extension, add-on
 
 **Settings**:
-The Keybumps window where capabilities are turned on and configured. Quick Search and the Command Palette offer it as Keybumps Settings.
+The Keybumps window where capabilities are turned on and configured. Quick Search offers it as Keybumps Settings, a Quick Search command, and its gear button and ⌘, open it too.
 _Avoid_: Preferences, Settings panel
 
 **What's New**:
@@ -64,28 +68,28 @@ _Avoid_: Feedback, bug report, ticket
 
 ### Capabilities
 
-**Quick Search**:
-Finding and opening local applications, files, and folders, finding snippets by keyword, name, or text and emoji by name (while Emoji Picker shows them there), and running Quick Search commands; the default Command Palette tab.
-_Avoid_: Web search, workflow launcher
+**Search tab**:
+Quick Search's first tab (⌘1): finding and opening local applications, files, and folders, finding snippets by keyword, name, or text and emoji by name (while Emoji Picker shows them there), and running Quick Search commands. It belongs to the Quick Search plugin; turning that off closes the tab and releases ⌘Space. In code, `CommandPaletteTab.search`, and the `QuickSearch` types (`QuickSearchModel`, `QuickSearchRanking`) are this tab's.
+_Avoid_: Quick Search tab, web search, workflow launcher
 
 **Quick Search command**:
-A Keybumps action that Quick Search offers beside applications, files, and folders: Keybumps Settings, Plugins, or a capability command, shown as the kind Command, or an action command, shown as the kind Action.
+A Keybumps action that the Search tab offers beside applications, files, and folders: Keybumps Settings, Plugins, or a capability command, shown as the kind Command, or an action command, shown as the kind Action.
 _Avoid_: Workflow, extension command
 
 **Action command**:
-A Quick Search command that does something a plugin does, rather than going somewhere, such as Record Screen or Hide Keystrokes. It's listed only while its plugin is on, and not while it would do nothing, such as Record Screen during a recording, or where ScreenGrabs can't record. Picking it closes the palette and does it, as the plugin's shortcut would, and opens the plugin's page when a permission it needs is missing.
+A Quick Search command that does something a plugin does, rather than going somewhere, such as Record Screen or Hide Keystrokes. It's listed only while its plugin is on, and not while it would do nothing, such as Record Screen during a recording, or where ScreenGrabs can't record. Picking it closes Quick Search and does it, as the plugin's shortcut would, and opens the plugin's page when a permission it needs is missing.
 _Avoid_: Quick action, workflow, shortcut (a key combination), command (alone)
 
 **Capability command**:
-The Quick Search command named for a capability, which goes to it: its Command Palette tab, or its Settings page when it has no tab or is turned off.
+The Quick Search command named for a capability, which goes to it: its tab in Quick Search, or its Settings page when it has no tab or is turned off.
 _Avoid_: Plugin, extension, navigation command
 
 **Recent Items**:
-The apps, files, and folders the user recently opened from Quick Search, listed while its search is empty. Quick Search commands never become Recent Items, and Keybumps itself is never listed.
+The apps, files, and folders the user recently opened from the Search tab, listed there while the search field is empty. Quick Search commands never become Recent Items, and Keybumps itself is never listed.
 _Avoid_: History, recents
 
 **Learned usage**:
-How often and how recently the user picked each app or Quick Search command from Quick Search, kept locally per item and used only to rank results: what the user picks more rises, weighed against how well each result matches the query. It is never listed, and no query is kept.
+How often and how recently the user picked each app or Quick Search command from the Search tab, kept locally per item and used only to rank results: what the user picks more rises, weighed against how well each result matches the query. It is never listed, and no query is kept.
 _Avoid_: Search history, frecency
 
 **Clipboard History**:
@@ -121,7 +125,7 @@ Recognition of actions the user did by hand that have a keyboard shortcut, with 
 _Avoid_: Keyboard Shortcutter (former name; code types still use it), Shortcut Coaching, Keylume app
 
 **Hotkeys**:
-The Command Palette tab label for Shortcut Coach history; everywhere else, including its capability command, it is called Shortcut Coach.
+The name of Quick Search's tab for Shortcut Coach history (⌘9), hidden unless Settings › Shortcut Coach shows it; everywhere else, including its capability command, it is called Shortcut Coach.
 
 **ScreenGrabs**:
 Taking screenshots and recordings of the screen, and marking screenshots up (ADR 0010). It replaced Screenshot Tools and Screencast, and ships on. Recording needs macOS 15; on an older Mac, ScreenGrabs takes screenshots only and says "Recording needs macOS 15". Its stored ID is still `screenshotTools`; its screenshot code is in `ScreenshotTools/` and its recording code, whose types keep Screencast's name, in `Screencast/`.
@@ -139,7 +143,7 @@ _Avoid_: Snap
 Where ScreenGrabs' hotkeys and the Screenshot Editor save screenshots: the folder chosen in Settings › ScreenGrabs, or, until one is, the folder macOS saves screenshots to (else the Desktop), following macOS's setting. A chosen folder that's gone or can't be written to stays chosen, and screenshots go to the default until it's back.
 
 **ScreenGrabs tab**:
-The Command Palette tab (⌘3) showing Clipboard History's newest 50 screenshot items and every recording in the recordings index, newest first (#494). Recordings show with Clipboard History off, and the header says why screenshots don't; on macOS 14 it shows screenshots only. Its grid has two columns, with the highlighted screengrab in full beside it, as in the Dictation tab (#552): its picture, a button for each of its actions with the keys that do the same, its name, and its information (Dimensions, Taken, and Size, or a recording's Length, Displays, Taken, and Size); until Down or a click highlights one, it says how to show one there. A click highlights a screengrab; a double-click or Return copies it, and a ⌘-click edits it. Clearing or deleting a screenshot in the Clipboard tab keeps it here; only this tab's Clear All or Delete, or 50 newer screenshots, remove it. Delete on a recording asks, then moves its folder to the Trash; Clear All leaves recordings. A recording moved or deleted outside Keybumps stays, marked "Moved or deleted", until it's removed.
+Quick Search's tab (⌘3) showing Clipboard History's newest 50 screenshot items and every recording in the recordings index, newest first (#494). Recordings show with Clipboard History off, and the header says why screenshots don't; on macOS 14 it shows screenshots only. Its grid has two columns, with the highlighted screengrab in full beside it, as in the Dictation tab (#552): its picture, a button for each of its actions with the keys that do the same, its name, and its information (Dimensions, Taken, and Size, or a recording's Length, Displays, Taken, and Size); until Down or a click highlights one, it says how to show one there. A click highlights a screengrab; a double-click or Return copies it, and a ⌘-click edits it. Clearing or deleting a screenshot in the Clipboard tab keeps it here; only this tab's Clear All or Delete, or 50 newer screenshots, remove it. Delete on a recording asks, then moves its folder to the Trash; Clear All leaves recordings. A recording moved or deleted outside Keybumps stays, marked "Moved or deleted", until it's removed.
 _Avoid_: Screenshots tab (its former name), screenshot library, gallery
 
 **Screenshot Editor**:
@@ -147,7 +151,7 @@ The ScreenGrabs window for marking up a screenshot.
 _Avoid_: Image editor, annotation app, Markup
 
 **Snippets**:
-Saving text you reuse, then copying or pasting it from the Command Palette.
+Saving text you reuse, then copying or pasting it from Quick Search.
 _Avoid_: Clippings, text library, plugin
 
 **Snippet**:
@@ -163,11 +167,11 @@ Replacing a snippet's keyword with the snippet as you type it in another app, th
 _Avoid_: Text expansion, autocorrect, abbreviation expansion
 
 **Sensitive snippet**:
-A snippet whose text is hidden in the Command Palette and Settings, left out of search, and kept in the Keychain instead of the snippets file.
+A snippet whose text is hidden in Quick Search and Settings, left out of search, and kept in the Keychain instead of the snippets file.
 _Avoid_: Secret, password snippet
 
 **Snippets tab**:
-The Command Palette tab (⌘5) that lists snippets. Return or ⌘C copies one, ⌘V pastes it into the app in front, and ⌘E edits it.
+Quick Search's tab (⌘5) that lists snippets. Return or ⌘C copies one, ⌘V pastes it into the app in front, and ⌘E edits it.
 _Avoid_: Snippet library, snippet manager
 
 **Timer**:
@@ -179,7 +183,7 @@ The card that stays at the top of the screen when a timer ends, ringing unless s
 _Avoid_: Notification, banner, popup
 
 **Timers tab**:
-The Command Palette tab (⌘6) where you type a duration such as `5m` or `tea 25` to start a timer, and pause, restart, or delete the timers listed under it. A click on a row does what Return does.
+Quick Search's tab (⌘6) where you type a duration such as `5m` or `tea 25` to start a timer, and pause, restart, or delete the timers listed under it. A click on a row does what Return does.
 _Avoid_: Timer list, timer manager
 
 **Emoji Picker**:
@@ -187,7 +191,7 @@ Finding an emoji by its name, a keyword, or its `:shortcode:`, then copying it o
 _Avoid_: Emoji keyboard, character viewer
 
 **Emoji tab**:
-The Command Palette tab (⌘7) for the Emoji Picker: a grid of recent emoji and Unicode's groups to browse, or a ranked list once you type. A click, Return, or ⌘C copies; ⌘V pastes and puts the clipboard back.
+Quick Search's tab (⌘7) for the Emoji Picker: a grid of recent emoji and Unicode's groups to browse, or a ranked list once you type. A click, Return, or ⌘C copies; ⌘V pastes and puts the clipboard back.
 _Avoid_: Emoji grid, emoji search
 
 **Recent emoji**:
@@ -199,7 +203,7 @@ Translating text between your two languages on this Mac, with Apple's Translatio
 _Avoid_: Translator, Translate (the tab's name)
 
 **Translate tab**:
-The Command Palette tab (⌘8) for Translation: what you type or paste in the search field, translated as you type. Return saves the translation to recent translations and clears the field; ⌘Return saves it and pastes it, then puts the clipboard back. ⌘V pastes into the field, as in any text field. ⌘T or the swap button translates the text the other way, and the target language in the header is a menu for picking another; either lasts until the text changes. A target picked for text detected in my language also becomes Other language. With the field empty, it lists recent translations.
+Quick Search's tab (⌘8) for Translation: what you type or paste in the search field, translated as you type. Return saves the translation to recent translations and clears the field; ⌘Return saves it and pastes it, then puts the clipboard back. ⌘V pastes into the field, as in any text field. ⌘T or the swap button translates the text the other way, and the target language in the header is a menu for picking another; either lasts until the text changes. A target picked for text detected in my language also becomes Other language. With the field empty, it lists recent translations.
 _Avoid_: Translation window, translator
 
 **Recent translations**:

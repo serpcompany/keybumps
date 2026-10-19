@@ -173,7 +173,7 @@ extension QuickSearchCommand {
             case .paletteTab(let tab): "Shows the \(tab.title) tab"
             case .settings(let section?): "Opens \(section.rawValue) in Settings"
             case .settings(nil): "Opens Settings"
-            case .action(let action): "Closes the palette, then runs \(action.title)"
+            case .action(let action): "Closes Quick Search, then runs \(action.title)"
             }
         }
     }

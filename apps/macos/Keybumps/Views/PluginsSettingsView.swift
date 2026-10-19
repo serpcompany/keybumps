@@ -106,8 +106,8 @@ private struct PluginsListRow: View {
                         Text(tabKey)
                             .foregroundStyle(.secondary)
                             .frame(width: 36, alignment: .trailing)
-                            .help("Its Command Palette tab")
-                            .accessibilityLabel(tabKey.isEmpty ? "" : "Command Palette tab \(tabKey)")
+                            .help("Its tab key in Quick Search")
+                            .accessibilityLabel(tabKey.isEmpty ? "" : "Tab key \(tabKey)")
                         let shortcut = PluginsTable.shortcutText(for: descriptor) { model.preferences.capabilityShortcut(for: $0) }
                         Text(shortcut)
                             .foregroundStyle(.secondary)

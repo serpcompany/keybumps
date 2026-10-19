@@ -1865,7 +1865,7 @@ private struct CommandPaletteView: View {
             state.selection = max(0, search.displayedRecentItems.count - 1)
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Keybumps command palette")
+        .accessibilityLabel("Quick Search")
     }
 
     @ViewBuilder
@@ -2030,7 +2030,7 @@ struct PaletteTabBar: View {
         .padding(.horizontal, 12)
         .padding(.bottom, 6)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Palette tabs")
+        .accessibilityLabel("Tabs")
     }
 
     /// The tabs with the open one named, or icons only: what `ViewThatFits` chooses between.
