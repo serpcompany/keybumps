@@ -413,7 +413,7 @@ struct PaletteCopyPasteKeyTests {
         #expect(DictationPaletteResults.playbackTitle(of: silent, player: fixture.palette.dictationPlayer) == nil, "No audio, no Space")
     }
 
-    @Test("The palette's footer, row by row: Clipboard's image rows add Edit ⌘E while ScreenGrabs is on; Dictation ends Play, then Delete, on ⌘⌫ while typing or filtered, and with no Paste on a recording with no transcript")
+    @Test("The palette's footer, row by row: Clipboard's image rows add Edit ⌘E while ScreenGrabs is on; Dictation ends Play, then Delete, on ⌘⌫ while typing or filtered, and with neither Copy nor Paste on a recording with no transcript")
     func paletteFooterByRow() throws {
         let fixture = CopyPasteFixture()
         defer { fixture.tearDown() }

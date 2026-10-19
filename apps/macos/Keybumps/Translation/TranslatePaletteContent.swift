@@ -10,13 +10,13 @@ import SwiftUI
 ///
 /// Return saves the translation to recent translations (`RecentTranslations`, the last 50, kept on
 /// this Mac) and clears the field; ⌘Return saves it and pastes it into the app you were using,
-/// putting the clipboard back (#362, #370). While you type, ⌘V pastes into the field, as in any
-/// text field (#552). With the field empty, the tab lists them, newest first, laid out like the
+/// putting the clipboard back (#362, #370). ⌘V always pastes into the field, as in any text field
+/// (#552). With the field empty, the tab lists them, newest first, laid out like the
 /// Dictation tab (#377): a compact row each on the left, and the highlighted one in full on the right
 /// (`detail(row:query:)`), its translation and source text selectable and scrolling, its languages
-/// and when it was saved, and a button for each key. Return or ⌘C copies one, kept out of Clipboard
-/// History; its Paste button pastes it (⌘V is the search field's here); Delete asks, then deletes it. Read Aloud, or Space, reads it aloud
-/// (`TranslationSpeaking`) until the palette closes, the tab or the text changes, another is read,
+/// and when it was saved, and its actions as buttons. Return or ⌘C copies one, kept out of Clipboard
+/// History; its Paste button pastes it; Delete asks, then deletes it. Read Aloud, or Space, reads it
+/// aloud (`TranslationSpeaking`) until the palette closes, the tab or the text changes, another is read,
 /// or it's deleted. Text selected with the pointer is Edit › Copy's, so ⌘C copies just that.
 @MainActor
 @Observable

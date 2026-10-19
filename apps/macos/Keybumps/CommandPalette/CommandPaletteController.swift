@@ -1317,7 +1317,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     }
 
     /// ⌘V: pastes the highlighted row into the app you were using (#370, #552), with each tab's
-    /// clipboard behavior: an emoji or a translation puts the clipboard back afterwards; a Clipboard
+    /// clipboard behavior: an emoji puts the clipboard back afterwards; a Clipboard
     /// History or Screenshots item, a snippet, or a transcript stays on it. Rows that don't paste do
     /// nothing; `selectionPastes` sends ⌘V to the search field there.
     private func pasteSelection() {
