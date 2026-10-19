@@ -542,6 +542,37 @@ struct TimerModuleTests {
         #expect(fixture.selectedRows.last == 0)
     }
 
+    @Test("A click does what Return does: starts the typed timer, or pauses, resumes, or restarts one; a double-click does it once (#552)")
+    func click() throws {
+        let fixture = ModuleFixture()
+        defer { fixture.tearDown() }
+        fixture.preferences.setCapability(.timer, enabled: true)
+        fixture.module.apply(fixture.context(enabled: [.timer]))
+        let content = try #require(fixture.module.paletteContent)
+        #expect(content.tab.clickAction == .acts)
+
+        content.click(.click(), row: 0, query: "tea 5m", palette: fixture.actions)
+        #expect(fixture.dismissals == 1, "The New Timer row starts it and closes the palette")
+        #expect(fixture.store.items.map(\.name) == ["tea"])
+        content.click(.click(), row: 0, query: "tea", palette: fixture.actions)
+        #expect(fixture.store.items.count == 1, "Unreadable text starts nothing")
+        #expect(fixture.selectedRows == [0, 0], "Each click highlights its row")
+
+        content.click(.click(), row: 0, query: "", palette: fixture.actions)
+        #expect(content.footerActions(row: 0, query: "").primary == "Resume", "A click pauses a running timer")
+        // A double-click's second click, then the double-click: it isn't resumed again.
+        content.click(.click(count: 2), row: 0, query: "", palette: fixture.actions)
+        content.click(.doubleClick(), row: 0, query: "", palette: fixture.actions)
+        #expect(content.footerActions(row: 0, query: "").primary == "Resume")
+        content.click(.click(), row: 0, query: "", palette: fixture.actions)
+        #expect(fixture.store.items.first?.isRunning == true, "Another click resumes it")
+
+        fixture.clock.advance(300)
+        fixture.scheduler.fire()
+        content.click(.click(withCommand: true), row: 0, query: "", palette: fixture.actions)
+        #expect(fixture.store.items.first?.isRunning == true, "A click restarts a finished one, ⌘ or not")
+    }
+
     @Test("A timer finishing while the tab is open keeps the highlight on the timer it was on")
     func selectionSurvivesAFinish() throws {
         let fixture = ModuleFixture(timersTabIsShowing: true)

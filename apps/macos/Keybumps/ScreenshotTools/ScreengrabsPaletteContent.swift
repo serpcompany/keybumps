@@ -20,7 +20,7 @@ enum ScreenshotPaletteContent: Equatable {
     }
 }
 
-/// What choosing a screenshot does. Return or a click copies it, as in the Clipboard tab.
+/// What choosing a screenshot does. Return or a double-click copies it, as in the Clipboard tab.
 /// Command-Return or Command-click opens it in the Screenshot Editor.
 enum ScreenshotPaletteAction: Equatable {
     case copy
@@ -240,9 +240,11 @@ enum ScreengrabsTabContent: Equatable {
 /// (`ScreengrabsTabContent`). Screenshots need Clipboard History on; recordings don't, and show only
 /// where ScreenGrabs records.
 ///
-/// - **Return** or a click copies: a screenshot as Clipboard History restores it, a recording as its
-///   files, every display's, as the recording window's Copy does, kept out of Clipboard History.
-///   **⌘V** pastes it.
+/// - A click highlights a screengrab, going into the grid as Down does, and the footer names its
+///   actions (`PaletteClickAction.selects`, #552).
+/// - **Return** or a double-click copies: a screenshot as Clipboard History restores it, a recording
+///   as its files, every display's, as the recording window's Copy does, kept out of Clipboard
+///   History. **⌘V** pastes it.
 /// - **⌘E** (Edit), **⌘Return**, or a ⌘-click opens a screenshot in the Screenshot Editor and a
 ///   recording in the recording window, where it's trimmed, cropped, and blurred, with Move to Trash
 ///   and Done (`ScreencastReviewMode.saved`).
@@ -442,6 +444,9 @@ final class ScreengrabsPaletteContent: CapabilityPaletteContent {
         choose(item, withCommand: true, palette: palette)
     }
 
+    /// A ⌘-click edits, as ⌘Return and ⌘E do.
+    var commandClicks: Bool { true }
+
     /// Each time the tab shows, the index looks at each recording's folder again, so one moved or
     /// deleted since shows as such.
     func didShow(palette: PaletteContentActions) {
@@ -461,12 +466,14 @@ final class ScreengrabsPaletteContent: CapabilityPaletteContent {
             query: context.query,
             selection: context.selection,
             actions: context.actions,
+            click: context.click,
             confirmationPresentationChanged: context.confirmationPresentationChanged
         ))
     }
 
-    /// Return, ⌘C, and a click copy; ⌘Return, ⌘E, and a ⌘-click open a screenshot in the Screenshot
-    /// Editor and a recording in its window. A moved or deleted recording says it couldn't open.
+    /// Return, ⌘C, and a double-click copy; ⌘Return, ⌘E, and a ⌘-click open a screenshot in the
+    /// Screenshot Editor and a recording in its window. A moved or deleted recording says it
+    /// couldn't open.
     func choose(_ item: Screengrab, withCommand: Bool, palette: PaletteContentActions) {
         switch item {
         case .screenshot(let entry):
@@ -482,7 +489,8 @@ final class ScreengrabsPaletteContent: CapabilityPaletteContent {
         }
     }
 
-    /// Return and a click copy a screenshot; with Command held they open it in the Screenshot Editor.
+    /// Return and a double-click copy a screenshot; with Command held they open it in the Screenshot
+    /// Editor.
     static func choose(_ entry: ClipboardEntry, withCommand: Bool, palette: PaletteContentActions) {
         switch ScreenshotPaletteAction(withCommand: withCommand) {
         case .copy: palette.copyClipboardEntry(entry)
@@ -584,6 +592,7 @@ private struct ScreengrabsResultsView: View {
     let query: String
     let selection: Int
     let actions: PaletteContentActions
+    let click: (PaletteClick, Int) -> Void
     let confirmationPresentationChanged: (Bool) -> Void
 
     var body: some View {
@@ -605,6 +614,7 @@ private struct ScreengrabsResultsView: View {
                 recordings: recordings,
                 content: content,
                 actions: actions,
+                click: click,
                 clear: clipboard.clearScreenshots,
                 confirmationPresentationChanged: confirmationPresentationChanged
             )
@@ -624,6 +634,8 @@ private struct ScreengrabGrid: View {
     let recordings: RecordingLibrary?
     let content: ScreengrabsPaletteContent
     let actions: PaletteContentActions
+    /// A click on a tile, which highlights it; a double-click copies it (`PaletteClickAction.selects`).
+    let click: (PaletteClick, Int) -> Void
     let clear: () -> Void
     let confirmationPresentationChanged: (Bool) -> Void
 
@@ -668,10 +680,8 @@ private struct ScreengrabGrid: View {
                                     isSelected: index == selection,
                                     recordings: recordings,
                                     copyTitle: item.recording.map(ScreengrabsPaletteContent.copyTitle(for:)) ?? "Copy",
-                                    choose: {
-                                        actions.selectRow(index)
-                                        content.choose(item, withCommand: NSEvent.modifierFlags.contains(.command), palette: actions)
-                                    },
+                                    clickAction: content.tab.clickAction,
+                                    click: { click($0, index) },
                                     run: { action in
                                         actions.selectRow(index)
                                         switch action {
@@ -714,7 +724,8 @@ private struct ScreengrabCard: View {
     let recordings: RecordingLibrary?
     /// Return's name, for the context menu's Copy.
     let copyTitle: String
-    let choose: () -> Void
+    let clickAction: PaletteClickAction
+    let click: (PaletteClick) -> Void
     let run: (ScreengrabCardAction) -> Void
     @State private var thumbnail: NSImage?
     /// The `Screengrab.thumbnailKey` `thumbnail` was loaded for.
@@ -724,7 +735,7 @@ private struct ScreengrabCard: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
         VStack(alignment: .leading, spacing: 6) {
-            Button(action: choose) {
+            PaletteClickButton(clickAction: clickAction, click: click) {
                 ZStack {
                     PaletteTheme.keycapFill
                     Group {
@@ -761,7 +772,6 @@ private struct ScreengrabCard: View {
                 .overlay(shape.strokeBorder(isSelected ? Color.accentColor : PaletteTheme.border, lineWidth: isSelected ? 3 : 1))
                 .contentShape(shape)
             }
-            .buttonStyle(.plain)
             .paletteLayoutProbe(.gridItem)
             .accessibilityLabel(item.thumbnailLabel)
             .accessibilityIdentifier(item.recording == nil ? "palette.screengrabs.screenshot" : "palette.screengrabs.recording")
@@ -852,8 +862,8 @@ private struct ScreengrabCard: View {
 }
 
 /// A recording's play badge, centered on its thumbnail: white play on a translucent black circle;
-/// a warning in its place for one moved or deleted. It only marks a video: a click copies, and Space
-/// plays it in Quick Look.
+/// a warning in its place for one moved or deleted. It only marks a video: a click highlights the
+/// tile, and Space plays it in Quick Look.
 private struct ScreengrabPlayBadge: View {
     let isMissing: Bool
 

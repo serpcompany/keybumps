@@ -540,6 +540,21 @@ struct CapabilityPaletteContentTests {
         #expect(fixture.palette.state.selection == 1)
     }
 
+    @Test("A click on a module tab's row reaches its rows with the search as it is, as its tab's click says (#552)")
+    func clickGoesToTheContent() {
+        let fixture = ModuleTabFixture()
+        defer { fixture.tearDown() }
+        fixture.palette.selectOnOpening(.keyboardShortcutter)
+        fixture.palette.state.historyQuery = "5m"
+        #expect(CommandPaletteTab.keyboardShortcutter.clickAction == .selects)
+
+        fixture.palette.clickContentRow(.click(), row: 2)
+        #expect(fixture.palette.state.selection == 2, "One click highlights the row")
+        #expect(fixture.content.activations.isEmpty)
+        fixture.palette.clickContentRow(.doubleClick(), row: 2)
+        #expect(fixture.content.activations == [.init(row: 2, query: "5m")], "A double-click does what Return does")
+    }
+
     @Test("Caps Lock doesn't stop the palette's Command keys (#182)")
     func capsLockKeepsCommandKeys() {
         let fixture = ModuleTabFixture()

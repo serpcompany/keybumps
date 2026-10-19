@@ -14,13 +14,15 @@ struct SnippetPaletteActions {
 }
 
 /// The Snippets tab: a Snippets header with New Snippet, then one row per snippet in the Clipboard
-/// tab's row layout. Return and ⌘C copy, ⌘V pastes, ⌘E edits, Delete asks, then deletes, and ⌘N makes
-/// a new one. The footer names them, as the context menu does (#552).
+/// tab's row layout. A click, Return, and ⌘C copy, ⌘V pastes, ⌘E edits, Delete asks, then deletes, and
+/// ⌘N makes a new one. The footer names them, as the context menu does (#552).
 struct SnippetPaletteResults: View {
     static let symbol = "text.quote"
 
     let content: SnippetPaletteContent
     let selection: Int
+    /// A click highlights the row, then copies it (`PaletteClickAction.acts`).
+    let select: (Int) -> Void
     let actions: SnippetPaletteActions
     @Binding var pendingDeletion: Snippet?
     let confirmationPresentationChanged: (Bool) -> Void
@@ -114,10 +116,9 @@ struct SnippetPaletteResults: View {
             // No per-row buttons: Delete (or ⌘⌫ while typing) asks to delete the selected row, and
             // the context menu and VoiceOver actions cover mouse and VoiceOver users.
             List(Array(snippets.enumerated()), id: \.element.id) { index, snippet in
-                Button { actions.copy(snippet) } label: {
+                PaletteClickButton(CommandPaletteTab.snippets.clickAction, select: { select(index) }, activate: { actions.copy(snippet) }) {
                     SnippetRow(snippet: snippet)
                 }
-                .buttonStyle(.plain)
                 .contextMenu {
                     Button("Copy") { actions.copy(snippet) }
                         .paletteMenuKeys(["⌘", "C"])

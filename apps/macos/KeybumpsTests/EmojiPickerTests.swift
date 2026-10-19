@@ -127,10 +127,11 @@ struct EmojiPaletteContentTests {
     private final class Palette {
         var copied: [String] = []
         var pasted: [(text: String, restores: Bool)] = []
+        var selected: [Int] = []
         var actions: PaletteContentActions {
             PaletteContentActions(
                 dismiss: {},
-                selectRow: { _ in },
+                selectRow: { [unowned self] in selected.append($0) },
                 clearQuery: {},
                 copy: { [unowned self] in copied.append($0) },
                 paste: { [unowned self] in pasted.append(($0, $1)) }
@@ -193,6 +194,31 @@ struct EmojiPaletteContentTests {
         tab.copy(row: 99_999, query: "", palette: palette.actions)
         tab.paste(row: 99_999, query: "", palette: palette.actions)
         #expect(palette.copied.count == 2 && palette.pasted.count == 1)
+    }
+
+    @Test("A click copies the emoji, as Return does, in the list and the grid, and a double-click copies it once (#552)")
+    func click() throws {
+        defer { try? FileManager.default.removeItem(at: url) }
+        let tab = try content()
+        let palette = Palette()
+        let row = try #require(tab.rows(query: "joy").firstIndex { $0.glyph == "😂" })
+        #expect(tab.tab.clickAction == .acts)
+
+        tab.click(.click(), row: row, query: "joy", palette: palette.actions)
+        #expect(palette.copied == ["😂"])
+        #expect(palette.selected == [row], "It highlights the emoji it copies")
+        // A double-click's second click, then the double-click: nothing more.
+        tab.click(.click(count: 2), row: row, query: "joy", palette: palette.actions)
+        tab.click(.doubleClick(), row: row, query: "joy", palette: palette.actions)
+        #expect(palette.copied == ["😂"])
+
+        // The grid's first emoji is now the recent one.
+        tab.click(.click(), row: 0, query: "", palette: palette.actions)
+        #expect(palette.copied == ["😂", "😂"])
+        tab.click(.click(withCommand: true), row: 0, query: "+1", palette: palette.actions)
+        #expect(palette.copied == ["😂", "😂", "👍"], "⌘ makes no difference")
+        #expect(palette.pasted.isEmpty)
+        #expect(tab.recents.glyphs == ["👍", "😂"])
     }
 
     @Test("The skin tone setting picks each emoji's form, and recent emoji are kept by their base")

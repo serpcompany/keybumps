@@ -86,8 +86,8 @@ final class TimerPaletteContent: CapabilityPaletteContent {
         rows(query: query).count
     }
 
-    /// Return starts the typed timer and closes the palette; on a timer it pauses, resumes, or
-    /// restarts it.
+    /// Return, or a click (#552), starts the typed timer and closes the palette; on a timer it
+    /// pauses, resumes, or restarts it.
     func activate(row: Int, query: String, palette: PaletteContentActions) {
         let rows = rows(query: query)
         guard rows.indices.contains(row) else { return }
@@ -137,7 +137,8 @@ final class TimerPaletteContent: CapabilityPaletteContent {
             preferences: preferences,
             query: context.query,
             selection: context.selection,
-            select: context.actions.selectRow
+            clickAction: tab.clickAction,
+            click: context.click
         ))
     }
 }
@@ -150,7 +151,9 @@ private struct TimerPaletteResults: View {
     @Bindable var preferences: AppPreferences
     let query: String
     let selection: Int
-    let select: (Int) -> Void
+    /// What a click does: what Return does on the row (`PaletteClickAction.acts`).
+    let clickAction: PaletteClickAction
+    let click: (PaletteClick, Int) -> Void
 
     var body: some View {
         PaletteResultsContainer {
@@ -192,10 +195,9 @@ private struct TimerPaletteResults: View {
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
                 }
-                Button { select(index) } label: {
+                PaletteClickButton(clickAction: clickAction, click: { click($0, index) }) {
                     TimerRowView(row: row, now: now)
                 }
-                .buttonStyle(.plain)
                 .listRowInsets(.init())
                 .listRowSeparator(.hidden)
                 .paletteHoverHighlights(row: index)

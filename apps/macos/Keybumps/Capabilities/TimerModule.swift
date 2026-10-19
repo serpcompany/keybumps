@@ -17,6 +17,7 @@ extension CapabilityDescriptor {
             prompt: "Start a timer: 5m, 1h30m, tea 25",
             primaryActionTitle: "Start",
             secondaryActions: [.delete()],
+            clickAction: .acts,
             dataSource: nil
         ),
         settingsPage: CapabilitySettingsPage(

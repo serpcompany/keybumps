@@ -16,6 +16,7 @@ extension CapabilityDescriptor {
             prompt: "Search apps, files, and folders",
             primaryActionTitle: "Open",
             secondaryActions: [],
+            clickAction: .acts,
             dataSource: nil
         ),
         settingsPage: CapabilitySettingsPage(

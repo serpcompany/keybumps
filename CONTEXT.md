@@ -27,7 +27,7 @@ The internal, first-party unit that implements one Capability for the app shell.
 _Avoid_: Extension
 
 **Command Palette**:
-The single floating, keyboard-first surface whose tabs present the capabilities' searchable content.
+The single floating, keyboard-first surface whose tabs present the capabilities' searchable content. One click on a row does what Return does, except in the tabs that show the highlighted row's actions (Dictation, Translate, and ScreenGrabs), where it highlights the row and a double-click does what Return does.
 _Avoid_: Quick Search panel, Clipboard panel, Alfred clone, Raycast clone
 
 **Notch notice**:
@@ -139,7 +139,7 @@ _Avoid_: Snap
 Where ScreenGrabs' hotkeys and the Screenshot Editor save screenshots: the folder chosen in Settings › ScreenGrabs, or, until one is, the folder macOS saves screenshots to (else the Desktop), following macOS's setting. A chosen folder that's gone or can't be written to stays chosen, and screenshots go to the default until it's back.
 
 **ScreenGrabs tab**:
-The Command Palette tab (⌘3) showing Clipboard History's newest 50 screenshot items and every recording in the recordings index, newest first (#494). Recordings show with Clipboard History off, and the header says why screenshots don't; on macOS 14 it shows screenshots only. Clearing or deleting a screenshot in the Clipboard tab keeps it here; only this tab's Clear All or Delete, or 50 newer screenshots, remove it. Delete on a recording asks, then moves its folder to the Trash; Clear All leaves recordings. A recording moved or deleted outside Keybumps stays, marked "Moved or deleted", until it's removed.
+The Command Palette tab (⌘3) showing Clipboard History's newest 50 screenshot items and every recording in the recordings index, newest first (#494). Recordings show with Clipboard History off, and the header says why screenshots don't; on macOS 14 it shows screenshots only. A click highlights a screengrab, and the footer names its actions; a double-click or Return copies it, and a ⌘-click edits it. Clearing or deleting a screenshot in the Clipboard tab keeps it here; only this tab's Clear All or Delete, or 50 newer screenshots, remove it. Delete on a recording asks, then moves its folder to the Trash; Clear All leaves recordings. A recording moved or deleted outside Keybumps stays, marked "Moved or deleted", until it's removed.
 _Avoid_: Screenshots tab (its former name), screenshot library, gallery
 
 **Screenshot Editor**:
@@ -179,7 +179,7 @@ The card that stays at the top of the screen when a timer ends, ringing unless s
 _Avoid_: Notification, banner, popup
 
 **Timers tab**:
-The Command Palette tab (⌘6) where you type a duration such as `5m` or `tea 25` to start a timer, and pause, restart, or delete the timers listed under it.
+The Command Palette tab (⌘6) where you type a duration such as `5m` or `tea 25` to start a timer, and pause, restart, or delete the timers listed under it. A click on a row does what Return does.
 _Avoid_: Timer list, timer manager
 
 **Emoji Picker**:
@@ -187,7 +187,7 @@ Finding an emoji by its name, a keyword, or its `:shortcode:`, then copying it o
 _Avoid_: Emoji keyboard, character viewer
 
 **Emoji tab**:
-The Command Palette tab (⌘7) for the Emoji Picker: a grid of recent emoji and Unicode's groups to browse, or a ranked list once you type. Return or ⌘C copies; ⌘V pastes and puts the clipboard back.
+The Command Palette tab (⌘7) for the Emoji Picker: a grid of recent emoji and Unicode's groups to browse, or a ranked list once you type. A click, Return, or ⌘C copies; ⌘V pastes and puts the clipboard back.
 _Avoid_: Emoji grid, emoji search
 
 **Recent emoji**:

@@ -16,6 +16,7 @@ extension CapabilityDescriptor {
             prompt: "Search clipboard history",
             primaryActionTitle: "Copy",
             secondaryActions: [.paste(), .delete()],
+            clickAction: .acts,
             dataSource: nil
         ),
         settingsPage: CapabilitySettingsPage(

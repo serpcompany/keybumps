@@ -2,9 +2,9 @@ import AppKit
 import SwiftUI
 
 /// The Emoji tab (#243). With the search empty it's a grid to browse: Recent, then Unicode's groups.
-/// Typing turns it into a ranked list, as the Search tab is. Return or ⌘C copies the emoji and ⌘V
-/// pastes it into the app you were using, putting your clipboard back afterwards; a double-click
-/// copies too. The emoji takes the skin tone set in Settings when it has one.
+/// Typing turns it into a ranked list, as the Search tab is. A click, Return, or ⌘C copies the emoji
+/// (#552) and ⌘V pastes it into the app you were using, putting your clipboard back afterwards. The
+/// emoji takes the skin tone set in Settings when it has one.
 @MainActor
 @Observable
 final class EmojiPaletteContent: CapabilityPaletteContent {
@@ -205,15 +205,7 @@ final class EmojiPaletteContent: CapabilityPaletteContent {
     }
 
     func makeView(_ context: PaletteContentContext) -> AnyView {
-        let actions = context.actions
-        let query = context.query
-        return AnyView(EmojiPaletteResults(
-            content: self,
-            query: query,
-            selection: context.selection,
-            select: actions.selectRow,
-            pick: { [weak self] row in self?.activate(row: row, query: query, palette: actions) }
-        ))
+        AnyView(EmojiPaletteResults(content: self, query: context.query, selection: context.selection, click: context.click))
     }
 }
 
@@ -223,9 +215,8 @@ private struct EmojiPaletteResults: View {
     let content: EmojiPaletteContent
     let query: String
     let selection: Int
-    let select: (Int) -> Void
-    /// A double-click: what Return does.
-    let pick: (Int) -> Void
+    /// A click on an emoji, which copies it, as Return does (`PaletteClickAction.acts`).
+    let click: (PaletteClick, Int) -> Void
 
     var body: some View {
         PaletteResultsContainer {
@@ -269,8 +260,8 @@ private struct EmojiPaletteResults: View {
                                         glyph: content.glyph(for: emoji),
                                         name: emoji.name,
                                         isSelected: index == selection,
-                                        select: { select(index) },
-                                        pick: { pick(index) }
+                                        clickAction: content.tab.clickAction,
+                                        click: { click($0, index) }
                                     )
                                     .paletteHoverHighlights(row: index)
                                     .id(index)
@@ -330,11 +321,9 @@ private struct EmojiPaletteResults: View {
             } else {
                 ScrollViewReader { proxy in
                     List(Array(rows.enumerated()), id: \.element.glyph) { index, emoji in
-                        Button { select(index) } label: {
+                        PaletteClickButton(clickAction: content.tab.clickAction, click: { click($0, index) }) {
                             EmojiRow(glyph: content.glyph(for: emoji), emoji: emoji)
                         }
-                        .buttonStyle(.plain)
-                        .simultaneousGesture(TapGesture(count: 2).onEnded { pick(index) })
                         .listRowInsets(.init())
                         .listRowSeparator(.hidden)
                         .paletteHoverHighlights(row: index)
@@ -355,11 +344,11 @@ private struct EmojiCell: View {
     let glyph: String
     let name: String
     let isSelected: Bool
-    let select: () -> Void
-    let pick: () -> Void
+    let clickAction: PaletteClickAction
+    let click: (PaletteClick) -> Void
 
     var body: some View {
-        Button(action: select) {
+        PaletteClickButton(clickAction: clickAction, click: click) {
             Text(glyph)
                 .font(.system(size: 30))
                 .frame(maxWidth: .infinity, minHeight: 52)
@@ -373,9 +362,7 @@ private struct EmojiCell: View {
                 )
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
         .paletteLayoutProbe(.gridItem)
-        .simultaneousGesture(TapGesture(count: 2).onEnded(pick))
         .accessibilityLabel(name)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier("palette.emoji.cell")

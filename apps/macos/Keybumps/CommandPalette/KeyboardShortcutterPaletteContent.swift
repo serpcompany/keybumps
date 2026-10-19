@@ -50,7 +50,8 @@ final class KeyboardShortcutterPaletteContent: CapabilityPaletteContent {
             preferences: preferences,
             query: context.query,
             selection: context.selection,
-            select: context.actions.selectRow,
+            clickAction: tab.clickAction,
+            click: context.click,
             confirmationPresentationChanged: context.confirmationPresentationChanged
         ))
     }
@@ -69,7 +70,9 @@ private struct KeyboardShortcutterResultsView: View {
     @Bindable var preferences: AppPreferences
     let query: String
     let selection: Int
-    let select: (Int) -> Void
+    /// What a click does: it highlights the row, which has no action (`PaletteClickAction.selects`).
+    let clickAction: PaletteClickAction
+    let click: (PaletteClick, Int) -> Void
     let confirmationPresentationChanged: (Bool) -> Void
 
     private var content: KeyboardShortcutterHistoryContent {
@@ -102,10 +105,9 @@ private struct KeyboardShortcutterResultsView: View {
 
                     ScrollViewReader { proxy in
                         List(Array(entries.enumerated()), id: \.element.id) { index, event in
-                            Button { select(index) } label: {
+                            PaletteClickButton(clickAction: clickAction, click: { click($0, index) }) {
                                 CoachingEventRow(event: event)
                             }
-                            .buttonStyle(.plain)
                             .listRowInsets(.init())
                             .listRowSeparator(.hidden)
                             .paletteHoverHighlights(row: index)
