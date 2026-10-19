@@ -19,7 +19,7 @@ What a capability declares about itself, so the shell draws its Settings page, i
 _Avoid_: Plist, config, schema
 
 **Plugins page**:
-Two places with one name. In the app, Settings › Plugins lists every plugin with its switch; Quick Search's Plugins command opens it, and so does its sidebar row, All Plugins, first under the Plugins header. A turned-off plugin's own page says so at the top, with a Turn On button. On the website, keybumps.app/plugins lists every plugin with a page for each, and Settings › Plugins links to it ("Browse on keybumps.app"). For now every plugin is official, built by Keybumps, and ships in the app.
+Two places with one name. In the app, Settings › Plugins lists every plugin with its switch, except Quick Search, which is always on; Quick Search's Plugins command opens it, and so does its sidebar row, All Plugins, first under the Plugins header. A turned-off plugin's own page says so at the top, with a Turn On button. On the website, keybumps.app/plugins lists every plugin with a page for each, and Settings › Plugins links to it ("Browse on keybumps.app"). For now every plugin is official, built by Keybumps, and ships in the app.
 _Avoid_: Store, marketplace, gallery
 
 **Capability Module**:
@@ -27,11 +27,11 @@ The internal, first-party unit that implements one Capability for the app shell.
 _Avoid_: Extension
 
 **Quick Search**:
-The single floating, keyboard-first window whose tabs present the capabilities' searchable content: the Search tab first, then the other plugins' tabs. ⌘Space (Open Quick Search) opens it on the Search tab, and a plugin's own shortcut on that plugin's tab, such as ⇧⌘Space on the Clipboard tab. Settings › Quick Search is the page of the plugin with the same name, which owns ⌘Space and the Search tab. Its code keeps the former name, Command Palette (`CommandPaletteController`, `CommandPaletteTab`, `palette` in other types' names, its accessibility identifiers, and `-KBOpenPalette`; ADR 0012). One click on a row does what Return does, except in the tabs that show the highlighted row's actions (Dictation, Translate, and ScreenGrabs), where it highlights the row and a double-click does what Return does, and in the Hotkeys tab, whose rows have no Return action, where it only highlights. Moving the pointer over a row highlights it, as in Raycast, except in those four tabs: there the highlight, and with it the detail, the footer, and the keys, follows only clicks and keys, and the row under the pointer is only outlined, so the pointer crossing a row on its way to the detail's buttons never changes which row they act on.
+The single floating, keyboard-first window whose tabs present the capabilities' searchable content: the Search tab first, then the other plugins' tabs. ⌘Space (Open Quick Search) opens it on its first shown tab, the Search tab unless that's hidden, and a plugin's own shortcut on that plugin's tab, such as ⇧⌘Space on the Clipboard tab. Settings › Quick Search is the window's page, and the page of the plugin with the same name, which owns ⌘Space and the Search tab. That plugin is always on, with no switch (#553). The page lists every tab with its tab key while it's in the tab bar, and a show switch on the Search and Hotkeys tabs that takes the tab out of the tab bar; one tab always stays shown. Its code keeps the former name, Command Palette (`CommandPaletteController`, `CommandPaletteTab`, `palette` in other types' names, its accessibility identifiers, and `-KBOpenPalette`; ADR 0012). One click on a row does what Return does, except in the tabs that show the highlighted row's actions (Dictation, Translate, and ScreenGrabs), where it highlights the row and a double-click does what Return does, and in the Hotkeys tab, whose rows have no Return action, where it only highlights. Moving the pointer over a row highlights it, as in Raycast, except in those four tabs: there the highlight, and with it the detail, the footer, and the keys, follows only clicks and keys, and the row under the pointer is only outlined, so the pointer crossing a row on its way to the detail's buttons never changes which row they act on.
 _Avoid_: Command Palette (its former name), palette, launcher, Alfred clone, Raycast clone; and panel in what people read (in code, the window is an `NSPanel`)
 
 **Tab key**:
-The key that shows one of Quick Search's tabs: ⌘ and the tab's number, from ⌘1 for the Search tab to ⌘9 for the Hotkeys tab. Each tab keeps its own while its plugin is off or the tab is hidden. The tab bar shows them while ⌘ is held, and Settings › Plugins lists each plugin's, the Hotkeys tab's only while it's shown. In code, a tab's `commandKey`.
+The key that shows one of Quick Search's tabs: ⌘ and the tab's number, from ⌘1 for the Search tab to ⌘9 for the Hotkeys tab. Each tab keeps its own while its plugin is off or the tab is hidden. The tab bar shows them while ⌘ is held, Settings › Plugins lists each plugin's, the Search and Hotkeys tabs' only while they're shown, and Settings › Quick Search each tab's while it's in the tab bar. In code, a tab's `commandKey`.
 _Avoid_: Command-number, tab shortcut
 
 **Notch notice**:
@@ -69,7 +69,7 @@ _Avoid_: Feedback, bug report, ticket
 ### Capabilities
 
 **Search tab**:
-Quick Search's first tab (⌘1): finding and opening local applications, files, and folders, finding snippets by keyword, name, or text and emoji by name (while Emoji Picker shows them there), and running Quick Search commands. It belongs to the Quick Search plugin; turning that off closes the tab and releases ⌘Space. In code, `CommandPaletteTab.search`, and the `QuickSearch` types (`QuickSearchModel`, `QuickSearchRanking`) are this tab's.
+Quick Search's first tab (⌘1): finding and opening local applications, files, and folders, finding snippets by keyword, name, or text and emoji by name (while Emoji Picker shows them there), and running Quick Search commands. It belongs to the Quick Search plugin, which is always on. Its show switch in Settings › Quick Search hides it, which took the place of turning Quick Search off: an install that had Quick Search off starts with the tab hidden (#553). While it's hidden, ⌘Space opens Quick Search on the first shown tab. In code, `CommandPaletteTab.search`, and the `QuickSearch` types (`QuickSearchModel`, `QuickSearchRanking`) are this tab's.
 _Avoid_: Quick Search tab, web search, workflow launcher
 
 **Quick Search command**:
@@ -125,7 +125,7 @@ Recognition of actions the user did by hand that have a keyboard shortcut, with 
 _Avoid_: Keyboard Shortcutter (former name; code types still use it), Shortcut Coaching, Keylume app
 
 **Hotkeys**:
-The name of Quick Search's tab for Shortcut Coach history (⌘9), hidden unless Settings › Shortcut Coach shows it; everywhere else, including its capability command, it is called Shortcut Coach.
+The name of Quick Search's tab for Shortcut Coach history (⌘9), hidden unless its show switch in Settings › Quick Search shows it; everywhere else, including its capability command, it is called Shortcut Coach.
 
 **ScreenGrabs**:
 Taking screenshots and recordings of the screen, and marking screenshots up (ADR 0010). It replaced Screenshot Tools and Screencast, and ships on. Recording needs macOS 15; on an older Mac, ScreenGrabs takes screenshots only and says "Recording needs macOS 15". Its stored ID is still `screenshotTools`; its screenshot code is in `ScreenshotTools/` and its recording code, whose types keep Screencast's name, in `Screencast/`.

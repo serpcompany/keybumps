@@ -210,7 +210,8 @@ struct SettingsRootView: View {
                     ToolbarSpacer(.flexible)
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    if let capability = visibleSelection.capability {
+                    // Quick Search is always on, so its page has no switch (#553).
+                    if let capability = visibleSelection.capability, !capability.descriptor.isAlwaysOn {
                         CapabilityToggle(capability: capability)
                     }
                 }
@@ -267,13 +268,15 @@ struct SettingsRootView: View {
         .accessibilityIdentifier("settings.sidebar.\(section.launchToken)")
         .contextMenu {
             if let capability = section.capability, !isLocked {
-                let isOn = CapabilityToggleBinding(model: model, capability: capability).value
-                Button(isOn.wrappedValue ? "Turn Off \(capability.title)" : "Turn On \(capability.title)") {
-                    isOn.wrappedValue.toggle()
+                if !capability.descriptor.isAlwaysOn {
+                    let isOn = CapabilityToggleBinding(model: model, capability: capability).value
+                    Button(isOn.wrappedValue ? "Turn Off \(capability.title)" : "Turn On \(capability.title)") {
+                        isOn.wrappedValue.toggle()
+                    }
+                    // A plugin that needs a newer macOS can't be turned on (#322).
+                    .disabled(!isOn.wrappedValue && model.preferences.compatibility.requirement(for: capability) != nil)
+                    Divider()
                 }
-                // A plugin that needs a newer macOS can't be turned on (#322).
-                .disabled(!isOn.wrappedValue && model.preferences.compatibility.requirement(for: capability) != nil)
-                Divider()
                 Button("Open on keybumps.app") { openURL(PluginLinks.page(for: capability)) }
             }
         }
@@ -552,23 +555,6 @@ struct SettingsSearchField: View {
         .background(SettingsTheme.field, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.primary.opacity(0.08)))
         .accessibilityIdentifier(identifier)
-    }
-}
-
-struct QuickSearchSettingsView: View {
-    @Environment(AppModel.self) private var model
-    var body: some View {
-        SettingsPage {
-            CapabilityControl(capability: .quickSearch, shortcuts: [.quickSearch])
-            SettingsGroup {
-                LabeledContent {
-                    Button("Open") { model.showQuickSearch() }
-                        .disabled(!model.preferences.enabledCapabilities.contains(.quickSearch))
-                } label: {
-                    SettingsRowLabel(title: "Open Quick Search", subtitle: "Search apps, files, and folders.")
-                }
-            }
-        }.navigationTitle("Quick Search")
     }
 }
 
@@ -961,12 +947,9 @@ struct KeyboardShortcutterSettingsView: View {
                 KeyboardGlyphLegendContent(entries: KeyboardShortcutRegistry.legendEntries)
             }
             SettingsGroup {
-                Toggle("Show Hotkeys tab in Quick Search", isOn: Binding(
-                    get: { model.preferences.showsHotkeysTab },
-                    set: { model.preferences.showsHotkeysTab = $0 }
-                ))
                 Button("Open Shortcut Coach History") { model.showKeyboardShortcutterHistory() }
-                Text("View, filter, and clear detected actions in Quick Search’s Hotkeys tab.")
+                // The tab's show switch moved to Settings › Quick Search's tab list (#553).
+                Text("View, filter, and clear detected actions in Quick Search’s Hotkeys tab, which Settings › Quick Search shows or hides.")
                     .foregroundStyle(.secondary)
             }
         }
@@ -1091,8 +1074,7 @@ private struct OnboardingView: View {
             Text("Grant the permissions your features need.")
                 .foregroundStyle(.secondary)
             PermissionWalkthroughView(compact: true)
-            if let shortcut = model.preferences.capabilityShortcut(for: .quickSearch),
-               model.preferences.enabledCapabilities.contains(.quickSearch) {
+            if let shortcut = model.preferences.capabilityShortcut(for: .quickSearch) {
                 Text("Quick Search opens with \(shortcut.displayName). If Spotlight uses the same shortcut, Keybumps turns off only Spotlight's keyboard shortcut; Spotlight search stays available.")
                     .font(.caption)
                     .foregroundStyle(.secondary)

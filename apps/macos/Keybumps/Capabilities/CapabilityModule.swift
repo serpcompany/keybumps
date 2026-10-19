@@ -42,11 +42,15 @@ struct CapabilityDescriptor: Identifiable {
     /// runs on. On an older Mac it's listed with "Requires macOS 15" and can't be turned on
     /// (`PluginCompatibility`).
     var minimumMacOS: Int?
+    /// Whether it's always on, with no switch to turn it off: Quick Search, whose Settings page is
+    /// the window's, where hiding the Search tab replaced turning it off (#553). `AppPreferences`
+    /// counts it on whatever was saved.
+    var isAlwaysOn = false
 
     var id: Capability { capability }
 }
 
-/// A Command Palette tab a module owns. `dataSource` names another module when the tab lists that
+/// A Quick Search tab a module owns. `dataSource` names another module when the tab lists that
 /// module's data (the ScreenGrabs tab lists Clipboard History's screenshot entries).
 struct CapabilityPaletteTab {
     let tab: CommandPaletteTab
@@ -102,6 +106,9 @@ enum CapabilityCatalog {
     static let defaultCapabilities: Set<Capability> = [
         .quickSearch, .clipboardHistory, .screenshotTools, .dictation, .windowManagement, .keyboardShortcutter, .snippets
     ]
+
+    /// The capabilities that are always on (`CapabilityDescriptor.isAlwaysOn`).
+    static let alwaysOnCapabilities = Set(descriptors.filter(\.isAlwaysOn).map(\.capability))
 
     private static let byCapability = Dictionary(uniqueKeysWithValues: descriptors.map { ($0.capability, $0) })
 

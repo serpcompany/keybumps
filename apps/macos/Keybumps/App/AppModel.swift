@@ -549,7 +549,6 @@ final class AppModel {
 
     func refreshQuickSearchShortcutConflict() {
         guard !preferences.didCompleteOnboarding,
-              preferences.enabledCapabilities.contains(.quickSearch),
               let binding = preferences.capabilityShortcut(for: .quickSearch) else {
             quickSearchShortcutConflictStatus = .noConflict
             return
@@ -576,7 +575,7 @@ final class AppModel {
             guard let self else { return }
             // Onboarding registers this before activation; it opens Quick Search only once licensed.
             guard self.isLicensed else { self.openLicenseSettings(); return }
-            self.commandPalette.toggle(.search)
+            self.commandPalette.toggle(self.commandPalette.openingTab)
         }
         quickSearchShortcutConflictStatus = registered
             ? .noConflict
@@ -590,6 +589,8 @@ final class AppModel {
     }
 
     func setCapability(_ capability: Capability, enabled: Bool) {
+        // Quick Search has no switch to turn it off (#553).
+        if !enabled, capability.descriptor.isAlwaysOn { return }
         if !enabled {
             capabilities.deactivate(capability, context: capabilityContext)
             // Nothing is left to open that would clear a turned-off capability's dot.
@@ -1021,17 +1022,18 @@ final class AppModel {
         applyCapabilities()
         return moved
     }
+    /// Opens Quick Search on its first shown tab, the Search tab unless Settings › Quick Search
+    /// hides it (#553), as ⌘Space does: from the Dock, the menu bar, and Settings › Quick Search.
     func showQuickSearch() {
         guard isLicensed else { openLicenseSettings(); return }
-        guard preferences.enabledCapabilities.contains(.quickSearch) else { return }
-        commandPalette.show(.search)
+        commandPalette.show(commandPalette.openingTab)
     }
-    var isQuickSearchVisible: Bool { commandPalette.isDisplaying(.search) }
+    var isQuickSearchVisible: Bool { commandPalette.isDisplaying(commandPalette.openingTab) }
     func setQuickSearchVisible(_ isVisible: Bool) {
         if isVisible {
             showQuickSearch()
         } else {
-            commandPalette.dismiss(ifDisplaying: .search)
+            commandPalette.dismiss(ifDisplaying: commandPalette.openingTab)
         }
     }
     func showClipboardHistory() {

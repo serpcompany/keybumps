@@ -67,7 +67,7 @@ struct TranslationGateTests {
         #expect(!old.model.capabilityContext.enabledCapabilities.contains(.translation))
         #expect(old.shortcuts()[CapabilityShortcut.translation.ownerID] == nil, "Open Translate isn't registered")
         let tabs = CommandPaletteTab.visibleTabs(
-            showsHotkeys: true, selected: .search, enabled: old.model.preferences.enabledCapabilities
+            hidden: [], selected: .search, enabled: old.model.preferences.enabledCapabilities
         )
         #expect(!tabs.contains(.translate))
         #expect(CommandPaletteTab.matchingCommandKey("8", in: tabs) == nil)

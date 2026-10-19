@@ -139,9 +139,12 @@ enum WiringRecorder {
     /// - every combination of the default capabilities, alone and with each added capability on;
     /// - every pair of added capabilities, with every default capability on;
     /// - everything on, and everything on but one, for each capability.
+    /// Quick Search is always on (#553), so it's in every combination and only the others vary.
     static func recordedCombinations() -> [String: Set<Capability>] {
-        let defaults = Capability.allCases.filter(CapabilityCatalog.defaultCapabilities.contains)
-        let added = Capability.allCases.filter { !CapabilityCatalog.defaultCapabilities.contains($0) }
+        let alwaysOn = CapabilityCatalog.alwaysOnCapabilities
+        let varying = Capability.allCases.filter { !alwaysOn.contains($0) }
+        let defaults = varying.filter(CapabilityCatalog.defaultCapabilities.contains)
+        let added = varying.filter { !CapabilityCatalog.defaultCapabilities.contains($0) }
         var sets: [Set<Capability>] = []
         for subset in everyCombination(of: defaults) {
             sets.append(subset)
@@ -152,8 +155,8 @@ enum WiringRecorder {
         }
         let everything = Set(Capability.allCases)
         sets.append(everything)
-        sets += Capability.allCases.map { everything.subtracting([$0]) }
-        return Dictionary(sets.map { (key(for: $0), $0) }, uniquingKeysWith: { first, _ in first })
+        sets += varying.map { everything.subtracting([$0]) }
+        return Dictionary(sets.map { (key(for: $0.union(alwaysOn)), $0.union(alwaysOn)) }, uniquingKeysWith: { first, _ in first })
     }
 
     /// The enabled capabilities' raw values in `Capability.allCases` order, or `none`. Adding a

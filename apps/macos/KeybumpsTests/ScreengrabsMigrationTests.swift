@@ -339,8 +339,8 @@ struct ScreengrabsMigrationTests {
         defaults.set(true, forKey: "copiesScreenshotsToClipboard")
 
         let first = AppPreferences(defaults: defaults)
-        #expect(first.enabledCapabilities == [.clipboardHistory, .screenshotTools])
-        #expect(defaults.stringArray(forKey: "enabledCapabilities") == ["clipboardHistory", "screenshotTools"])
+        #expect(first.enabledCapabilities == [.quickSearch, .clipboardHistory, .screenshotTools], "Quick Search is always on (#553)")
+        #expect(defaults.stringArray(forKey: "enabledCapabilities") == ["clipboardHistory", "quickSearch", "screenshotTools"])
         #expect(defaults.stringArray(forKey: "knownCapabilities")?.contains("screencast") == false)
         #expect(first.capabilityShortcut(for: .screenshotAreaAndEdit) == nil)
         #expect(first.capabilityShortcut(for: .screencast) == DefaultShortcut.recordScreen, "Launch's one-time step then gives Record Screen ⇧⌘5 in place of its own (#513)")
@@ -352,7 +352,7 @@ struct ScreengrabsMigrationTests {
         let second = AppPreferences(defaults: defaults)
         #expect(second.capabilityShortcut(for: .screenshotAreaAndEdit) == DefaultShortcut.screenshotAreaAndEdit)
         #expect(second.copiesScreenshotsToClipboard)
-        #expect(second.enabledCapabilities == [.clipboardHistory, .screenshotTools])
+        #expect(second.enabledCapabilities == [.quickSearch, .clipboardHistory, .screenshotTools])
     }
 
     // MARK: What it leaves
