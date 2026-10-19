@@ -10,6 +10,9 @@ enum UpdateStatus: Equatable {
     case downloaded(version: String)
     case readyToRestart(version: String)
     case deferred(version: String)
+    /// A newer version released after the license's update year: shown with Renew, never
+    /// downloaded or installed (ADR 0011).
+    case renewalRequired(version: String)
     case current
     case failed(String)
 
@@ -23,6 +26,7 @@ enum UpdateStatus: Equatable {
         case .downloaded(let version): "Version \(version) is downloaded and being prepared"
         case .readyToRestart(let version): "Version \(version) is ready to install"
         case .deferred(let version): "Version \(version) will install when Dictation is idle"
+        case .renewalRequired(let version): "Version \(version) is available with a renewal"
         case .current: "Keybumps is up to date"
         case .failed(let message): message
         }
@@ -55,6 +59,10 @@ struct UpdateSnapshot: Equatable {
     /// The newer version found and not yet installed or skipped. It outlives checks and failed
     /// checks or downloads, so the red dot stays until the update installs (#420).
     var knownUpdate: String? = nil
+    /// The newer version only a renewal installs (ADR 0011). Like `knownUpdate`, it outlives checks and
+    /// failed checks, so the red dot and Renew stay until a check finds nothing newer or an update
+    /// the license covers.
+    var renewalVersion: String? = nil
 
     /// The newer version to show: the one the status names, else the one found before it.
     var newerVersion: String? { status.availableVersion ?? knownUpdate }
@@ -65,10 +73,25 @@ struct UpdateSnapshot: Equatable {
     mutating func setStatus(_ status: UpdateStatus) {
         self.status = status
         switch status {
-        case .idle, .current, .unavailable: knownUpdate = nil
+        case .idle, .current, .unavailable:
+            knownUpdate = nil
+            renewalVersion = nil
         case .checking, .failed: break
-        case .available, .downloading, .downloaded, .readyToRestart, .deferred: knownUpdate = status.availableVersion
+        case .available, .downloading, .downloaded, .readyToRestart, .deferred:
+            knownUpdate = status.availableVersion
+            renewalVersion = nil
+        case .renewalRequired(let version):
+            knownUpdate = nil
+            renewalVersion = version
         }
+    }
+
+    /// What a waiting update's dot says when pointed at: the newer version, or the status.
+    var waitingSummary: String {
+        if status.availableVersion != nil { return status.summary }
+        if let knownUpdate { return UpdateStatus.available(version: knownUpdate).summary }
+        if let renewalVersion { return UpdateStatus.renewalRequired(version: renewalVersion).summary }
+        return status.summary
     }
 }
 
@@ -83,6 +106,8 @@ protocol UpdateControlling: AnyObject {
     func setAutomaticallyChecks(_ enabled: Bool)
     func installationSafetyDidChange()
     func restartWhenSafe()
+    /// What the license lets the updater install (ADR 0011).
+    func setUpdateCoverage(_ coverage: UpdateCoverage)
 }
 
 @MainActor
@@ -105,6 +130,7 @@ final class DisabledUpdateController: UpdateControlling {
     func setAutomaticallyChecks(_ enabled: Bool) {}
     func installationSafetyDidChange() {}
     func restartWhenSafe() {}
+    func setUpdateCoverage(_ coverage: UpdateCoverage) {}
 }
 
 @MainActor

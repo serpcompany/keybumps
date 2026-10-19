@@ -21,15 +21,17 @@ final class MenuBarAttention {
     var showsDot: Bool { !phrases.isEmpty }
 
     /// Whether the update state needs the dot: a newer version was found and hasn't installed, been
-    /// skipped, or been answered by an up-to-date check, through checks and failures (#420), or a
-    /// restart is ready.
+    /// skipped, or been answered by an up-to-date check, through checks and failures (#420), a
+    /// restart is ready, or a newer version needs a renewal (ADR 0011).
     static func updateIsWaiting(_ snapshot: UpdateSnapshot) -> Bool {
-        snapshot.canRestart || snapshot.newerVersion != nil
+        snapshot.canRestart || snapshot.newerVersion != nil || snapshot.renewalVersion != nil
     }
 
     /// What VoiceOver says for the update's dot.
     static func updatePhrase(_ snapshot: UpdateSnapshot) -> String {
-        snapshot.canRestart ? "update ready" : "update available"
+        if snapshot.canRestart { return "update ready" }
+        if snapshot.newerVersion == nil, snapshot.renewalVersion != nil { return "update available with a renewal" }
+        return "update available"
     }
 
     func show(_ reason: MenuBarAttentionReason, saying phrase: String) {

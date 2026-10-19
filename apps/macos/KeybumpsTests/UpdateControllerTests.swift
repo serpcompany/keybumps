@@ -54,6 +54,8 @@ final class FakeUpdateController: UpdateControlling {
 
     func installationSafetyDidChange() { safetyChangeCount += 1 }
     func restartWhenSafe() { restartCount += 1 }
+    private(set) var coverages: [UpdateCoverage] = []
+    func setUpdateCoverage(_ coverage: UpdateCoverage) { coverages.append(coverage) }
 
     func emit(_ status: UpdateStatus, canCheck: Bool? = nil, canRestart: Bool? = nil) {
         snapshot.setStatus(status)

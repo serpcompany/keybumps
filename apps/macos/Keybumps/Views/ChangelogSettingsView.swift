@@ -21,6 +21,11 @@ struct ChangelogSettingsView: View {
                         if model.updateSnapshot.canRestart {
                             Button("Restart to Update") { model.restartToUpdate() }
                         }
+                        if model.updateSnapshot.renewalVersion != nil {
+                            Button("Renew Updates…") { openURL(LicenseLinks.renew) }
+                                .help("Opens keybumps.app/pricing in your browser")
+                                .accessibilityIdentifier("settings.changelog.renew")
+                        }
                         Button("Check now") { model.checkForUpdates() }
                             .disabled(!model.updateSnapshot.canCheck)
                     }
@@ -35,6 +40,11 @@ struct ChangelogSettingsView: View {
                     )
                 )
                 .disabled(!model.updateSnapshot.canCheck)
+                if let version = model.updateSnapshot.renewalVersion {
+                    // ADR 0011: a version released after the update year shows, with Renew instead of Install.
+                    SettingsNote(Self.renewalNote(version: version, updateYear: model.licenseSnapshot.updateYear))
+                        .accessibilityIdentifier("settings.changelog.renewalNote")
+                }
                 if case .unavailable = model.updateSnapshot.status {
                     SettingsNote("This build does not contain a configured update feed. Keybumps remains fully usable offline.")
                 }
@@ -73,5 +83,10 @@ struct ChangelogSettingsView: View {
             }
         }
         .navigationTitle("Changelog")
+    }
+
+    static func renewalNote(version: String, updateYear: UpdateYear?) -> String {
+        let ended = updateYear.map { " ended on \($0.lastDayText)" } ?? " have ended"
+        return "Version \(version) came out after your license’s updates\(ended). Renew updates to install it. The version you have keeps working either way."
     }
 }

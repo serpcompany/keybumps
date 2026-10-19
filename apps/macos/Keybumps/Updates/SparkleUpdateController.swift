@@ -82,7 +82,11 @@ enum UpdateControllerFactory {
             return DisabledUpdateController(reason: "Update service is not configured")
             #endif
         }
-        return SparkleUpdateController(configuration: configuration, safetyPolicy: safetyPolicy)
+        return SparkleUpdateController(
+            configuration: configuration,
+            safetyPolicy: safetyPolicy,
+            previewRenewalVersion: UpdatePreview.renewalVersion()
+        )
     }
 }
 
@@ -102,13 +106,22 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
     private let telemetry: UpdateTelemetry
     private var updaterController: SPUStandardUpdaterController?
     private var started = false
+    /// What the license lets Sparkle install (ADR 0011), which `bestValidUpdate(in:for:)` filters by.
+    private(set) var coverage: UpdateCoverage = .unknown
+    /// The newer version the last appcast held that only a renewal installs; shown once Sparkle
+    /// reports that it found nothing to install, and cleared when the next appcast loads.
+    private(set) var pendingRenewalVersion: String?
+    /// QA candidates and Debug builds only (`UpdatePreview.renewalVersion`).
+    private let previewRenewalVersion: String?
 
     init(
         configuration: SparkleUpdateConfiguration,
         safetyPolicy: UpdateInstallationSafetyPolicy,
-        telemetry: UpdateTelemetry = UpdateTelemetry()
+        telemetry: UpdateTelemetry = UpdateTelemetry(),
+        previewRenewalVersion: String? = nil
     ) {
         self.configuration = configuration
+        self.previewRenewalVersion = previewRenewalVersion
         self.installCoordinator = SafeUpdateInstallCoordinator(safetyPolicy: safetyPolicy)
         self.telemetry = telemetry
         super.init()
@@ -143,7 +156,49 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
         guard let updater = updaterController?.updater, updater.canCheckForUpdates else { return }
         refresh(status: .checking)
         telemetry.record(.checking)
-        updater.checkForUpdates()
+        // Sparkle's alert would call Keybumps up to date when only a renewal installs the newer
+        // version, so after the update year the check is quiet, and Settings › Changelog shows its
+        // result with Renew (ADR 0011).
+        if UpdateYearFilter.checksQuietly(coverage: coverage, now: Date()) {
+            updater.checkForUpdatesInBackground()
+            onShowVersionHistory?()
+        } else {
+            updater.checkForUpdates()
+        }
+    }
+
+    func setUpdateCoverage(_ coverage: UpdateCoverage) {
+        guard coverage != self.coverage else { return }
+        let wasWaiting = self.coverage == .noLicense || snapshot.renewalVersion != nil
+        self.coverage = coverage
+        // A key was activated, or a renewal moved the last day: check again, so a version the
+        // license now covers installs.
+        if wasWaiting, let updater = updaterController?.updater, updater.canCheckForUpdates {
+            updater.checkForUpdatesInBackground()
+        }
+    }
+
+    func updater(_ updater: SPUUpdater, didFinishLoading appcast: SUAppcast) {
+        pendingRenewalVersion = nil
+    }
+
+    /// Leaves out every version released after the license's update year, and remembers the newest
+    /// of them to show with Renew (ADR 0011). Sparkle has already left out what this Mac can't run.
+    func bestValidUpdate(in appcast: SUAppcast, for updater: SPUUpdater) -> SUAppcastItem? {
+        let items = appcast.items
+        let hostVersion = updater.hostBundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
+        return choose(items, hostVersion: hostVersion)
+    }
+
+    /// `bestValidUpdate(in:for:)` for a list of items, which tests can build.
+    func choose(_ items: [SUAppcastItem], hostVersion: String) -> SUAppcastItem? {
+        let choice = UpdateYearFilter.choose(items.map(UpdateCandidate.init(item:)), hostVersion: hostVersion, coverage: coverage)
+        pendingRenewalVersion = choice.renewalVersion
+        switch choice.pick {
+        case .sparkle: return nil
+        case .candidate(let index): return items[index]
+        case .nothing: return SUAppcastItem.empty()
+        }
     }
 
     func setAutomaticallyChecks(_ enabled: Bool) {
@@ -209,6 +264,11 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
     /// Sparkle found no update. An answer (up to date, or nothing fits this Mac) means no newer
     /// version is installable, so the dot goes even when the status reads as a failure (#420).
     func noUpdateFound(reasonCode: Int?) {
+        // Sparkle reports this through two callbacks, so the version stays until the next appcast loads.
+        if let version = pendingRenewalVersion ?? previewRenewalVersion {
+            apply(.renewalRequired(version: version))
+            return
+        }
         if NoUpdateStatusResolver.isAnswer(reasonCode: reasonCode) { snapshot.knownUpdate = nil }
         apply(NoUpdateStatusResolver.status(reasonCode: reasonCode))
     }
@@ -286,6 +346,8 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
         case .downloaded(let version): telemetry.record(.downloaded, version: version)
         case .readyToRestart(let version): telemetry.record(.ready, version: version)
         case .deferred(let version): telemetry.record(.deferred, version: version)
+        // Whether a renewal is needed is licensing state, which is never logged (ADR 0002).
+        case .renewalRequired: break
         case .current: telemetry.record(.current)
         case .failed: telemetry.record(.failed, failureCategory: "status")
         case .checking: telemetry.record(.checking)

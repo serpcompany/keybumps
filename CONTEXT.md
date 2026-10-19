@@ -267,3 +267,11 @@ _Avoid_: Lease, token, license file
 **Locked**:
 The app state without a valid License Check, in which capabilities do not run.
 _Avoid_: Trial mode, demo mode, unregistered
+
+**Update year**:
+The updates a License includes: every release made on or before its last day, a year after the key was bought (2027-10-19 for Licenses bought before 2026-10-19), or later if a Renewal paid for more. Its end never Locks the version a person has; a newer one shows in the app with Renew instead of Install (ADR 0011). In code, `UpdateYear` and its `lastDay`.
+_Avoid_: Subscription, maintenance period, expiry, `updatesUntil` (ADR 0001's name)
+
+**Renewal**:
+Another year of updates for a License, bought on keybumps.app/pricing. It reaches the app as the Polar customer's `keybumps_updates_until`, never as a new key.
+_Avoid_: Upgrade, resubscribe

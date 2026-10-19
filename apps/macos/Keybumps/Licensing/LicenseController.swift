@@ -24,6 +24,10 @@ final class LicenseController: LicenseControlling {
     private let store: any LicenseStoring
     private let device: any DeviceIdentifying
     private let now: () -> Date
+    /// This build's release date, which the update year is checked against (ADR 0011).
+    private let releaseDate: Date?
+    /// Replaces the stored license's update year, in QA candidates only (`UpdateYearTest`).
+    private let testUpdateYear: UpdateYear?
     private var timer: Timer?
     private var wakeObserver: NSObjectProtocol?
     private var started = false
@@ -32,21 +36,26 @@ final class LicenseController: LicenseControlling {
         provider: any LicenseProviding,
         store: any LicenseStoring,
         device: any DeviceIdentifying,
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        releaseDate: Date? = nil,
+        testUpdateYear: UpdateYear? = nil
     ) {
         self.provider = provider
         self.store = store
         self.device = device
         self.now = now
+        self.releaseDate = releaseDate
+        self.testUpdateYear = testUpdateYear
         snapshot = LicenseSnapshot(state: .unlicensed)
-        snapshot.state = storedState()
+        applyStoredCheck()
     }
 
     func start() {
         guard !started else { return }
         started = true
-        snapshot.state = storedState()
-        Task { await refresh(force: false) }
+        applyStoredCheck()
+        let force = LicensePolicy.needsUpdateYear(store.load())
+        Task { await refresh(force: force) }
         // Re-evaluate hourly; a check runs once the daily refresh interval has passed.
         timer = Timer.scheduledTimer(withTimeInterval: 3_600, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.refresh(force: false) }
@@ -77,8 +86,10 @@ final class LicenseController: LicenseControlling {
                 key: key,
                 activationID: activation.activationID,
                 validatedAt: now(),
-                expiresAt: activation.expiresAt,
-                deviceLabel: label
+                expiresAt: activation.dates.expiresAt,
+                deviceLabel: label,
+                purchasedAt: activation.dates.purchasedAt,
+                renewedThrough: activation.dates.renewedThrough
             )
             do {
                 try store.save(check)
@@ -87,7 +98,7 @@ final class LicenseController: LicenseControlling {
                 try? await provider.deactivate(key: key, activationID: activation.activationID)
                 throw LicenseActionError.unexpected
             }
-            snapshot.state = storedState()
+            applyStoredCheck()
         } catch {
             snapshot.lastError = (error as? LicenseActionError) ?? .unexpected
         }
@@ -101,7 +112,7 @@ final class LicenseController: LicenseControlling {
         do {
             try await provider.deactivate(key: check.key, activationID: check.activationID)
             store.clear()
-            snapshot.state = .unlicensed
+            applyStoredCheck()
         } catch {
             // Keep the activation locally: the slot is only freed once the provider confirms.
             snapshot.lastError = (error as? LicenseActionError) ?? .unexpected
@@ -110,7 +121,7 @@ final class LicenseController: LicenseControlling {
 
     func refresh(force: Bool) async {
         guard !snapshot.isBusy else { return }
-        snapshot.state = storedState()
+        applyStoredCheck()
         guard var check = store.load(), snapshot.state != .unlicensed else { return }
         let locked = !snapshot.isEntitled
         guard force || locked || LicensePolicy.needsRefresh(check, now: now()) else { return }
@@ -125,20 +136,32 @@ final class LicenseController: LicenseControlling {
         // A deactivate or re-activation replaced the stored check while this ran; ignore the stale answer.
         guard store.load()?.activationID == check.activationID else { return }
         switch result {
-        case .granted(let expiresAt):
+        case .granted(let dates):
             check.validatedAt = now()
-            check.expiresAt = expiresAt
+            check.expiresAt = dates.expiresAt
+            // The purchase date never changes, so an answer without it keeps the one known.
+            check.purchasedAt = dates.purchasedAt ?? check.purchasedAt
+            // Renewals can go down, when one is refunded, but an answer Keybumps couldn't read
+            // them from keeps the date known.
+            if dates.readRenewals { check.renewedThrough = dates.renewedThrough }
             check.notAccepted = nil
         case .notAccepted:
             check.notAccepted = true
         }
         try? store.save(check)
-        snapshot.state = storedState()
+        applyStoredCheck()
     }
 
-    /// Applies the stored check's refusal, time, and device rules, with no network call.
-    private func storedState() -> LicenseState {
-        LicensePolicy.state(for: store.load(), now: now(), deviceLabel: device.activationLabel)
+    /// Applies the stored check's refusal, time, device, and update-year rules, with no network call.
+    private func applyStoredCheck() {
+        let check = store.load()
+        var next = snapshot
+        next.state = LicensePolicy.state(
+            for: check, now: now(), deviceLabel: device.activationLabel,
+            releaseDate: releaseDate, updateYear: testUpdateYear
+        )
+        next.updateYear = next.state == .unlicensed ? nil : testUpdateYear ?? check?.updateYear
+        snapshot = next
     }
 }
 
@@ -148,8 +171,29 @@ enum LicenseControllerFactory {
         LicenseController(
             provider: PolarLicenseProvider(),
             store: KeychainLicenseStore(),
-            device: HardwareDeviceIdentity()
+            device: HardwareDeviceIdentity(),
+            releaseDate: UpdateYearTest.releaseDate ?? BuildRelease.date(),
+            testUpdateYear: UpdateYearTest.updateYear
         )
+    }
+}
+
+/// QA candidates (`-dev.` versions) and Debug builds only: `-KBTestUpdateYearEnd 2026-10-01` ends
+/// the license's update year on that day, and `-KBTestReleaseDate 2026-10-19` dates this build, so a
+/// candidate shows an ended update year, or Locks as a newer build installed by hand (ADR 0011).
+enum UpdateYearTest {
+    static var updateYear: UpdateYear? {
+        value(for: "KBTestUpdateYearEnd").flatMap(UpdateYear.day).map(UpdateYear.init(lastDay:))
+    }
+
+    static var releaseDate: Date? {
+        value(for: "KBTestReleaseDate").flatMap(UpdateYear.day)
+    }
+
+    private static func value(for key: String, defaults: UserDefaults = .standard, bundle: Bundle = .main) -> String? {
+        let version = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        guard UpdatePreview.isAllowed(version: version) else { return nil }
+        return defaults.string(forKey: key)
     }
 }
 
@@ -160,8 +204,8 @@ final class FixedLicenseController: LicenseControlling {
     private(set) var snapshot: LicenseSnapshot { didSet { onChange?(snapshot) } }
     var onChange: ((LicenseSnapshot) -> Void)?
 
-    init(state: LicenseState = .active(FixedLicenseController.sampleCheck)) {
-        snapshot = LicenseSnapshot(state: state)
+    init(state: LicenseState = .active(FixedLicenseController.sampleCheck), updateYear: UpdateYear? = nil) {
+        snapshot = LicenseSnapshot(state: state, updateYear: updateYear)
     }
 
     nonisolated static let sampleCheck = LicenseCheck(
@@ -173,7 +217,7 @@ final class FixedLicenseController: LicenseControlling {
 
     func start() {}
     func activate(key: String) async { snapshot.state = .active(Self.sampleCheck) }
-    func deactivate() async { snapshot.state = .unlicensed }
+    func deactivate() async { snapshot = LicenseSnapshot(state: .unlicensed) }
     func refresh(force: Bool) async {}
 }
 #endif

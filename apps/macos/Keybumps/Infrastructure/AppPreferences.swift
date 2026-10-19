@@ -26,6 +26,7 @@ final class AppPreferences {
         static let copiesScreenshotsToClipboard = "copiesScreenshotsToClipboard"
         static let expandsSnippetKeywords = "expandsSnippetKeywords"
         static let lastLaunchedVersion = "lastLaunchedVersion"
+        static let lastUpdateYearDay = "lastUpdateYearDay"
         static let didFillSettingsWindow = "didFillSettingsWindow"
         static let sendsCrashReports = "sendsCrashReports"
         /// Whether the one-time step that gives Record Screen ⇧⌘5 has run (#513). It replaced #490's
@@ -214,6 +215,13 @@ final class AppPreferences {
         didSet { defaults.set(lastLaunchedVersion, forKey: Key.lastLaunchedVersion) }
     }
 
+    /// The last day of the last update year this Mac learned (ADR 0011). The updater keeps filtering
+    /// by it while no license is active, so a deactivated Mac never installs a release its license
+    /// didn't cover and then finds it Locked when activated again.
+    var lastUpdateYearDay: Date? {
+        didSet { if lastUpdateYearDay != oldValue { defaults.set(lastUpdateYearDay, forKey: Key.lastUpdateYearDay) } }
+    }
+
     /// The plugins that start on: in a new install every one but those that ship off; in an existing
     /// install the ones it had on, plus any an update added since (not in `known`) that ship on.
     static func initialCapabilities(stored: [String]?, known: [String]?, shippingOff: Set<Capability>) -> Set<Capability> {
@@ -348,6 +356,7 @@ final class AppPreferences {
         expandsSnippetKeywords = defaults.bool(forKey: Key.expandsSnippetKeywords)
         sendsCrashReports = Self.sendsCrashReports(in: defaults)
         lastLaunchedVersion = defaults.string(forKey: Key.lastLaunchedVersion)
+        lastUpdateYearDay = defaults.object(forKey: Key.lastUpdateYearDay) as? Date
         var introducedShortcuts = false
         if let data = defaults.data(forKey: Key.capabilityShortcuts),
            var decoded = try? JSONDecoder().decode([String: ShortcutBinding].self, from: data) {

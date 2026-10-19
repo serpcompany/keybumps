@@ -493,3 +493,173 @@ final class UpdateReleaseScriptTests: XCTestCase {
         try runProcess(executable, arguments, from: appFolder, environment: environment)
     }
 }
+
+/// ADR 0011: the release script adds the release date to the build's appcast item, which the app
+/// checks against the license's update year, and signs the feed again.
+@Suite("Appcast release date")
+struct AppcastReleaseDateTests {
+    private let script = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent("scripts/stamp-appcast-release-date.sh")
+
+    /// A folder with a signed-looking appcast for build 4033, and a `sign_update` that records its
+    /// arguments and signs by appending a signature comment, as Sparkle's does.
+    private func makeFixture() throws -> (work: URL, appcast: URL, tools: URL) {
+        let work = FileManager.default.temporaryDirectory.appendingPathComponent("release-date-\(UUID().uuidString)")
+        let tools = work.appendingPathComponent("tools")
+        try FileManager.default.createDirectory(at: tools, withIntermediateDirectories: true)
+        let signUpdate = tools.appendingPathComponent("sign_update")
+        try """
+        #!/bin/zsh
+        print -r -- "$@" >> "${0:h}/calls"
+        print '<!-- sparkle-signatures:\nedSignature: test\nlength: 1\n-->' >> "${@[-1]}"
+        """.write(to: signUpdate, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: signUpdate.path)
+        let appcast = work.appendingPathComponent("appcast.xml")
+        try """
+        <?xml version="1.0" standalone="yes"?><!-- sparkle-sign-warning:
+        IMPORTANT: This file was signed by Sparkle.
+        --><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+            <channel>
+                <item>
+                    <title>0.0.3-beta.28</title>
+                    <sparkle:version>4033</sparkle:version>
+                    <sparkle:shortVersionString>0.0.3-beta.28</sparkle:shortVersionString>
+                    <enclosure url="https://updates.keybumps.app/releases/4033/Keybumps-0.0.3-beta.28.zip" length="1" type="application/octet-stream" sparkle:edSignature="x"></enclosure>
+                </item>
+            </channel>
+        </rss><!-- sparkle-signatures:
+        edSignature: old
+        length: 1
+        -->
+        """.write(to: appcast, atomically: true, encoding: .utf8)
+        return (work, appcast, tools)
+    }
+
+    private func stamp(_ arguments: [String], in work: URL) throws -> (status: Int32, output: String) {
+        try runProcess(script, arguments, from: work, environment: ["KEYBUMPS_SPARKLE_KEY_FILE": "/fixture/key"])
+    }
+
+    @Test("The build's item gets the release date in Keybumps's namespace, and the feed is signed again")
+    func stampsAndSigns() throws {
+        let (work, appcast, tools) = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: work) }
+
+        let result = try stamp([appcast.path, "4033", "2026-10-19T12:00:00Z", tools.path], in: work)
+        #expect(result.status == 0, "\(result.output)")
+        let feed = try String(contentsOf: appcast, encoding: .utf8)
+        #expect(feed.contains(#"<rss xmlns:keybumps="https://keybumps.app/xml-namespaces/appcast" "#))
+        #expect(feed.contains("<sparkle:version>4033</sparkle:version>\n            <keybumps:releaseDate>2026-10-19T12:00:00Z</keybumps:releaseDate>"))
+        #expect(UpdateCandidate.releaseDateKey == "keybumps:releaseDate", "The name Sparkle gives the element")
+        let calls = try String(contentsOf: tools.appendingPathComponent("calls"), encoding: .utf8)
+        // The script resolves the path, which may add /private to a temporary folder.
+        #expect(calls.hasPrefix("--ed-key-file /fixture/key /") && calls.hasSuffix("/\(work.lastPathComponent)/appcast.xml\n"), "\(calls)")
+
+        // What validate-update-release.sh reads back.
+        let read = try runProcess(URL(fileURLWithPath: "/usr/bin/xmllint"), [
+            "--xpath", "string(//*[local-name()='item'][1]/*[local-name()='releaseDate'])", appcast.path
+        ], from: work)
+        #expect(read.output.trimmingCharacters(in: .whitespacesAndNewlines) == "2026-10-19T12:00:00Z")
+
+        let again = try stamp([appcast.path, "4033", "2026-10-19T12:00:00Z", tools.path], in: work)
+        #expect(again.status == 70)
+        #expect(again.output.contains("already carries a release date"))
+    }
+
+    @Test("A date that isn't a UTC time, or no item for the build, changes nothing", arguments: [
+        ["4033", "2026-10-19"], ["4033", "2026-10-19T12:00:00+02:00"], ["4034", "2026-10-19T12:00:00Z"],
+    ])
+    func failsClosed(arguments: [String]) throws {
+        let (work, appcast, tools) = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: work) }
+        let before = try Data(contentsOf: appcast)
+        let result = try stamp([appcast.path] + arguments + [tools.path], in: work)
+        #expect(result.status != 0, "\(result.output)")
+        #expect(try Data(contentsOf: appcast) == before)
+        #expect(!FileManager.default.fileExists(atPath: tools.appendingPathComponent("calls").path))
+    }
+}
+
+/// ADR 0011: validate-update-release.sh fails when the app's release date and its appcast item's
+/// differ. Fixture mode skips Apple's checks, so a fixture reaches the date check.
+@Suite("Release validation of the release date")
+struct ReleaseDateValidationTests {
+    private let validator = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent("scripts/validate-update-release.sh")
+    private let feed = "http://127.0.0.1:8765/appcast.xml"
+
+    private func validate(appDate: String?, appcastDate: String?) throws -> (status: Int32, output: String) {
+        let work = FileManager.default.temporaryDirectory.appendingPathComponent("release-date-validation-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: work) }
+        let tools = work.appendingPathComponent("tools")
+        let contents = work.appendingPathComponent("Keybumps.app/Contents")
+        for folder in [tools, contents.appendingPathComponent("Resources"), contents.appendingPathComponent("MacOS")] {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        }
+        let publicKey = String(repeating: "A", count: 43) + "="
+        for (name, script) in [("generate_keys", "print 'Public key: \(publicKey)'"), ("sign_update", "exit 0")] {
+            let tool = tools.appendingPathComponent(name)
+            try "#!/bin/zsh\n\(script)\n".write(to: tool, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tool.path)
+        }
+        var info: [String: Any] = [
+            "CFBundleIdentifier": "com.serp.keybumps", "CFBundleVersion": "4033", "CFBundleShortVersionString": "0.0.3-beta.28",
+            "SUFeedURL": feed, "SUPublicEDKey": publicKey, "SURequireSignedFeed": true, "SUVerifyUpdateBeforeExtraction": true,
+        ]
+        info["KBBuildReleaseDate"] = appDate
+        try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+            .write(to: contents.appendingPathComponent("Info.plist"))
+        try "# Notes\n".write(to: contents.appendingPathComponent("Resources/WhatsNew.md"), atomically: true, encoding: .utf8)
+        try FileManager.default.copyItem(atPath: "/usr/bin/true", toPath: contents.appendingPathComponent("MacOS/Keybumps").path)
+        let archive = work.appendingPathComponent("Keybumps-0.0.3-beta.28.zip")
+        try Data("archive".utf8).write(to: archive)
+        // SHA-256 of "archive".
+        try "0eb3e36bfb24dcd9bb1d1bece1531216b59539a8fde17ee80224af0653c92aa3  Keybumps-0.0.3-beta.28.zip\n".write(to: work.appendingPathComponent("Keybumps-0.0.3-beta.28.zip.sha256"), atomically: true, encoding: .utf8)
+        let notes = work.appendingPathComponent("Keybumps-0.0.3-beta.28.md")
+        try "# Notes\n".write(to: notes, atomically: true, encoding: .utf8)
+        let appcast = work.appendingPathComponent("appcast.xml")
+        try """
+        <?xml version="1.0" standalone="yes"?>
+        <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:keybumps="https://keybumps.app/xml-namespaces/appcast" version="2.0"><channel><item>
+        <sparkle:version>4033</sparkle:version>\(appcastDate.map { "<keybumps:releaseDate>\($0)</keybumps:releaseDate>" } ?? "")
+        <sparkle:shortVersionString>0.0.3-beta.28</sparkle:shortVersionString>
+        <sparkle:minimumSystemVersion>14.2</sparkle:minimumSystemVersion>
+        <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+        <sparkle:releaseNotesLink sparkle:edSignature="x" sparkle:length="8">http://127.0.0.1:8765/Keybumps-0.0.3-beta.28.md</sparkle:releaseNotesLink>
+        <enclosure url="http://127.0.0.1:8765/Keybumps-0.0.3-beta.28.zip" length="7" type="application/octet-stream" sparkle:edSignature="x"></enclosure>
+        </item></channel></rss><!-- sparkle-signatures:
+        edSignature: x
+        length: 1
+        -->
+        """.write(to: appcast, atomically: true, encoding: .utf8)
+        return try runProcess(validator, [
+            contents.deletingLastPathComponent().path, archive.path, appcast.path, notes.path, feed, feed,
+            "4032", "4033", "0.0.3-beta.28", tools.path, "fixture", "--skip-apple-trust-for-fixture",
+        ], from: work)
+    }
+
+    @Test("A release date the appcast doesn't match, or a missing one, fails validation", arguments: [
+        ("2026-10-19T12:00:00Z", "2026-10-19T12:00:01Z"),
+        ("2026-10-19T12:00:00Z", nil),
+        (nil, "2026-10-19T12:00:00Z"),
+        ("2026-10-19", "2026-10-19"),
+    ] as [(String?, String?)])
+    func mismatch(appDate: String?, appcastDate: String?) throws {
+        let result = try validate(appDate: appDate, appcastDate: appcastDate)
+        #expect(result.status == 70, "\(result.output)")
+        #expect(result.output.contains("release date"), "\(result.output)")
+    }
+
+    @Test("Matching dates, or none in a fixture, pass the date check", arguments: [
+        ("2026-10-19T12:00:00Z", "2026-10-19T12:00:00Z"), (nil, nil),
+    ] as [(String?, String?)])
+    func matching(appDate: String?, appcastDate: String?) throws {
+        let result = try validate(appDate: appDate, appcastDate: appcastDate)
+        #expect(!result.output.contains("release date"), "\(result.output)")
+        // The asset-prefix check after the date's takes only HTTPS feeds, so a loopback fixture stops there.
+        #expect(result.output.contains("production URL must use HTTPS"), "Reached a later check: \(result.output)")
+    }
+}

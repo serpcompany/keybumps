@@ -311,9 +311,7 @@ final class NativeStatusItemController: NSObject, NSMenuDelegate {
         // The same red dot as the icon's, until the update installs or is skipped (#416, #420).
         if MenuBarAttention.updateIsWaiting(snapshot) {
             updates.image = Self.updateDot(saying: MenuBarAttention.updatePhrase(snapshot))
-            updates.toolTip = snapshot.status.availableVersion == nil
-                ? snapshot.knownUpdate.map { UpdateStatus.available(version: $0).summary } ?? snapshot.status.summary
-                : snapshot.status.summary
+            updates.toolTip = snapshot.waitingSummary
         }
         let settings = menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self

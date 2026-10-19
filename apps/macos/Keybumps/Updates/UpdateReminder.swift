@@ -254,4 +254,16 @@ enum UpdatePreview {
     static var isRequested: Bool {
         UserDefaults.standard.bool(forKey: String(argument.dropFirst()))
     }
+
+    /// `-KBPreviewRenewal YES`: every update check ends as though a newer version needed a renewal
+    /// (ADR 0011), so the red dot, the menu, and Settings › Changelog's Renew can be checked on a
+    /// candidate. The version it names, or nil when not asked or not allowed.
+    static func renewalVersion(
+        version: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
+        isDebugBuild: Bool = isDebugBuild,
+        defaults: UserDefaults = .standard
+    ) -> String? {
+        guard isAllowed(version: version, isDebugBuild: isDebugBuild), defaults.bool(forKey: "KBPreviewRenewal") else { return nil }
+        return "9.9.9 (preview)"
+    }
 }

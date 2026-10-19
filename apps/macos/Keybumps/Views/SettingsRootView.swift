@@ -326,13 +326,17 @@ private struct AccountView: View {
     }
 }
 
-/// Activation, status, and deactivation for this Mac's license key (ADR 0002).
+/// Activation, status, and deactivation for this Mac's license key (ADR 0002), and its update year (ADR 0011).
 private struct LicenseSettingsGroup: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openURL) private var openURL
     @State private var key = ""
 
     private var snapshot: LicenseSnapshot { model.licenseSnapshot }
+    /// This build came out after the update year, so it's Locked until a renewal covers it.
+    private var releasedAfterUpdateYear: Bool { snapshot.state == .locked(.releasedAfterUpdateYear) }
+    /// The update year is over: newer versions need a renewal, and this one keeps working.
+    private var updateYearEnded: Bool { snapshot.updateYear?.hasEnded(at: Date()) == true }
 
     var body: some View {
         SettingsGroup("License") {
@@ -343,13 +347,10 @@ private struct LicenseSettingsGroup: View {
                 SettingsRowLabel(title: "Keybumps License", subtitle: statusDetail)
             }
             if case .locked(let reason) = snapshot.state, reason != .expired {
-                LabeledContent {
-                    Button(snapshot.isBusy ? "Checking…" : "Check Again") { Task { await model.refreshLicense(force: true) } }
-                        .disabled(snapshot.isBusy)
-                        .accessibilityIdentifier("license.check")
-                } label: {
-                    SettingsRowLabel(title: "Check license", subtitle: "Asks Polar about this key now.")
-                }
+                checkAgainRow
+            } else if snapshot.isEntitled && updateYearEnded {
+                // A renewal reaches Keybumps at the next daily check; this checks for it now.
+                checkAgainRow
             }
             if snapshot.state != .unlicensed {
                 LabeledContent {
@@ -360,6 +361,7 @@ private struct LicenseSettingsGroup: View {
                     SettingsRowLabel(title: "Move to another Mac", subtitle: "Frees this Mac’s activation so the key can be used elsewhere.")
                 }
             }
+            // Also when this build came out after the update year: a new license's key goes here.
             if !snapshot.isEntitled {
                 HStack(spacing: 8) {
                     TextField("KEYBUMPS-…", text: $key)
@@ -378,8 +380,15 @@ private struct LicenseSettingsGroup: View {
                     .accessibilityIdentifier("license.error")
             }
             HStack(spacing: 12) {
-                if !snapshot.isEntitled {
+                if releasedAfterUpdateYear || (snapshot.isEntitled && updateYearEnded) {
+                    Button("Renew Updates…") { openURL(LicenseLinks.renew) }
+                        .accessibilityIdentifier("license.renew")
+                } else if !snapshot.isEntitled {
                     Button("Buy Keybumps") { openURL(LicenseLinks.buy) }
+                }
+                if releasedAfterUpdateYear {
+                    Button("Earlier Versions…") { openURL(Changelog.website) }
+                        .help("Opens keybumps.app/changelog in your browser")
                 }
                 Button("Find My Key or Manage My Purchase") { openURL(LicenseLinks.customerPortal) }
             }
@@ -396,6 +405,16 @@ private struct LicenseSettingsGroup: View {
         }
     }
 
+    private var checkAgainRow: some View {
+        LabeledContent {
+            Button(snapshot.isBusy ? "Checking…" : "Check Again") { Task { await model.refreshLicense(force: true) } }
+                .disabled(snapshot.isBusy)
+                .accessibilityIdentifier("license.check")
+        } label: {
+            SettingsRowLabel(title: "Check license", subtitle: "Asks Polar about this key now.")
+        }
+    }
+
     private var statusText: String {
         switch snapshot.state {
         case .active: return "Active"
@@ -403,6 +422,7 @@ private struct LicenseSettingsGroup: View {
         case .locked(.notAccepted): return "Not accepted"
         case .locked(.expired): return "Expired"
         case .locked(.needsCheck): return "Check required"
+        case .locked(.releasedAfterUpdateYear): return "Renewal required"
         }
     }
 
@@ -410,13 +430,18 @@ private struct LicenseSettingsGroup: View {
         switch snapshot.state {
         case .active(let check):
             let checked = check.validatedAt.formatted(date: .abbreviated, time: .omitted)
-            return "Key \(check.maskedKey) · Checked \(checked)"
+            guard let year = snapshot.updateYear else { return "Key \(check.maskedKey) · Checked \(checked)" }
+            let updates = updateYearEnded ? "Updates ended \(year.lastDayText)" : "Updates through \(year.lastDayText)"
+            return "Key \(check.maskedKey) · \(updates) · Checked \(checked)"
         case .unlicensed:
             return "Enter the license key from your Polar receipt to use Keybumps on this Mac."
         case .locked(.notAccepted):
             return "Polar no longer accepts this key on this Mac. It may have been refunded or revoked, or this Mac was deactivated in the customer portal. Check again, or enter your key to activate this Mac again."
         case .locked(.expired):
-            return "This license has expired."
+            return "Polar says this license key has expired. Contact support@keybumps.app."
+        case .locked(.releasedAfterUpdateYear):
+            let ended = snapshot.updateYear.map { " on \($0.lastDayText)" } ?? ""
+            return "This version of Keybumps came out after your license’s updates ended\(ended). Renew updates to use it, install an earlier version from keybumps.app/changelog, or enter a new license’s key below."
         case .locked(.needsCheck):
             return "Keybumps hasn’t been able to check your license for 45 days. Connect to the internet and check again."
         }
