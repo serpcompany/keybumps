@@ -70,10 +70,10 @@ export function ScreenshotVisual() {
     <div className="editor-mock">
       <div className="editor-bar">
         <span>Arrow</span>
-        <span>Draw</span>
         <span>Text</span>
-        <span className="on">Redact</span>
+        <span>Draw</span>
         <span>Blur</span>
+        <span className="on">Redact</span>
         <span className="save">Save ↩</span>
       </div>
       <div className="shot-mock">
