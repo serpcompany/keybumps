@@ -38,6 +38,12 @@ describe('pricing', () => {
     expect(pricingIncludes.some(item => item.includes(pricing.macsLabel))).toBe(true)
   })
 
+  it('shows the renewal price in the pricing card’s fine print', () => {
+    const card = readFileSync(join(src, 'components', 'pricing-card.tsx'), 'utf8')
+    expect(pricing.model.renewal).toContain(pricing.renewalPrice)
+    expect(card).toContain('{pricing.model.renewal}')
+  })
+
   // Trying another price or model is an edit to pricing.ts alone.
   it('keeps prices and terms of sale out of every other file', () => {
     const written = [

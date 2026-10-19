@@ -56,7 +56,7 @@ export const pricing = {
   guarantee: `${refundDays}-day money-back guarantee`,
   scope,
   /** /pricing/'s second question. */
-  scopeQuestion: { q: 'Does it include online features?', a: `No. ${scope}` },
+  scopeQuestion: { q: 'Does it include AI or cloud features?', a: `No. ${scope}` },
   /** Everything that depends on how Keybumps is sold. */
   model: {
     /** The pricing card's pill. */
