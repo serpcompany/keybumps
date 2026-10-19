@@ -44,6 +44,9 @@ describe('pricing', () => {
       pricing.price,
       pricing.renewalPrice,
       pricing.scope,
+      // Not `updateYearBegan`: it's also the legal pages' date, LEGAL_UPDATED.
+      pricing.earlierLicensesUpdatedThrough,
+      ...strings(pricing.scopeQuestion),
       `${pricing.refundDays}-day`,
       `${pricing.refundDays} days`,
       pricing.macsText,
@@ -51,14 +54,14 @@ describe('pricing', () => {
       `${pricing.macsInWords}-Mac`,
       'buy.polar.sh',
       ...(pricing.checkoutUrl ? [pricing.checkoutUrl] : []),
-      // The one-time model's own words. Revisit them with the terms for any other model.
+      // Claims about how Keybumps is sold, the old model's and this one's. Revisit them with the
+      // terms for any other model.
       'one-time',
       'one time',
       'subscription',
       'yours to keep',
       'future updates',
       'year of updates',
-      'October 19, 2027',
       ...strings(pricing.model)
     ].map(word => word.toLowerCase())
     // #269: /license/ is a (sensitive-url) page, so it moves with its own leak test.
@@ -87,6 +90,8 @@ describe('pricing', () => {
     expect({
       LEGAL_UPDATED,
       renewalPrice: pricing.renewalPrice,
+      updateYearBegan: pricing.updateYearBegan,
+      earlierLicensesUpdatedThrough: pricing.earlierLicensesUpdatedThrough,
       macs: pricing.macs,
       macsInWords: pricing.macsInWords,
       refundDays: pricing.refundDays,
@@ -96,14 +101,16 @@ describe('pricing', () => {
     }).toEqual({
       LEGAL_UPDATED: 'October 19, 2026',
       renewalPrice: '$49',
+      updateYearBegan: 'October 19, 2026',
+      earlierLicensesUpdatedThrough: 'October 19, 2027',
       macs: 1,
       macsInWords: 'one',
       refundDays: 30,
       guarantee: '30-day money-back guarantee',
       scope:
-        'The license covers the Keybumps features that run on your Mac. Online services that run on our servers, such as AI or cloud features, are not included; if we offer them, they are sold separately.',
+        'The license covers the Keybumps features that run on your Mac. Features that run on our servers, such as AI or cloud services, are not included; if we offer them, they are sold separately.',
       terms:
-        'A license does not expire. It includes the updates released in the year after purchase, new plugins among them; a license bought before October 19, 2026 includes the updates released through October 19, 2027. When that year ends you may keep using the last version released in it, or renew updates for another year (currently $49 a year).'
+        'A license does not expire. It includes the updates released in the year after purchase, new plugins among them; a license bought before October 19, 2026 includes the updates released through October 19, 2027. When a license’s updates end, you may keep using the last version released before then, or renew updates for another year (currently $49 a year).'
     })
   })
 })

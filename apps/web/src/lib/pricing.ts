@@ -18,6 +18,13 @@ const renewalPrice = '$49'
 const macs = 1
 /** Days in which a purchase is refunded in full, no questions asked. */
 const refundDays = 30
+/** Licenses bought before the update year began (the day it went live)... */
+const updateYearBegan = 'October 19, 2026'
+/** ...get updates through this day, a year after it. */
+const earlierLicensesUpdatedThrough = 'October 19, 2027'
+/** What a license covers and what it doesn't, on the terms and /pricing/ (#547). */
+const scope =
+  'The license covers the Keybumps features that run on your Mac. Features that run on our servers, such as AI or cloud services, are not included; if we offer them, they are sold separately.'
 
 const numberWords = ['zero', 'one', 'two', 'three', 'four', 'five']
 /** "one", for sentences. */
@@ -29,6 +36,8 @@ const macsText = `${macsInWords} Mac${plural}`
 export const pricing = {
   price,
   renewalPrice,
+  updateYearBegan,
+  earlierLicensesUpdatedThrough,
   /** After the price, such as "/month"; empty for a one-time purchase. */
   period: '',
   currency: 'USD',
@@ -45,9 +54,9 @@ export const pricing = {
   macsLabel: `${macs} Mac${plural}`,
   macsText,
   guarantee: `${refundDays}-day money-back guarantee`,
-  /** What a license covers and what it doesn't, on the terms and /pricing/ (#547). */
-  scope:
-    'The license covers the Keybumps features that run on your Mac. Online services that run on our servers, such as AI or cloud features, are not included; if we offer them, they are sold separately.',
+  scope,
+  /** /pricing/'s second question. */
+  scopeQuestion: { q: 'Does it include online features?', a: `No. ${scope}` },
   /** Everything that depends on how Keybumps is sold. */
   model: {
     /** The pricing card's pill. */
@@ -63,12 +72,12 @@ export const pricing = {
     /** /pricing/'s first question. */
     question: {
       q: 'Do I have to renew?',
-      a: `No. You pay ${price} once, and that includes a year of updates and new plugins. After that, renewing updates is optional, at ${renewalPrice} a year. If you don’t renew, Keybumps keeps working, and the last version released in your year is yours to keep.`
+      a: `No. You pay ${price} once, and that includes a year of updates and new plugins. After that, renewing updates is optional, at ${renewalPrice} a year. If you don’t renew, Keybumps keeps working, and the last version released in your year of updates is yours to keep.`
     },
     /** /pricing/'s description, before the guarantee. */
     description: `Keybumps is a ${price} one-time purchase for ${macsText}, including a year of updates`,
     /** Terms § 3, after the grant: how long the license lasts and what it includes. */
-    terms: `A license does not expire. It includes the updates released in the year after purchase, new plugins among them; a license bought before October 19, 2026 includes the updates released through October 19, 2027. When that year ends you may keep using the last version released in it, or renew updates for another year (currently ${renewalPrice} a year).`
+    terms: `A license does not expire. It includes the updates released in the year after purchase, new plugins among them; a license bought before ${updateYearBegan} includes the updates released through ${earlierLicensesUpdatedThrough}. When a license’s updates end, you may keep using the last version released before then, or renew updates for another year (currently ${renewalPrice} a year).`
   }
 } as const
 

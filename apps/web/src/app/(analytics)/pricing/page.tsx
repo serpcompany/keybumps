@@ -8,7 +8,7 @@ export const metadata = pageMetadata('/pricing/')
 
 const QUESTIONS = [
   pricing.model.question,
-  { q: 'Does it include online features?', a: pricing.scope },
+  pricing.scopeQuestion,
   {
     q: 'How do I activate it?',
     a: 'After checkout you receive a license key by email. Paste it into Keybumps → Settings → License. Activation needs an internet connection once; after that Keybumps checks in occasionally to keep the license current.'
