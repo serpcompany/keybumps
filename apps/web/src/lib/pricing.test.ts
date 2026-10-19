@@ -50,7 +50,7 @@ describe('pricing', () => {
       pricing.price,
       pricing.renewalPrice,
       pricing.scope,
-      // Not `updateYearBegan`: it's also the legal pages' date, LEGAL_UPDATED.
+      // Not `updateYearBegan`: a date, which LEGAL_UPDATED, the legal pages' date, can match.
       pricing.earlierLicensesUpdatedThrough,
       ...strings(pricing.scopeQuestion),
       `${pricing.refundDays}-day`,
@@ -105,7 +105,7 @@ describe('pricing', () => {
       scope: pricing.scope,
       terms: pricing.model.terms
     }).toEqual({
-      LEGAL_UPDATED: 'October 19, 2026',
+      LEGAL_UPDATED: 'October 20, 2026',
       renewalPrice: '$49',
       updateYearBegan: 'October 19, 2026',
       earlierLicensesUpdatedThrough: 'October 19, 2027',

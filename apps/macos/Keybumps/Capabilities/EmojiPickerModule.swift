@@ -63,8 +63,8 @@ extension PluginPreference {
     )
     static let emojiInQuickSearch = PluginPreference(
         key: "showsInQuickSearch",
-        title: "Show emoji in Quick Search",
-        subtitle: "Matching emoji appear in Quick Search's results, after apps, commands, and snippets.",
+        title: "Show emoji in the Search tab",
+        subtitle: "Matching emoji appear in the Search tab's results, after apps, commands, and snippets.",
         group: "Picking",
         kind: .toggle(default: true)
     )

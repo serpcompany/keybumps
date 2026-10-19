@@ -36,7 +36,7 @@ final class QuickSearchModel {
     /// Snippets is on.
     @ObservationIgnored var snippets: () -> [Snippet] = { [] }
     /// Every emoji a query can find: none until Emoji Picker supplies them (#333), which it does only
-    /// while it's on and Show emoji in Quick Search is too. The palette shows a few of them, or all
+    /// while it's on and Show emoji in the Search tab is too. The palette shows a few of them, or all
     /// under `/`'s Emoji filter (`QuickSearchEmoji.limited`).
     @ObservationIgnored var emoji: (_ query: String) -> [QuickSearchEmoji] = { _ in [] }
     /// The action commands a query can find: none until the palette supplies them, which lists only

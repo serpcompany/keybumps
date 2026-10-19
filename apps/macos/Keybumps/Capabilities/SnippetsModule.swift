@@ -23,7 +23,7 @@ extension CapabilityDescriptor {
         ),
         settingsPage: CapabilitySettingsPage(
             section: .snippets,
-            summary: "Save text you reuse, then copy or paste it from the Command Palette.",
+            summary: "Save text you reuse, then copy or paste it from Quick Search.",
             disableExplanation: "Turning this off closes the Snippets tab and releases its global shortcut. Your snippets stay saved on this Mac.",
             content: { AnyView(SnippetsSettingsView()) }
         ),

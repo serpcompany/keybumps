@@ -17,10 +17,8 @@ export default function TermsPage() {
 
       <h2>1. The app</h2>
       <p>
-        Keybumps is a macOS app that brings search, clipboard history, screenshots, dictation, and
-        other utilities together as plugins you can turn on or off. It requires a Mac with Apple
-        silicon running a supported version of macOS. Some features need macOS permissions such as
-        Accessibility, Screen Recording, or Microphone, which you can grant or revoke at any time.
+        Keybumps is a macOS app. It requires a Mac with Apple silicon running a supported version of
+        macOS. Some features need macOS permissions, which you can grant or revoke at any time.
       </p>
 
       <h2>2. Purchases</h2>
@@ -69,9 +67,8 @@ export default function TermsPage() {
 
       <h2>7. Third-party components</h2>
       <p>
-        Keybumps includes open-source components, such as Sparkle, WhisperKit, OpenAI Whisper
-        models, Rectangle, and Shotnix, each under its own license. Those licenses govern those
-        components. Apple frameworks and services the app uses are subject to Apple’s terms.
+        Keybumps includes open-source components, each under its own license, which governs that
+        component. Apple frameworks and services the app uses are subject to Apple’s terms.
       </p>
 
       <h2>8. Ownership</h2>
@@ -84,7 +81,8 @@ export default function TermsPage() {
       <p>
         THE SERVICE IS PROVIDED “AS IS” AND “AS AVAILABLE” WITHOUT WARRANTIES OF ANY KIND, EXPRESS
         OR IMPLIED, INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND
-        NON-INFRINGEMENT. DICTATION TRANSCRIPTS AND TRANSLATIONS MAY BE INACCURATE.
+        NON-INFRINGEMENT. TRANSCRIPTS, TRANSLATIONS, AND OTHER RESULTS THE APP PRODUCES MAY BE
+        INACCURATE.
       </p>
 
       <h2>10. Limitation of liability</h2>

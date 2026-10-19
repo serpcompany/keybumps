@@ -65,7 +65,7 @@ final class EmojiPaletteContent: CapabilityPaletteContent {
     }
 
     /// Quick Search's emoji for a query: every match of the Emoji tab's search, while Emoji Picker
-    /// and Show emoji in Quick Search are on. None until the list has loaded.
+    /// and Show emoji in the Search tab are on. None until the list has loaded.
     func quickSearchMatches(_ query: String) -> [QuickSearchEmoji] {
         guard preferences.quickSearchFindsEmoji, Self.isSearching(query) else { return [] }
         loadIfNeeded()
