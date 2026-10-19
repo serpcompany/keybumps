@@ -218,4 +218,35 @@ describe('scripts/release-index.mjs', () => {
         name === 'build:staging' || name === 'build:production'
       )
   })
+
+  it('has web-deploy.yml read the list from R2, with the token in that step only', () => {
+    const deploy = readFileSync(
+      join(web, '..', '..', '.github', 'workflows', 'web-deploy.yml'),
+      'utf8'
+    )
+    const steps = deploy.split(/\n(?=\s+- name: )/)
+    const named = (name: string) => steps.filter(step => step.includes(`- name: ${name}\n`))
+    const reads = named('Read the release index from R2')
+    expect(reads).toHaveLength(2)
+    for (const step of reads) {
+      expect(step).toContain('working-directory: ${{ runner.temp }}')
+      expect(step).toContain('/r2/buckets/keybumps-updates/objects/releases.json')
+      expect(step).toContain('--output "$RUNNER_TEMP/releases.json"')
+      // The token reaches curl on stdin, never on a command line, and no npm or repo code runs.
+      expect(step).toContain('--header @-')
+      expect(step).not.toMatch(/pnpm|npx|wrangler |node |scripts\//)
+    }
+    expect(steps.filter(step => step.includes('secrets.CLOUDFLARE_R2_TOKEN'))).toEqual(reads)
+    expect(deploy).not.toMatch(/^env:/m)
+    const jobs = deploy.split(/\n(?=  [a-z]+:\n)/)
+    for (const job of jobs.filter(job => job.includes('pnpm build:'))) {
+      const read = job.indexOf('- name: Read the release index from R2')
+      expect(read).toBeGreaterThan(0)
+      expect(read).toBeLessThan(job.indexOf('- name: Install dependencies'))
+    }
+    for (const build of ['build:staging', 'build:production']) {
+      const step = named('Build').find(step => step.includes(`run: pnpm ${build}`))
+      expect(step, build).toContain('RELEASE_INDEX: ${{ runner.temp }}/releases.json')
+    }
+  })
 })
