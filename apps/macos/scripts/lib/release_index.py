@@ -7,7 +7,7 @@ A JSON array with one entry per published release, newest (highest build) first:
      "url": "https://updates.keybumps.app/releases/4033/Keybumps-0.0.3-beta.28.dmg",
      "releasedAt": "2026-10-19T15:21:01Z"}
 
-Merging never drops an entry or rewrites one: an entry already listed stays as it is, a version
+Merging never drops a version or rewrites an entry: an entry already listed stays as it is, a version
 published again under a higher build replaces its entry, and anything else that disagrees with
 the list (a build listed under another version or date, or a lower build for a listed version)
 stops the merge.

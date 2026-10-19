@@ -1,6 +1,8 @@
 #!/bin/zsh
 # Publish a release prepared by build-update-release.sh to the updates.keybumps.app R2 bucket.
-# Dry run by default; uploads only with --publish, which requires owner authorization.
+# Dry run by default; uploads only with --publish, which requires owner authorization. A production
+# dry run with --check-index also reads the live release index and checks this release merges into
+# it (publish-release-index.sh --check-live), uploading nothing, so a problem shows before approval.
 #
 # Phase 1 uploads immutable assets to releases/<build>/ (refusing to overwrite different bytes)
 # and verifies each uploaded object byte for byte, read back from R2. Phase 2 then publishes the pointers last:
@@ -8,17 +10,19 @@
 # On production, phase 3 then adds the release to the release index, releases.json, through
 # publish-release-index.sh, so the index lists only releases that are live.
 #
-# usage: publish-release.sh <release-output-directory> <production|staging> [--publish]
-# env:   CLOUDFLARE_API_TOKEN  bucket-scoped R2 token with read and write (read by wrangler; never stored here)
+# usage: publish-release.sh <release-output-directory> <production|staging> [--check-index|--publish]
+# env:   CLOUDFLARE_API_TOKEN  bucket-scoped R2 token (read by wrangler; never stored here): read for
+#                              --check-index, read and write for --publish
 #        KEYBUMPS_WRANGLER     wrangler command (default: wrangler)
 set -euo pipefail
 source "${0:A:h}/lib/update-url-validation.sh"
 source "${0:A:h}/lib/r2-objects.sh"
 
-(( $# == 2 || $# == 3 )) || { print -u2 "usage: $0 <release-output-directory> <production|staging> [--publish]"; exit 64; }
+(( $# == 2 || $# == 3 )) || { print -u2 "usage: $0 <release-output-directory> <production|staging> [--check-index|--publish]"; exit 64; }
 output=${1:A}; channel=$2; mode=${3:-}
 [[ "$channel" == production || "$channel" == staging ]] || { print -u2 "channel must be production or staging"; exit 64; }
-[[ -z "$mode" || "$mode" == --publish ]] || { print -u2 "unknown option: $mode"; exit 64; }
+[[ -z "$mode" || "$mode" == --check-index || "$mode" == --publish ]] || { print -u2 "unknown option: $mode"; exit 64; }
+[[ "$mode" != --check-index || "$channel" == production ]] || { print -u2 "--check-index applies to production only: staging has no release index"; exit 64; }
 
 bucket=keybumps-updates
 wrangler=(${=KEYBUMPS_WRANGLER:-wrangler})
@@ -75,6 +79,7 @@ if [[ "$channel" == production ]]; then
   print "  releases.json adds $version ($build), released $released_at"
 fi
 if [[ "$mode" != --publish ]]; then
+  [[ "$mode" != --check-index ]] || "${0:A:h}/publish-release-index.sh" "$index_entry" --check-live
   print "Dry run only. Re-run with --publish (owner authorization required) to upload."
   exit 0
 fi

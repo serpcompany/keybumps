@@ -236,6 +236,15 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+      # Reads the live releases.json from R2 and checks this release merges into it, uploading
+      # nothing, so a list that would stop production's release index step fails here, before
+      # staging publishes or production is approved. After the artifacts are kept, so it never loses them.
+      - name: Check the live release index
+        if: inputs.publish
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_R2_TOKEN }}
+        run: ${{ env.APP_DIR }}/scripts/publish-release.sh "$RUNNER_TEMP/release" production --check-index
+
       - name: Publish to staging
         if: inputs.publish
         env:
