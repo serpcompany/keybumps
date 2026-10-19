@@ -126,8 +126,9 @@ struct PaletteInformationRow: View {
 }
 
 /// A detail pane's action button: its icon and title, then a keycap for each shortcut that does the
-/// same, such as Copy ↵ ⌘C, so the buttons teach the keys. It calls what the keys do. VoiceOver reads
-/// the title, with the keys as its hint: "Copy", "Return, or Command C".
+/// same, such as Copy ↵ ⌘C, so the buttons teach the keys. It calls what the keys do; one no key does,
+/// such as Show in Finder, has no keycap. VoiceOver reads the title, with the keys as its hint:
+/// "Copy", "Return, or Command C".
 struct PaletteActionButton: View {
     let title: String
     let systemImage: String
@@ -148,7 +149,7 @@ struct PaletteActionButton: View {
             .fixedSize()
         }
         .buttonStyle(PalettePillButtonStyle())
-        .help("\(title) (\(shortcuts.map { $0.joined() }.joined(separator: " or ")))")
+        .help(shortcuts.isEmpty ? title : "\(title) (\(shortcuts.map { $0.joined() }.joined(separator: " or ")))")
         .accessibilityLabel(title)
         .accessibilityHint(shortcuts.map(PaletteKeyAction.spokenShortcut).joined(separator: ", or "))
     }

@@ -44,7 +44,7 @@ enum TextPasteError: Error, Equatable {
 protocol TextPasting {
     @MainActor func paste(_ text: String, concealed: Bool) throws
     /// Presses ⌘V for what's on the clipboard already, writing nothing: a Clipboard History or
-    /// Screenshots item the palette's ⌘P put back there, which stays on it (#370).
+    /// Screenshots item the palette's ⌘V put back there, which stays on it (#370).
     @MainActor func pasteClipboard() throws
     /// Keyword expansion: deletes the `count` characters just typed (the keyword), before pasting.
     @MainActor func deleteTyped(_ count: Int) throws

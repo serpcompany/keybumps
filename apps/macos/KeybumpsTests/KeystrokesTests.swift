@@ -181,15 +181,19 @@ struct KeystrokesTests {
         #expect(KeystrokeActionNames.keybumpsName(for: press(kVK_Space, [.command, .shift]), bindings: bindings) == nil)
     }
 
-    @Test("In the Command Palette, standard shortcuts get the palette's own names, or none")
+    @Test("In the Command Palette, standard shortcuts get the palette's own names, or none: ⌘V Paste, ⌘E Edit, and nothing for ⌘P (#552)")
     func paletteNames() throws {
-        let palette = KeystrokeActionNames.paletteNames([.paste(), .edit, .space("Play")])
-        #expect(palette == ["⌘P": "Paste", "⌘↩": "Edit", "Space": "Play"])
-        #expect(KeystrokeActionNames.name(for: try #require(name(kVK_ANSI_P, [.command])), keybumps: nil, palette: palette) == "Paste", "Not Print")
-        #expect(KeystrokeActionNames.name(for: try #require(name(kVK_Return, [.command])), keybumps: nil, palette: palette) == "Edit")
+        let palette = KeystrokeActionNames.paletteNames([.paste(), .edit, .space("Play"), .delete()])
+        #expect(palette == ["⌘V": "Paste", "⌘E": "Edit", "Space": "Play", "⌫": "Delete"])
+        #expect(KeystrokeActionNames.name(for: try #require(name(kVK_ANSI_V, [.command])), keybumps: nil, palette: palette) == "Paste")
+        #expect(KeystrokeActionNames.name(for: try #require(name(kVK_ANSI_E, [.command])), keybumps: nil, palette: palette) == "Edit")
+        #expect(KeystrokeActionNames.name(for: try #require(name(kVK_ANSI_P, [.command])), keybumps: nil, palette: palette) == nil, "Not Print: it does nothing there")
         #expect(KeystrokeActionNames.name(for: try #require(name(kVK_ANSI_Z, [.command])), keybumps: nil, palette: palette) == nil, "Not Undo")
         #expect(KeystrokeActionNames.name(for: try #require(name(kVK_ANSI_P, [.command])), keybumps: nil, palette: nil) == "Print")
         #expect(KeystrokeActionNames.name(for: try #require(name(kVK_Space, [.command])), keybumps: "Open Quick Search", palette: palette) == "Open Quick Search")
+        // The Translate tab's ⌘Return while you type.
+        let translating = KeystrokeActionNames.paletteNames([TranslatePaletteContent.saveAndPaste])
+        #expect(KeystrokeActionNames.name(for: try #require(name(kVK_Return, [.command])), keybumps: nil, palette: translating) == "Save and Paste")
     }
 
     @Test("Only shortcuts registered with macOS now are named: not one that failed, and none while a shortcut is being recorded")
@@ -1415,7 +1419,7 @@ final class KeyDisplayNotificationCenter: NotificationCenter, @unchecked Sendabl
 @MainActor
 private final class FixedKeyboardLayout: KeyboardLayoutTranslating {
     private static let us: [Int: (String, String)] = [
-        kVK_ANSI_A: ("a", "A"), kVK_ANSI_C: ("c", "C"), kVK_ANSI_H: ("h", "H"), kVK_ANSI_K: ("k", "K"),
+        kVK_ANSI_A: ("a", "A"), kVK_ANSI_C: ("c", "C"), kVK_ANSI_E: ("e", "E"), kVK_ANSI_H: ("h", "H"), kVK_ANSI_K: ("k", "K"),
         kVK_ANSI_R: ("r", "R"), kVK_ANSI_S: ("s", "S"), kVK_ANSI_V: ("v", "V"), kVK_ANSI_Z: ("z", "Z"),
         kVK_ANSI_L: ("l", "L"), kVK_ANSI_P: ("p", "P"), kVK_ANSI_5: ("5", "%"), kVK_ANSI_2: ("2", "@"), kVK_ANSI_3: ("3", "#"),
         kVK_ANSI_4: ("4", "$"), kVK_ANSI_Slash: ("/", "?"), kVK_ANSI_Minus: ("-", "_"),

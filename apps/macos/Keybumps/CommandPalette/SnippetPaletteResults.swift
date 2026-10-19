@@ -14,7 +14,8 @@ struct SnippetPaletteActions {
 }
 
 /// The Snippets tab: a Snippets header with New Snippet, then one row per snippet in the Clipboard
-/// tab's row layout. Return and ⌘C copy, ⌘P pastes, ⌘E edits, and ⌘N makes a new one.
+/// tab's row layout. Return and ⌘C copy, ⌘V pastes, ⌘E edits, Delete asks, then deletes, and ⌘N makes
+/// a new one. The footer names them, as the context menu does (#552).
 struct SnippetPaletteResults: View {
     static let symbol = "text.quote"
 
@@ -114,15 +115,19 @@ struct SnippetPaletteResults: View {
             // the context menu and VoiceOver actions cover mouse and VoiceOver users.
             List(Array(snippets.enumerated()), id: \.element.id) { index, snippet in
                 Button { actions.copy(snippet) } label: {
-                    SnippetRow(snippet: snippet, isSelected: index == selection)
+                    SnippetRow(snippet: snippet)
                 }
                 .buttonStyle(.plain)
                 .contextMenu {
                     Button("Copy") { actions.copy(snippet) }
+                        .paletteMenuKeys(["⌘", "C"])
                     Button("Paste") { actions.paste(snippet) }
-                    Button("Edit…") { actions.edit(snippet) }
+                        .paletteMenuKeys(PaletteKeyAction.paste().keys)
+                    Button(PaletteKeyAction.edit.title) { actions.edit(snippet) }
+                        .paletteMenuKeys(PaletteKeyAction.edit.keys)
                     Divider()
                     Button("Delete…", role: .destructive) { actions.requestDelete(snippet) }
+                        .paletteMenuKeys(PaletteKeyAction.delete().keys)
                 }
                 .accessibilityAction(named: "Paste") { actions.paste(snippet) }
                 .accessibilityAction(named: "Edit") { actions.edit(snippet) }
@@ -141,11 +146,10 @@ struct SnippetPaletteResults: View {
 }
 
 /// A snippet in the Clipboard tab's row layout: the `text.quote` tile, the name with the text on one
-/// gray line under it (masked for a sensitive snippet), and the keyword chip right-aligned. Only the
-/// selected row shows Edit ⌘E, since the footer doesn't list it. Every row is the same height.
+/// gray line under it (masked for a sensitive snippet), and the keyword chip right-aligned. Its Edit
+/// ⌘E is in the footer (#552). Every row is the same height.
 struct SnippetRow: View {
     let snippet: Snippet
-    let isSelected: Bool
 
     var body: some View {
         PaletteRow {
@@ -176,19 +180,6 @@ struct SnippetRow: View {
 
     private var accessories: some View {
         HStack(spacing: 14) {
-            if isSelected {
-                HStack(spacing: 6) {
-                    Text("Edit").fixedSize()
-                    HStack(spacing: 3) {
-                        PaletteKeycap("⌘")
-                        PaletteKeycap("E")
-                    }
-                }
-                .font(.system(size: 14))
-                .foregroundStyle(.secondary)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Edit with Command-E")
-            }
             if let keyword = snippet.keyword {
                 SnippetKeywordChip(keyword: keyword)
             }

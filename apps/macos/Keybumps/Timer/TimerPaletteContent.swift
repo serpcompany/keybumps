@@ -113,9 +113,12 @@ final class TimerPaletteContent: CapabilityPaletteContent {
         return true
     }
 
+    /// Return's action for the row, and Delete ⌫ on a timer, which Delete cancels or clears.
     func footerActions(row: Int, query: String) -> PaletteFooterActions {
         let rows = rows(query: query)
-        return PaletteFooterActions(primary: rows.indices.contains(row) ? rows[row].returnAction : nil)
+        guard rows.indices.contains(row) else { return PaletteFooterActions(primary: nil) }
+        let isTimer = if case .timer = rows[row] { true } else { false }
+        return PaletteFooterActions(primary: rows[row].returnAction, secondary: isTimer ? [.delete()] : [])
     }
 
     func didShow(palette: PaletteContentActions) {

@@ -480,7 +480,7 @@ struct TimerModuleTests {
         #expect(fixture.store.items.count == 1, "Unreadable text starts nothing")
     }
 
-    @Test("Return pauses, resumes, and restarts; Delete removes; the footer says which")
+    @Test("Return pauses, resumes, and restarts; Delete removes; the footer says which, with Delete ⌫ last")
     func timerRows() throws {
         let fixture = ModuleFixture()
         defer { fixture.tearDown() }
@@ -502,6 +502,10 @@ struct TimerModuleTests {
         #expect(fixture.store.items.first?.isRunning == true)
 
         #expect(content.footerActions(row: 1, query: "5m").primary == "Pause", "Timers follow the new-timer row")
+        // Delete ⌫ last, on timers only (#552).
+        #expect(content.footerActions(row: 1, query: "5m").secondary.map(\.description) == ["Delete ⌫"])
+        #expect(content.footerActions(row: 0, query: "5m").secondary.isEmpty, "The new-timer row has nothing to delete")
+        #expect(!content.pastes(row: 1, query: "5m"), "A timer doesn't paste, so ⌘V is the search field's")
         #expect(content.delete(row: 0, query: "5m") == false, "The new-timer row isn't deletable")
         #expect(content.delete(row: 1, query: "5m"))
         #expect(fixture.store.items.isEmpty)

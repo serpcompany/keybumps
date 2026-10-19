@@ -288,7 +288,7 @@ final class AppModel {
         // menu's route; a capability's command asks for its page.
         commandPalette.openSettings = { section in MainWindowRouter.shared.open(section) }
         // Posting ⌘V into another app needs Accessibility, re-read from macOS on every paste. It's
-        // optional for pasting from the palette: without it ⌘P copies and offers the usual setup.
+        // optional for pasting from the palette: without it ⌘V copies and offers the usual setup.
         commandPalette.canPaste = {
             permissions.refresh()
             return permissions.accessibilityGranted
@@ -399,12 +399,13 @@ final class AppModel {
             perform: { [weak self] action in self?.runQuickSearchAction(action) }
         )
         // The key display names a Keybumps shortcut only while it's registered, and in the Command
-        // Palette, the palette's own keys rather than what they do elsewhere.
+        // Palette, the palette's own keys rather than what they do elsewhere: what its footer says
+        // they do on the highlighted row, such as Paste for ⌘V and Edit for ⌘E (#552).
         keyDisplay.registeredShortcutName = { [shortcuts] press in
             KeystrokeActionNames.keybumpsName(for: press, bindings: shortcuts.registeredBindings)
         }
         keyDisplay.paletteKeyNames = { [commandPalette] in
-            commandPalette.isKey ? KeystrokeActionNames.paletteNames(commandPalette.selectedTab.secondaryActions) : nil
+            commandPalette.isKey ? KeystrokeActionNames.paletteNames(commandPalette.footerActions.secondary) : nil
         }
         // A screenshot shortcut the display knows clears it: macOS's as the person set them (read
         // only), and ScreenGrabs' screenshot hotkeys while they're registered, which also clear it
@@ -701,14 +702,14 @@ final class AppModel {
         return true
     }
 
-    /// After ⌘P had to copy for lack of Accessibility: offers the usual Accessibility setup.
+    /// After ⌘V had to copy for lack of Accessibility: offers the usual Accessibility setup.
     private func offerPasteSetup(for plugin: Capability) {
         permissionDragAssistant.showPasteSetup(plugin: plugin.title) { [weak self] in
             Task { await self?.setUpPaste() }
         }
     }
 
-    /// Set Up Paste…, offered after a plugin's ⌘P had to copy. Like Dictation's card, it opens
+    /// Set Up Paste…, offered after a plugin's ⌘V had to copy. Like Dictation's card, it opens
     /// System Settings over another app, so that opening stays out of the Settings window's
     /// relaunch check.
     func setUpPaste() async {

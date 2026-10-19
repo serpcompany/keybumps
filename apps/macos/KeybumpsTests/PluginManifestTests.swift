@@ -113,19 +113,25 @@ struct PluginManifestTests {
         }
     }
 
-    @Test("Every plugin whose tab pastes with ⌘P declares Accessibility, which pasting into another app needs (#370)")
+    @Test("Every plugin whose tab pastes with ⌘V declares Accessibility, which pasting into another app needs (#370, #552)")
     func pastingPluginsDeclareAccessibility() {
         let pasting = CapabilityCatalog.descriptors.filter { descriptor in
-            descriptor.paletteTab?.secondaryActions.contains { $0.keys == PaletteKeyAction.paste().keys } == true
+            descriptor.paletteTab?.secondaryActions.contains(where: \.isPaste) == true
         }
-        #expect(pasting.map(\.capability) == [.clipboardHistory, .screenshotTools, .dictation, .snippets, .emojiPicker, .translation])
-        for descriptor in pasting {
+        // Translation pastes a saved translation from its detail pane's button; its ⌘V is the search
+        // field's (#552). It declares Accessibility too, checked with the others below.
+        #expect(pasting.map(\.capability) == [.clipboardHistory, .screenshotTools, .dictation, .snippets, .emojiPicker])
+        for descriptor in pasting + [CapabilityDescriptor.translation] {
             let declared = descriptor.requiredPermissions.union(descriptor.optionalPermissions.map(\.permission))
             #expect(declared.contains(.accessibility), "\(descriptor.title)")
         }
         #expect(CapabilityDescriptor.clipboardHistory.optionalPermissions.map(\.permission) == [.accessibility])
         #expect(CapabilityDescriptor.screenshotTools.optionalPermissions.map(\.permission) == [.accessibility, .microphone, .inputMonitoring])
         #expect(CapabilityDescriptor.dictation.requiredPermissions.contains(.accessibility), "Dictation needs it anyway")
+        // Their reasons name the key that pastes now (#552).
+        let reasons = pasting.flatMap(\.optionalPermissions).filter { $0.permission == .accessibility }.map(\.reason)
+        #expect(!reasons.isEmpty && reasons.allSatisfy { $0.contains("⌘V") && !$0.contains("⌘P") })
+        #expect(MacPermission.accessibility.explanation.contains("⌘V in the Command Palette"))
     }
 
     @Test("A new install starts with every plugin on except those that ship off")

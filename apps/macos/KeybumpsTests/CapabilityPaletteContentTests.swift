@@ -64,7 +64,7 @@ struct CapabilityPaletteContentTests {
         #expect(fixture.content.pastes.isEmpty)
     }
 
-    @Test("⌘C and ⌘P go to the module tab's highlighted row, Caps Lock or not; a held key's repeats do nothing")
+    @Test("⌘C and ⌘V go to the module tab's highlighted row, Caps Lock or not; a held key's repeats do nothing")
     func copyAndPasteGoToTheContent() {
         let fixture = ModuleTabFixture()
         defer { fixture.tearDown() }
@@ -73,36 +73,64 @@ struct CapabilityPaletteContentTests {
         fixture.palette.state.selection = 2
 
         #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_C, "c", command: true)) == nil)
-        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_P, "p", command: true)) == nil)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_V, "v", command: true)) == nil)
         #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_C, "C", modifiers: [.command, .capsLock])) == nil)
-        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_P, "P", modifiers: [.command, .capsLock])) == nil)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_V, "V", modifiers: [.command, .capsLock])) == nil)
         #expect(fixture.content.copies == [.init(row: 2, query: "tea"), .init(row: 2, query: "tea")])
         #expect(fixture.content.pastes == [.init(row: 2, query: "tea"), .init(row: 2, query: "tea")])
         #expect(fixture.content.activations.isEmpty, "Neither is Return")
 
-        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_P, "p", modifiers: .command, isARepeat: true)) == nil)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_V, "v", modifiers: .command, isARepeat: true)) == nil)
         #expect(fixture.content.pastes.count == 2)
 
-        // ⇧⌘C and ⌥⌘P aren't them.
+        // ⇧⌘C and ⌥⌘V aren't them.
         #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_C, "c", modifiers: [.command, .shift])) != nil)
-        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_P, "p", modifiers: [.command, .option])) != nil)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_V, "v", modifiers: [.command, .option])) != nil)
         #expect(fixture.content.copies.count == 2 && fixture.content.pastes.count == 2)
     }
 
-    @Test("With no highlighted row, ⌘C and ⌘P do nothing: an empty list, or a grid nothing in is highlighted yet")
+    @Test("⌘V on a row that doesn't paste is the search field's; ⌘P does nothing anywhere, and never reaches the field (#552)")
+    func pasteKeyOnARowThatDoesntPaste() {
+        let fixture = ModuleTabFixture()
+        defer { fixture.tearDown() }
+        fixture.palette.selectOnOpening(.keyboardShortcutter)
+        fixture.palette.state.selection = 1
+
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_P, "p", command: true)) == nil, "⌘P is swallowed")
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_P, "p", modifiers: .command, isARepeat: true)) == nil)
+        #expect(fixture.content.pastes.isEmpty, "…and pastes nothing")
+
+        fixture.content.pastesRows = false
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_V, "v", command: true)) != nil, "⌘V goes on to the search field")
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_P, "p", command: true)) == nil)
+        #expect(fixture.content.pastes.isEmpty)
+    }
+
+    @Test("By default a row pastes where its footer names Paste ⌘V")
+    func pastesFollowsTheFooter() {
+        let content = FooterOnlyContent()
+        content.footer = PaletteFooterActions(primary: "Copy", secondary: [.paste(), .delete()])
+        #expect(content.pastes(row: 0, query: ""))
+        content.footer = PaletteFooterActions(primary: "Save", secondary: [TranslatePaletteContent.saveAndPaste])
+        #expect(!content.pastes(row: 0, query: ""), "Save and Paste is ⌘Return's")
+        content.footer = PaletteFooterActions(primary: "Start", secondary: [.delete()])
+        #expect(!content.pastes(row: 0, query: ""))
+    }
+
+    @Test("With no highlighted row, ⌘C does nothing and ⌘V is the search field's: an empty list, or a grid nothing in is highlighted yet")
     func copyAndPasteNeedAHighlightedRow() {
         let fixture = ModuleTabFixture()
         defer { fixture.tearDown() }
         fixture.palette.selectOnOpening(.keyboardShortcutter)
         fixture.content.rows = 0
         #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_C, "c", command: true)) == nil)
-        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_P, "p", command: true)) == nil)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_V, "v", command: true)) != nil, "⌘V pastes into the search field")
 
         fixture.content.rows = 3
         fixture.content.isGrid = true
         #expect(!fixture.palette.state.isBrowsingGrid)
         #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_C, "c", command: true)) == nil)
-        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_P, "p", command: true)) == nil)
+        #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_V, "v", command: true)) != nil, "A grid before Down: the field's")
         #expect(fixture.content.copies.isEmpty && fixture.content.pastes.isEmpty)
 
         // Once Down goes into the grid, its first item is highlighted.
@@ -434,22 +462,27 @@ struct CapabilityPaletteContentTests {
         #expect(filtering.palette.state.selection == 2)
     }
 
-    @Test("The footer names a module tab's actions, else Quick Search's row's, else the tab's own, then Space's")
+    @Test("The footer names a module tab's actions, else Quick Search's row's, else the tab's own, then Space's, then Delete's")
     func footerActions() {
         let content = PaletteFooterActions(primary: "Pause")
         #expect(PaletteFooterActions.resolve(tab: .keyboardShortcutter, searchItem: nil, content: content) == content)
         #expect(
             PaletteFooterActions.resolve(tab: .snippets, searchItem: nil, content: nil)
-                == PaletteFooterActions(primary: "Copy", secondary: [.paste()])
+                == PaletteFooterActions(primary: "Copy", secondary: [.paste(), .edit, .delete()])
         )
         #expect(PaletteFooterActions(tab: .keyboardShortcutter) == PaletteFooterActions(primary: nil))
         #expect(
             PaletteFooterActions.resolve(tab: .dictation, searchItem: nil, content: nil, playback: "Play")
-                == PaletteFooterActions(primary: "Copy", secondary: [.paste(), .space("Play")])
+                == PaletteFooterActions(primary: "Copy", secondary: [.paste(), .space("Play"), .delete()])
         )
         #expect(
-            PaletteFooterActions.resolve(tab: .translate, searchItem: nil, content: PaletteFooterActions(primary: "Copy", secondary: [.paste()]), playback: "Read Aloud")
-                .secondary.map(\.description) == ["Paste ⌘P", "Read Aloud Space"]
+            PaletteFooterActions.resolve(tab: .translate, searchItem: nil, content: PaletteFooterActions(primary: "Copy", secondary: [.paste(), .delete()]), playback: "Read Aloud")
+                .secondary.map(\.description) == ["Paste ⌘V", "Read Aloud Space", "Delete ⌫"]
+        )
+        #expect(
+            PaletteFooterActions.resolve(tab: .emoji, searchItem: nil, content: PaletteFooterActions(primary: "Copy", secondary: [.paste()]), playback: "Play")
+                .secondary.map(\.description) == ["Paste ⌘V", "Play Space"],
+            "With no Delete, Space's goes last"
         )
     }
 
@@ -600,6 +633,8 @@ private final class RecordingPaletteContent: CapabilityPaletteContent {
     var copiesOnActivate: String?
     /// Whether every row has audio for Space to play.
     var hasAudio = false
+    /// Whether ⌘V pastes the rows; otherwise it's the search field's.
+    var pastesRows = true
     private(set) var moves: [PaletteMove] = []
     private(set) var shows = 0
     private(set) var activations: [Activation] = []
@@ -636,6 +671,8 @@ private final class RecordingPaletteContent: CapabilityPaletteContent {
         pastes.append(Activation(row: row, query: query))
     }
 
+    func pastes(row: Int, query: String) -> Bool { pastesRows }
+
     func playback(row: Int, query: String) -> PalettePlayback? {
         guard hasAudio else { return nil }
         return PalettePlayback(title: "Play") { [weak self] in self?.toggles.append(row) }
@@ -650,6 +687,17 @@ private final class RecordingPaletteContent: CapabilityPaletteContent {
 
     func didShow(palette: PaletteContentActions) { shows += 1 }
 
+    func makeView(_ context: PaletteContentContext) -> AnyView { AnyView(EmptyView()) }
+}
+
+/// Rows that answer only for their footer, so `pastes(row:query:)` keeps its default.
+@MainActor
+private final class FooterOnlyContent: CapabilityPaletteContent {
+    let tab = CommandPaletteTab.keyboardShortcutter
+    var footer = PaletteFooterActions(primary: nil)
+
+    func rowCount(query: String) -> Int { 1 }
+    func footerActions(row: Int, query: String) -> PaletteFooterActions { footer }
     func makeView(_ context: PaletteContentContext) -> AnyView { AnyView(EmptyView()) }
 }
 

@@ -3,7 +3,7 @@ import SwiftUI
 /// The rows of a Command Palette tab that a capability module supplies itself, so the palette needs
 /// no case of its own for the tab. The palette keeps the search field, the tab bar, the selection,
 /// the arrow keys, Escape, and the footer's chrome; the content answers for its rows, for Return,
-/// ⌘Return, ⌘C, ⌘P, Space, and Delete on them, and for what the footer says those keys do.
+/// ⌘Return, ⌘C, ⌘V, Space, and Delete on them, and for what the footer says those keys do.
 @MainActor
 protocol CapabilityPaletteContent: AnyObject {
     /// The tab these rows fill; it is the owning module's `paletteTab`.
@@ -29,14 +29,18 @@ protocol CapabilityPaletteContent: AnyObject {
     /// the tab gives it an action of its own (`commandActivate`).
     func activate(row: Int, query: String, palette: PaletteContentActions)
     /// ⌘Return on the selected row: what Return does, unless the tab gives it an action of its own,
-    /// such as the ScreenGrabs tab's Edit (`PaletteKeyAction.edit`). It never pastes (#370).
+    /// such as the ScreenGrabs tab's Edit, which ⌘E also does. It pastes only the Translate tab's
+    /// translation being typed, where ⌘V is the search field's (#370, #552).
     func commandActivate(row: Int, query: String, palette: PaletteContentActions)
     /// ⌘C on the selected row: copies it, as Return does in most tabs. A row that doesn't copy does
     /// nothing.
     func copy(row: Int, query: String, palette: PaletteContentActions)
-    /// ⌘P on the selected row: pastes it into the app you were using (`PaletteContentActions.paste`).
-    /// A row that doesn't paste does nothing.
+    /// ⌘V on the selected row, where `pastes(row:query:)` says it pastes: pastes it into the app you
+    /// were using (`PaletteContentActions.paste`).
     func paste(row: Int, query: String, palette: PaletteContentActions)
+    /// Whether ⌘V pastes the selected row (#552). Elsewhere ⌘V is the search field's, as in any text
+    /// field. By default, a row whose footer names Paste ⌘V.
+    func pastes(row: Int, query: String) -> Bool
     /// What Space does on the selected row while the search field is empty: plays or pauses its
     /// audio, such as a saved translation read aloud, or opens it in Quick Look, as a screengrab's
     /// does. Nil for a row with none, where Space types.
@@ -47,8 +51,9 @@ protocol CapabilityPaletteContent: AnyObject {
     /// For a row whose Delete asks first, as a recording's does: the question, and what its Delete
     /// does. The palette shows it in place of `delete(row:query:)`. Nil deletes at once.
     func deletionConfirmation(row: Int, query: String) -> PaletteDeletionConfirmation?
-    /// What the footer says Return and the other keys do on the selected row. The palette adds
-    /// Space's, from `playback(row:query:)`.
+    /// What the footer says Return and the other keys do on the selected row, with Delete's last
+    /// (`PaletteKeyAction.delete`) on a row Delete removes. The palette adds Space's, from
+    /// `playback(row:query:)`, before Delete's.
     func footerActions(row: Int, query: String) -> PaletteFooterActions
     /// The Command keys the tab keeps for itself, such as `t` for the Translate tab's ⌘T, as
     /// `charactersIgnoringModifiers` reports them, lowercased. The palette's own Command keys (the
@@ -77,6 +82,9 @@ extension CapabilityPaletteContent {
     }
     func copy(row: Int, query: String, palette: PaletteContentActions) {}
     func paste(row: Int, query: String, palette: PaletteContentActions) {}
+    func pastes(row: Int, query: String) -> Bool {
+        footerActions(row: row, query: query).secondary.contains(where: \.isPaste)
+    }
     func playback(row: Int, query: String) -> PalettePlayback? { nil }
     func delete(row: Int, query: String) -> Bool { false }
     func deletionConfirmation(row: Int, query: String) -> PaletteDeletionConfirmation? { nil }
@@ -97,8 +105,8 @@ struct PaletteDeletionConfirmation {
     var confirmTitle = "Delete"
 }
 
-/// What the footer names after Select: Return's action, then each other key's, such as Paste ⌘P.
-/// A nil primary leaves Return out.
+/// What the footer names after Select: Return's action, then each other key's, such as Paste ⌘V,
+/// ending with Delete's. A nil primary leaves Return out.
 struct PaletteFooterActions: Equatable {
     var primary: String?
     var secondary: [PaletteKeyAction]
@@ -114,45 +122,66 @@ struct PaletteFooterActions: Equatable {
     }
 }
 
-/// A key the footer names after Return's, and what it does on the selected row: "Paste" with ⌘P.
+/// A key the footer names after Return's, and what it does on the selected row: "Paste" with ⌘V.
+/// Every tab gives a key the same name: Paste ⌘V, Edit ⌘E, and Delete ⌫, which the footer lists last
+/// (#552).
 struct PaletteKeyAction: Equatable, CustomStringConvertible {
     let title: String
     /// Its keycaps, in order.
     let keys: [String]
-    /// Whether the key does anything only on a highlighted row, as ⌘P and Space do; Return acts on
-    /// a grid's first item before Down goes into it. The footer leaves such a key out until then.
+    /// Whether the key does anything only on a highlighted row, as ⌘V, Space, and Delete do; Return
+    /// acts on a grid's first item before Down goes into it. The footer leaves such a key out until
+    /// then.
     var needsHighlightedRow = false
 
-    /// ⌘P, which pastes the row into the app you were using (#370).
+    /// ⌘V, which pastes the row into the app you were using (#370, #552). On a row that doesn't
+    /// paste, ⌘V is the search field's.
     static func paste(_ title: String = "Paste") -> PaletteKeyAction {
-        PaletteKeyAction(title: title, keys: ["⌘", "P"], needsHighlightedRow: true)
+        PaletteKeyAction(title: title, keys: ["⌘", "V"], needsHighlightedRow: true)
     }
 
-    /// ⌘Return, which in the ScreenGrabs tab opens a screenshot in the Screenshot Editor.
-    static let edit = PaletteKeyAction(title: "Edit", keys: ["⌘", "↵"])
+    /// ⌘E, which opens the row where it's edited: a screenshot or a Clipboard History image in the
+    /// Screenshot Editor, a recording in the recording window, or a snippet in Settings. Like
+    /// ⌘Return in the ScreenGrabs tab, it acts on a grid's first item before Down goes into it.
+    static let edit = PaletteKeyAction(title: "Edit", keys: ["⌘", "E"])
 
-    /// ⌘Return, which in the ScreenGrabs tab opens a recording in the recording window.
-    static let open = PaletteKeyAction(title: "Open", keys: ["⌘", "↵"])
+    /// Delete, which removes the row (or Command-Delete while typing), named for what it does there,
+    /// such as Move to Trash for a ScreenGrabs recording. The footer lists it last.
+    static func delete(_ title: String = "Delete") -> PaletteKeyAction {
+        PaletteKeyAction(title: title, keys: ["⌫"], needsHighlightedRow: true)
+    }
 
-    /// Delete, named in the footer where it's all a row offers, as for a ScreenGrabs recording that
-    /// was moved or deleted.
-    static let remove = PaletteKeyAction(title: "Remove", keys: ["⌫"], needsHighlightedRow: true)
+    /// Delete on a row that only leaves the list: a Recent Item, whose app or file stays, or a
+    /// ScreenGrabs recording that was moved or deleted.
+    static let remove = delete("Remove")
 
     /// Space, which plays or pauses a row's audio while the search field is empty.
     static func space(_ title: String) -> PaletteKeyAction {
         PaletteKeyAction(title: title, keys: ["Space"], needsHighlightedRow: true)
     }
 
-    /// "Paste ⌘P"
+    /// Whether it's ⌘V's Paste.
+    var isPaste: Bool { keys == Self.paste().keys }
+
+    /// Whether it's Delete's, which the footer lists last, with or without Command.
+    var isDelete: Bool { keys.last == Self.remove.keys.last }
+
+    /// The same action on ⌘⌫, which the footer names while the search field has text or a filter,
+    /// where ⌫ alone edits them.
+    var withCommand: PaletteKeyAction {
+        PaletteKeyAction(title: title, keys: ["⌘"] + keys, needsHighlightedRow: needsHighlightedRow)
+    }
+
+    /// "Paste ⌘V"
     var description: String { "\(title) \(keys.joined())" }
 
-    /// What VoiceOver reads for a footer hint: "Paste, Command P", "Select, Up Arrow or Down Arrow".
+    /// What VoiceOver reads for a footer hint: "Paste, Command V", "Select, Up Arrow or Down Arrow".
     /// Keys after a modifier are one shortcut; keys on their own are alternatives.
     static func accessibilityLabel(title: String, keys: [String]) -> String {
         "\(title), \(spokenShortcut(keys))"
     }
 
-    /// Keys as VoiceOver reads them: "Command P", or "Up Arrow or Down Arrow".
+    /// Keys as VoiceOver reads them: "Command V", or "Up Arrow or Down Arrow".
     static func spokenShortcut(_ keys: [String]) -> String {
         let spoken = keys.map { spokenKeys[$0] ?? $0 }
         let isShortcut = keys.first.map { spokenKeys[$0] == "Command" } ?? false
@@ -163,6 +192,30 @@ struct PaletteKeyAction: Equatable, CustomStringConvertible {
         "⌘": "Command", "↵": "Return", "↑": "Up Arrow", "↓": "Down Arrow", "←": "Left Arrow", "→": "Right Arrow",
         "⌫": "Delete",
     ]
+
+    /// The same keys beside a context menu item, as the footer names them: ⌘C beside Copy, ⌘V beside
+    /// Paste, ⌘E beside Edit, and ⌫ beside Delete. Nil for keys a menu doesn't show, such as Space.
+    static func menuShortcut(_ keys: [String]) -> KeyboardShortcut? {
+        let command = keys.first == "⌘"
+        let rest = command ? Array(keys.dropFirst()) : keys
+        guard rest.count == 1, let key = rest.first else { return nil }
+        let modifiers: EventModifiers = command ? .command : []
+        switch key {
+        case "↵": return KeyboardShortcut(.return, modifiers: modifiers)
+        case "⌫": return KeyboardShortcut(.delete, modifiers: modifiers)
+        default:
+            guard key.count == 1, let letter = key.lowercased().first, letter.isLetter else { return nil }
+            return KeyboardShortcut(KeyEquivalent(letter), modifiers: modifiers)
+        }
+    }
+}
+
+extension View {
+    /// Shows a palette key beside a context menu item (`PaletteKeyAction.menuShortcut`), so menus
+    /// teach the keys the footer names (#552): `.paletteMenuKeys(PaletteKeyAction.paste().keys)`.
+    func paletteMenuKeys(_ keys: [String]) -> some View {
+        keyboardShortcut(PaletteKeyAction.menuShortcut(keys))
+    }
 }
 
 /// Space on a row with audio while the search field is empty: what the footer calls it, such as
@@ -189,7 +242,7 @@ struct PaletteContentActions {
     /// Copies text, keeping it out of Clipboard History, then closes the palette and confirms the
     /// copy at the notch.
     var copy: (String) -> Void = { _ in }
-    /// Closes the palette and pastes text into the app that was in front when it opened (⌘P), or
+    /// Closes the palette and pastes text into the app that was in front when it opened (⌘V), or
     /// copies it and says why when it can't (`PalettePasteRoute`). With `restoresClipboard` true, what
     /// was on the clipboard comes back once the paste has been read.
     var paste: (_ text: String, _ restoresClipboard: Bool) -> Void = { _, _ in }
@@ -200,7 +253,7 @@ struct PaletteContentActions {
     /// copy at the notch, as the Clipboard tab's Return does.
     var copyClipboardEntry: (ClipboardEntry) -> Void = { _ in }
     /// Puts a Clipboard History item back on the clipboard, then closes the palette and pastes it into
-    /// the app that was in front when it opened (⌘P), as the Clipboard tab's ⌘P does. It stays on the
+    /// the app that was in front when it opened, as the Clipboard tab's ⌘V does. It stays on the
     /// clipboard afterwards.
     var pasteClipboardEntry: (ClipboardEntry) -> Void = { _ in }
     /// Closes the palette and opens an image item in the Screenshot Editor, as ⌘E does in the
@@ -210,7 +263,7 @@ struct PaletteContentActions {
     /// closes the palette and confirms the copy at the notch, as a ScreenGrabs recording's Return does.
     var copyFiles: ([URL]) -> Void = { _ in }
     /// Copies files as `copyFiles` does, then closes the palette and pastes them into the app that
-    /// was in front when it opened (⌘P). They stay on the clipboard afterwards.
+    /// was in front when it opened (⌘V). They stay on the clipboard afterwards.
     var pasteFiles: ([URL]) -> Void = { _ in }
     /// Shows a warning at the notch, such as why a recording couldn't open, leaving the palette open.
     var warn: (String) -> Void = { _ in }

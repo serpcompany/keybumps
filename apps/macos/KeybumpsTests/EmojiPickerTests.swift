@@ -169,7 +169,7 @@ struct EmojiPaletteContentTests {
         #expect(tab.selection(after: .down, from: 1, query: "") == 1 + EmojiPaletteContent.columns)
     }
 
-    @Test("Return and ⌘C copy, ⌘P pastes and puts the clipboard back, and each makes it recent")
+    @Test("Return and ⌘C copy, ⌘V pastes and puts the clipboard back, and each makes it recent")
     func copyAndPaste() throws {
         defer { try? FileManager.default.removeItem(at: url) }
         let tab = try content()
@@ -185,7 +185,8 @@ struct EmojiPaletteContentTests {
         #expect(palette.copied == ["😂", "👍"])
         #expect(palette.pasted.count == 1)
         #expect(tab.recents.glyphs == ["👍", "🎉", "😂"])
-        #expect(tab.footerActions(row: 0, query: "") == PaletteFooterActions(primary: "Copy", secondary: [.paste()]))
+        #expect(tab.footerActions(row: 0, query: "") == PaletteFooterActions(primary: "Copy", secondary: [.paste()]), "Nothing to delete")
+        #expect(tab.pastes(row: 0, query: ""), "⌘V pastes the emoji")
         #expect(tab.playback(row: 0, query: "") == nil, "Emoji have no audio, so Space types")
 
         // A row that isn't there copies and pastes nothing.

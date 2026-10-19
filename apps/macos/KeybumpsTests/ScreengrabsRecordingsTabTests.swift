@@ -156,7 +156,7 @@ struct ScreengrabsRecordingsTabTests {
 
     // MARK: Keys on a recording
 
-    @Test("Return and ⌘C copy a recording's files, ⌘P pastes them, ⌘Return and ⌘E open it, and Space shows it in Quick Look")
+    @Test("Return and ⌘C copy a recording's files, ⌘V pastes them, ⌘E (Edit) and ⌘Return open it, and Space shows it in Quick Look")
     func keys() throws {
         let fixture = RecordingsTabFixture()
         defer { fixture.tearDown() }
@@ -185,7 +185,10 @@ struct ScreengrabsRecordingsTabTests {
 
         let footer = content.footerActions(row: 0, query: "")
         #expect(footer.primary == "Copy")
-        #expect(footer.secondary.map(\.description) == ["Paste ⌘P", "Open ⌘↵"])
+        #expect(footer.secondary.map(\.description) == ["Paste ⌘V", "Edit ⌘E", "Move to Trash ⌫"], "Edit opens the recording window, where it's trimmed")
+        let resolved = PaletteFooterActions.resolve(tab: .screenshots, searchItem: nil, content: footer, playback: playback.title)
+        #expect(resolved.secondary.map(\.description) == ["Paste ⌘V", "Edit ⌘E", "Quick Look Space", "Move to Trash ⌫"])
+        #expect(content.pastes(row: 0, query: ""))
         #expect(fixture.log.warnings.isEmpty)
     }
 
@@ -199,7 +202,7 @@ struct ScreengrabsRecordingsTabTests {
         #expect(fixture.log.warnings == [ScreengrabsPaletteContent.openFailedMessage])
     }
 
-    @Test("A recording of every screen is one tile: Return copies, ⌘P pastes, and Space previews every display's video")
+    @Test("A recording of every screen is one tile: Return copies, ⌘V pastes, and Space previews every display's video")
     func everyScreen() throws {
         let fixture = RecordingsTabFixture()
         defer { fixture.tearDown() }
@@ -234,7 +237,7 @@ struct ScreengrabsRecordingsTabTests {
         #expect(fixture.notices.messages == ["Copied to Clipboard"])
     }
 
-    @Test("⌘P on a recording, through the palette, copies its files and says why it couldn't paste without Accessibility")
+    @Test("⌘V on a recording, through the palette, copies its files and says why it couldn't paste without Accessibility")
     func pasteThroughThePalette() throws {
         let fixture = RecordingsTabFixture()
         defer { fixture.tearDown() }
@@ -246,7 +249,7 @@ struct ScreengrabsRecordingsTabTests {
         palette.selectOnOpening(.screenshots)
 
         #expect(palette.handleKeyDown(Self.key(kVK_DownArrow)) == nil)
-        #expect(palette.handleKeyDown(Self.key(kVK_ANSI_P, "p", modifiers: .command)) == nil)
+        #expect(palette.handleKeyDown(Self.key(kVK_ANSI_V, "v", modifiers: .command)) == nil)
         let copied = fixture.library.pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL]
         #expect(copied?.map(\.lastPathComponent) == recording.sharingURLs.map(\.lastPathComponent))
         #expect(fixture.notices.messages == [PalettePasteRoute.Reason.needsAccessibility.notice])
@@ -263,7 +266,7 @@ struct ScreengrabsRecordingsTabTests {
         let footer = PaletteFooterActions.resolve(
             tab: .screenshots, searchItem: nil, content: fixture.content.footerActions(row: 0, query: ""), playback: playback.title
         )
-        #expect(footer.secondary.map(\.description) == ["Paste ⌘P", "Edit ⌘↵", "Quick Look Space"])
+        #expect(footer.secondary.map(\.description) == ["Paste ⌘V", "Edit ⌘E", "Quick Look Space", "Delete ⌫"])
     }
 
     @Test("Show in Finder selects a recording's videos, and a screenshot's file while it's where it was saved")
@@ -380,6 +383,7 @@ struct ScreengrabsRecordingsTabTests {
         let footer = content.footerActions(row: 0, query: "")
         #expect(footer.primary == nil)
         #expect(footer.secondary.map(\.description) == ["Remove ⌫"])
+        #expect(content.pastes(row: 0, query: ""), "⌘V is still the recording's, and says why it can't, as its other keys do")
         #expect(content.deletionConfirmation(row: 0, query: "") == nil, "No question: nothing's left to trash")
         #expect(content.delete(row: 0, query: ""))
         #expect(fixture.recordings.recordings.isEmpty)
@@ -436,7 +440,7 @@ struct ScreengrabsRecordingsTabTests {
 
         #expect(palette.handleKeyDown(Self.key(kVK_DownArrow)) == nil)
         #expect(palette.handleKeyDown(Self.key(kVK_Return, "\r")) == nil)
-        #expect(palette.handleKeyDown(Self.key(kVK_ANSI_P, "p", modifiers: .command)) == nil)
+        #expect(palette.handleKeyDown(Self.key(kVK_ANSI_V, "v", modifiers: .command)) == nil)
         #expect(fixture.library.pasteboard.changeCount == changeCount, "Nothing put on the pasteboard")
         let copied = fixture.library.pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL]
         #expect(copied?.isEmpty ?? true)

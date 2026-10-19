@@ -101,7 +101,7 @@ The website a Clipboard History item was copied from, kept as its domain name on
 _Avoid_: Source URL, page address (the full address is never kept)
 
 **Dictation**:
-A session that records speech, transcribes it locally, and inserts the text at the original cursor. It inserts through the clipboard, kept out of Clipboard History, then puts the clipboard back unless something else was copied meanwhile; turning off Put the clipboard back after inserting, in Settings › Dictation, leaves the transcript there. The Dictation tab's ⌘P leaves the transcript on the clipboard either way.
+A session that records speech, transcribes it locally, and inserts the text at the original cursor. It inserts through the clipboard, kept out of Clipboard History, then puts the clipboard back unless something else was copied meanwhile; turning off Put the clipboard back after inserting, in Settings › Dictation, leaves the transcript there. The Dictation tab's ⌘V leaves the transcript on the clipboard either way.
 _Avoid_: Voice guide, assistant
 
 **Recognition language**:
@@ -167,7 +167,7 @@ A snippet whose text is hidden in the Command Palette and Settings, left out of 
 _Avoid_: Secret, password snippet
 
 **Snippets tab**:
-The Command Palette tab (⌘5) that lists snippets. Return or ⌘C copies one and ⌘P pastes it into the app in front.
+The Command Palette tab (⌘5) that lists snippets. Return or ⌘C copies one, ⌘V pastes it into the app in front, and ⌘E edits it.
 _Avoid_: Snippet library, snippet manager
 
 **Timer**:
@@ -187,7 +187,7 @@ Finding an emoji by its name, a keyword, or its `:shortcode:`, then copying it o
 _Avoid_: Emoji keyboard, character viewer
 
 **Emoji tab**:
-The Command Palette tab (⌘7) for the Emoji Picker: a grid of recent emoji and Unicode's groups to browse, or a ranked list once you type. Return or ⌘C copies; ⌘P pastes and puts the clipboard back.
+The Command Palette tab (⌘7) for the Emoji Picker: a grid of recent emoji and Unicode's groups to browse, or a ranked list once you type. Return or ⌘C copies; ⌘V pastes and puts the clipboard back.
 _Avoid_: Emoji grid, emoji search
 
 **Recent emoji**:
@@ -199,11 +199,11 @@ Translating text between your two languages on this Mac, with Apple's Translatio
 _Avoid_: Translator, Translate (the tab's name)
 
 **Translate tab**:
-The Command Palette tab (⌘8) for Translation: what you type or paste in the search field, translated as you type. Return saves the translation to recent translations and clears the field; ⌘P saves it and pastes it, then puts the clipboard back. ⌘T or the swap button translates the text the other way, and the target language in the header is a menu for picking another; either lasts until the text changes. A target picked for text detected in my language also becomes Other language. With the field empty, it lists recent translations.
+The Command Palette tab (⌘8) for Translation: what you type or paste in the search field, translated as you type. Return saves the translation to recent translations and clears the field; ⌘Return saves it and pastes it, then puts the clipboard back. ⌘V pastes into the field, as in any text field. ⌘T or the swap button translates the text the other way, and the target language in the header is a menu for picking another; either lasts until the text changes. A target picked for text detected in my language also becomes Other language. With the field empty, it lists recent translations.
 _Avoid_: Translation window, translator
 
 **Recent translations**:
-The last 50 translations saved with Return or ⌘P in the Translate tab, newest first, listed there while the search field is empty, with the highlighted one in full beside the list, as in the Dictation tab. Return or ⌘C copies one, kept out of Clipboard History; ⌘P pastes it; Delete asks, then deletes it; and Read Aloud, or Space, reads it aloud in an installed voice for its language, or says there's none. User content, kept only on this Mac (`recent-translations.json`) and never logged. Turning Translation off keeps them; Clear Recent Translations in its settings removes them.
+The last 50 translations saved with Return or ⌘Return in the Translate tab, newest first, listed there while the search field is empty, with the highlighted one in full beside the list, as in the Dictation tab. Return or ⌘C copies one, kept out of Clipboard History; its Paste button pastes it (⌘V stays the search field's in this tab); Delete asks, then deletes it; and Read Aloud, or Space, reads it aloud in an installed voice for its language, or says there's none. User content, kept only on this Mac (`recent-translations.json`) and never logged. Turning Translation off keeps them; Clear Recent Translations in its settings removes them.
 _Avoid_: Translation history, favorites, phrasebook
 
 **Language pair**:
