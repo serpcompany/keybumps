@@ -36,6 +36,7 @@ export default function TermsPage() {
         install and use it on the number of Macs stated at purchase (currently {pricing.macsInWords}
         ). {pricing.model.terms}
       </p>
+      <p>{pricing.scope}</p>
       <p>
         The app activates your license online and checks in occasionally to keep it current. You may
         deactivate a Mac and move the license to another one. Do not share, resell, or publish your
