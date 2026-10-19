@@ -107,7 +107,7 @@ const featured: readonly {
     lede: 'Save the text you reuse and paste it from the Command Palette, or turn on keyword expansion and type a short keyword in any app.',
     features: [
       'With keyword expansion on, keywords like ;ship expand as you type',
-      'Sensitive snippets stay hidden and out of search',
+      'Sensitive snippets keep their text hidden and out of search',
       'Bring your snippets over from Alfred'
     ],
     options: { label: 'Use them', values: ['⌘5 in the palette', 'Quick Search', 'Type a keyword'] },

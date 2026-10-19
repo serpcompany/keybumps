@@ -199,7 +199,7 @@ export const plugins: readonly Plugin[] = [
       },
       {
         q: 'Can it find my snippets?',
-        a: 'Yes. It finds snippets by keyword, by name, and by a word in their text, and shows each one’s text under its name. A keyword typed in full comes first. Return or ⌘C copies one, and ⌘P pastes it into the app you were using. With Emoji Picker on, it finds emoji too, which copy and paste the same way.'
+        a: 'Yes. It finds snippets by keyword, by name, and by a word in their text, and shows each one’s text under its name. A sensitive snippet’s text stays hidden and is never searched, but its keyword and name still find it. A keyword typed in full comes first. Return or ⌘C copies one, and ⌘P pastes it into the app you were using. With Emoji Picker on, it finds emoji too, which copy and paste the same way.'
       },
       {
         q: 'Does it learn what I open?',
@@ -670,7 +670,7 @@ export const plugins: readonly Plugin[] = [
       'Save text with a name and an optional keyword, such as ;ship',
       'Return or ⌘C copies a snippet, and ⌘P pastes it into the app you’re using',
       'Expand keywords as you type in any app, then get your clipboard back; never in password fields or in Keybumps itself',
-      'Sensitive snippets hide their text in the Command Palette and Settings, stay out of search, and are kept in the Keychain',
+      'Sensitive snippets keep their text hidden in the Command Palette and Settings, out of search, and in the Keychain; their keyword and name still find them',
       'Quick Search finds snippets by keyword, name, or a word in their text',
       'Import an Alfred snippets export',
       'Sort snippets by column, and select several to delete them or mark them sensitive together'
