@@ -401,7 +401,7 @@ export const plugins: readonly Plugin[] = [
       },
       {
         q: 'Where do I find my recordings?',
-        a: 'In the ScreenGrabs tab (⌘3), beside your screenshots, newest first: every recording, wherever it’s saved. Return copies one, ⌘Return opens it in the recording window, and with the search field empty, Space plays it in Quick Look. Delete asks, then moves it to the Trash.'
+        a: 'In the ScreenGrabs tab (⌘3), beside your screenshots, newest first: every recording, wherever it’s saved. Return copies one, ⌘E (or ⌘Return) opens it in the recording window, and with the search field empty, Space plays it in Quick Look. Delete asks, then moves it to the Trash.'
       }
     ],
     keeps: [

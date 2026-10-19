@@ -367,25 +367,27 @@ describe('plugin page guides', () => {
   })
 
   it('pastes with ⌘V, never ⌘Return, which edits in ScreenGrabs, reveals in Finder in Search, and saves and pastes in Translate (#370, #552)', () => {
-    const pluginText = plugins.flatMap(plugin => [
+    const textOf = (plugin: (typeof plugins)[number]) => [
       ...plugin.overview,
       ...plugin.features,
       ...plugin.howTo.map(step => step.text),
       ...plugin.faq.flatMap(item => [item.q, item.a]),
       ...plugin.keeps,
       ...[...plugin.permissions, ...(plugin.optionalPermissions ?? [])].map(item => item.reason)
-    ])
+    ]
     // Every page and component under src/app/, such as the home page and the privacy page.
     const appDir = fileURLToPath(new URL('../app/', import.meta.url))
     const pageText = readdirSync(appDir, { recursive: true, encoding: 'utf8' })
       .filter(file => file.endsWith('.tsx'))
       .map(file => readFileSync(join(appDir, file), 'utf8'))
     const commandReturn = /⌘(Return|↵|↩)[^;,.]*\b(past|cop|sav)\w*/gi
-    // Translate's ⌘Return saves and pastes, because ⌘V is its search field's.
-    const claims = [...pluginText, ...pageText]
-      .flatMap(text => text.match(commandReturn) ?? [])
-      .filter(claim => !/\bsav/i.test(claim))
-    expect(claims).toEqual([])
+    const claimsIn = (text: string[]) => text.flatMap(line => line.match(commandReturn) ?? [])
+    const otherText = plugins.filter(plugin => plugin.slug !== 'translation').flatMap(textOf)
+    expect(claimsIn([...otherText, ...pageText])).toEqual([])
+    // Translate's ⌘Return saves and pastes, because ⌘V is its search field's: its own text may
+    // say so, and nothing else may.
+    const translateClaims = claimsIn(textOf(pluginFor('translation')))
+    expect(translateClaims.filter(claim => !/\bsav/i.test(claim))).toEqual([])
     // Each tab where ⌘V pastes lists Accessibility, which the paste uses.
     for (const slug of [
       'clipboard-history',
