@@ -177,13 +177,13 @@ export const plugins: readonly Plugin[] = [
     isDefault: true,
     overview: [
       'Quick Search opens the apps, files, and folders on your Mac from the keyboard. Press ⌘ Space, type a few letters, and press Return to open the result.',
-      'It is the first tab of the Command Palette. Besides apps, files, and folders, it finds your snippets by keyword or name, and typing a plugin’s name, such as “dictation” or “snippets”, takes you straight to it.'
+      'It is the first tab of the Command Palette. Besides apps, files, and folders, it finds your snippets by keyword, name, or a word in their text, and typing a plugin’s name, such as “dictation” or “snippets”, takes you straight to it.'
     ],
     features: [
       'Open apps, files, and folders without leaving the keyboard',
       'Recent Items: what you last opened from Quick Search, listed while the search is empty',
       'Apps and commands you pick more often rank higher, weighed against how well they match',
-      'Finds snippets by keyword and name; a keyword typed in full comes first',
+      'Finds snippets by keyword, name, or a word in their text; a keyword typed in full comes first',
       'Type a plugin’s name to go to it, or open Keybumps Settings',
       'If Spotlight uses ⌘ Space, Keybumps turns off only Spotlight’s shortcut; Spotlight search stays available'
     ],
@@ -199,7 +199,7 @@ export const plugins: readonly Plugin[] = [
       },
       {
         q: 'Can it find my snippets?',
-        a: 'Yes. It finds snippets by keyword and by name, and a keyword typed in full comes first. Return or ⌘C copies one, and ⌘P pastes it into the app you were using. With Emoji Picker on, it finds emoji too, which copy and paste the same way.'
+        a: 'Yes. It finds snippets by keyword, by name, and by a word in their text, and shows each one’s text under its name. A sensitive snippet’s text stays hidden and is never searched, but its keyword and name still find it. A keyword typed in full comes first. Return or ⌘C copies one, and ⌘P pastes it into the app you were using. With Emoji Picker on, it finds emoji too, which copy and paste the same way.'
       },
       {
         q: 'Does it learn what I open?',
@@ -670,8 +670,8 @@ export const plugins: readonly Plugin[] = [
       'Save text with a name and an optional keyword, such as ;ship',
       'Return or ⌘C copies a snippet, and ⌘P pastes it into the app you’re using',
       'Expand keywords as you type in any app, then get your clipboard back; never in password fields or in Keybumps itself',
-      'Sensitive snippets hide their text in the Command Palette and Settings, stay out of search, and are kept in the Keychain',
-      'Quick Search finds snippets by keyword and name',
+      'Sensitive snippets keep their text hidden in the Command Palette and Settings, out of search, and in the Keychain; their keyword and name still find them',
+      'Quick Search finds snippets by keyword, name, or a word in their text',
       'Import an Alfred snippets export',
       'Sort snippets by column, and select several to delete them or mark them sensitive together'
     ],
