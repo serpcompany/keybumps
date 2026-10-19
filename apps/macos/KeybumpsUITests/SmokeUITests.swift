@@ -51,10 +51,11 @@ final class SmokeUITests: XCTestCase {
 
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 5), "The sidebar has the stock search field")
-        search.click()
-        search.typeText("clip")
+        // Typed at the app, not the field, so the rows filter only if Command-F gave the field the keyboard.
+        app.typeKey("f", modifierFlags: .command)
+        app.typeText("clip")
         XCTAssertTrue(element("settings.sidebar.clipboard").waitForExistence(timeout: 5))
-        XCTAssertTrue(element("settings.sidebar.general").waitForNonExistence(timeout: 5), "Search filters the rows")
+        XCTAssertTrue(element("settings.sidebar.general").waitForNonExistence(timeout: 5), "Command-F focuses search, and search filters the rows")
 
         search.typeText("zzz")
         XCTAssertTrue(element("settings.sidebar.noResults").waitForExistence(timeout: 5), "A search that finds nothing says so")
