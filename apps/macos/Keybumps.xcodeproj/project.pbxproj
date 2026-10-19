@@ -283,6 +283,7 @@
 		C9A712A7EBBCFA196D2B2C84 /* ScreencastOverlaysWiringTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B903359660FF9F039C776454 /* ScreencastOverlaysWiringTests.swift */; };
 		CA2667F7C8770937CAB7F89F /* ScreencastCapturesSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B004FB7A2954A79900D58DE0 /* ScreencastCapturesSettings.swift */; };
 		CA4B582384C2E5F823005E8D /* ScreengrabsPaletteContentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5107BC225B4C95450E4C2799 /* ScreengrabsPaletteContentTests.swift */; };
+		CA6C916DDD0452B98915CF62 /* UpdateRenewalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B95831FC110D6075E1AAEEC0 /* UpdateRenewalTests.swift */; };
 		CAF0D8445DF2139E92F3C873 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = B51FAB2B198D5DDDE9DB256B /* WhisperKit */; };
 		CBC867F62D30E8C568A35C78 /* LICENSE.argmax-oss-swift in Resources */ = {isa = PBXBuildFile; fileRef = E157807C893115811A044F4A /* LICENSE.argmax-oss-swift */; };
 		CC9C3B70B132461EB151193B /* DictationHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4E5DACAF82C804C00620C7F /* DictationHistoryView.swift */; };
@@ -312,6 +313,7 @@
 		DC14F6DA4D191B22EEB7488C /* MenuBarStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A4D3B83F7BE33EDDE1D0250 /* MenuBarStatus.swift */; };
 		DC5D1578C1100C5D5B0471DC /* Capability.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C53D92EB611917B9E44212C /* Capability.swift */; };
 		DDB4B047889E220BBDB9D684 /* ScreencastEditOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BE9CC77AEBB0765A585FB6D /* ScreencastEditOverlay.swift */; };
+		DE404355E600A4E9CB2F4C73 /* UpdateYearFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD64FD885F3CE9F1B0F12855 /* UpdateYearFilter.swift */; };
 		DEBF5A3933E405A4EB8A14A5 /* MicrophonePermissionFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A364445928DF760A5349FFE /* MicrophonePermissionFlowTests.swift */; };
 		DEC59CAAAE193A1988206761 /* ScreencastReviewFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 433D39076650EF39E2EAE526 /* ScreencastReviewFiles.swift */; };
 		DF3C6036471441621CD4CBC1 /* KeywordExpansion.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6EB3F95A9FA81521835A693 /* KeywordExpansion.swift */; };
@@ -641,6 +643,7 @@
 		B6327E049E43AE9352EE8171 /* PolarLicenseProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolarLicenseProvider.swift; sourceTree = "<group>"; };
 		B8303524C1C39CD33356B40F /* TranslatePaletteContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslatePaletteContent.swift; sourceTree = "<group>"; };
 		B903359660FF9F039C776454 /* ScreencastOverlaysWiringTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreencastOverlaysWiringTests.swift; sourceTree = "<group>"; };
+		B95831FC110D6075E1AAEEC0 /* UpdateRenewalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateRenewalTests.swift; sourceTree = "<group>"; };
 		BB451C44F8A86BD957F10A8C /* ScreenCaptureKitCaptureSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenCaptureKitCaptureSystem.swift; sourceTree = "<group>"; };
 		BBAC8C5B3255FDDF35DAC7B1 /* ScreencastControlBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreencastControlBar.swift; sourceTree = "<group>"; };
 		BBE8144F23899E23DB88E5B1 /* QuickSearchCommandTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickSearchCommandTests.swift; sourceTree = "<group>"; };
@@ -687,6 +690,7 @@
 		D9A93B963A93E2394EA3F990 /* ScreencastAudioMixdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreencastAudioMixdown.swift; sourceTree = "<group>"; };
 		DB6B9ABC58C0008C3E05C155 /* TextPaster.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextPaster.swift; sourceTree = "<group>"; };
 		DC80479B99FBFBAE0AA7A0F6 /* CapabilityPaletteContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapabilityPaletteContent.swift; sourceTree = "<group>"; };
+		DD64FD885F3CE9F1B0F12855 /* UpdateYearFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateYearFilter.swift; sourceTree = "<group>"; };
 		DEED3BE59B403C1032BD4A4E /* ScreenshotAnnotationRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotAnnotationRenderer.swift; sourceTree = "<group>"; };
 		DF26C7E27900E5FC321564B0 /* ScreencastCaptureContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreencastCaptureContext.swift; sourceTree = "<group>"; };
 		DFF0A12F7876C599C9C3433E /* issue-31-live-shortcuts.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "issue-31-live-shortcuts.json"; sourceTree = "<group>"; };
@@ -1049,6 +1053,7 @@
 				44D821EC6664B978596FDDFD /* UnitTestHostTests.swift */,
 				3F710416110B79E7BA260C96 /* UpdateControllerTests.swift */,
 				54B168FD3BBC8DE647021EFF /* UpdateReleaseScriptTests.swift */,
+				B95831FC110D6075E1AAEEC0 /* UpdateRenewalTests.swift */,
 				0D9BB7DAAA4089817B830BCD /* UpdateVisibilityTests.swift */,
 				B59F298F120874DF78C6CF86 /* WAVHeaderRepairTests.swift */,
 				FEA66B12E4521124871A028B /* WhisperCppEngineTests.swift */,
@@ -1421,6 +1426,7 @@
 				E17017DC2EA54085B3C86D75 /* SparkleUpdateController.swift */,
 				C13C5DD5F845097BB1BA796D /* UpdateController.swift */,
 				2DE541948E34E30A0C55C182 /* UpdateReminder.swift */,
+				DD64FD885F3CE9F1B0F12855 /* UpdateYearFilter.swift */,
 				CA9CCB5D3E923DC4533BB853 /* WhatsNew.swift */,
 			);
 			path = Updates;
@@ -1625,7 +1631,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if [ \"$CONFIGURATION\" = \"Release\" ]; then\n  if /usr/bin/env | /usr/bin/grep -q '^SUPERMAC_'; then\n    echo \"error: legacy SUPERMAC_* release variables are forbidden\"\n    exit 1\n  fi\n  case \"$KEYBUMPS_UPDATE_FEED_URL\" in\n    \"https://updates.keybumps.app/appcast.xml\"|\"https://updates.keybumps.app/staging/appcast.xml\") ;;\n    *) echo \"error: KEYBUMPS_UPDATE_FEED_URL must be a canonical Keybumps feed\"; exit 1 ;;\n  esac\n  if [ -z \"$KEYBUMPS_UPDATE_PUBLIC_KEY\" ]; then\n    echo \"error: KEYBUMPS_UPDATE_PUBLIC_KEY is required for Release builds\"\n    exit 1\n  fi\nfi\n";
+			shellScript = "if [ \"$CONFIGURATION\" = \"Release\" ]; then\n  if /usr/bin/env | /usr/bin/grep -q '^SUPERMAC_'; then\n    echo \"error: legacy SUPERMAC_* release variables are forbidden\"\n    exit 1\n  fi\n  case \"$KEYBUMPS_UPDATE_FEED_URL\" in\n    \"https://updates.keybumps.app/appcast.xml\"|\"https://updates.keybumps.app/staging/appcast.xml\") ;;\n    *) echo \"error: KEYBUMPS_UPDATE_FEED_URL must be a canonical Keybumps feed\"; exit 1 ;;\n  esac\n  if [ -z \"$KEYBUMPS_UPDATE_PUBLIC_KEY\" ]; then\n    echo \"error: KEYBUMPS_UPDATE_PUBLIC_KEY is required for Release builds\"\n    exit 1\n  fi\n  case \"$KEYBUMPS_RELEASE_DATE\" in\n    \"\"|[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) ;;\n    *) echo \"error: KEYBUMPS_RELEASE_DATE must be a UTC time like 2026-10-19T12:00:00Z\"; exit 1 ;;\n  esac\nfi\n";
 		};
 		8D4CE9BB23FAE174BD7ABA58 /* Bundle every release's notes for Settings › Changelog */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -1851,6 +1857,7 @@
 				3DE0285ABEBA4DBB8627DD25 /* UnitTestHost.swift in Sources */,
 				952BFAC50F37CBE088DC6D6F /* UpdateController.swift in Sources */,
 				086C97A2D77C73E96872A323 /* UpdateReminder.swift in Sources */,
+				DE404355E600A4E9CB2F4C73 /* UpdateYearFilter.swift in Sources */,
 				FD4C24B2FDA01E8D4DE1F177 /* WAVHeaderRepair.swift in Sources */,
 				839ADB854B9177E47955376F /* WhatsNew.swift in Sources */,
 				4385C3439DE98055F31D79BC /* WhisperCppCompletedAudioTranscriber.swift in Sources */,
@@ -1973,6 +1980,7 @@
 				011D4C30FD4FF1168AD3B32B /* UnitTestHostTests.swift in Sources */,
 				F2C72DC369FD3FDD4586E311 /* UpdateControllerTests.swift in Sources */,
 				98D0993E91F7EFD2B0E346D1 /* UpdateReleaseScriptTests.swift in Sources */,
+				CA6C916DDD0452B98915CF62 /* UpdateRenewalTests.swift in Sources */,
 				57ABC6624CE28646EA5FC0FC /* UpdateVisibilityTests.swift in Sources */,
 				50D51089240D1FFB07462408 /* WAVHeaderRepairTests.swift in Sources */,
 				38D319928497FD8AC4A7FD3E /* WhisperCppEngineTests.swift in Sources */,
@@ -2138,6 +2146,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				KEYBUMPS_CRASH_REPORTS_DSN = "";
+				KEYBUMPS_RELEASE_DATE = "";
 				KEYBUMPS_UPDATE_FEED_URL = "";
 				KEYBUMPS_UPDATE_PUBLIC_KEY = "";
 				MACOSX_DEPLOYMENT_TARGET = 14.2;
@@ -2244,6 +2253,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				KEYBUMPS_CRASH_REPORTS_DSN = "https://9041bf71456c1490b110d9ca240ef35a@o4505803284873216.ingest.us.sentry.io/4512206336950272";
+				KEYBUMPS_RELEASE_DATE = "";
 				KEYBUMPS_UPDATE_FEED_URL = "";
 				KEYBUMPS_UPDATE_PUBLIC_KEY = "";
 				MACOSX_DEPLOYMENT_TARGET = 14.2;

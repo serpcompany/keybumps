@@ -425,6 +425,7 @@ final class AppModel {
         updater.onChange = { [weak self] snapshot in self?.updateSnapshot = snapshot }
         updater.onShowVersionHistory = { [weak self] in self?.openVersionHistory() }
         licensing.onChange = { [weak self] snapshot in self?.licenseDidChange(snapshot) }
+        updater.setUpdateYear(licenseSnapshot.updateYear)
         refreshDetectorState()
         refreshUpdateAttention()
     }
@@ -510,6 +511,7 @@ final class AppModel {
     private func licenseDidChange(_ snapshot: LicenseSnapshot) {
         let wasLicensed = isLicensed
         licenseSnapshot = snapshot
+        updater.setUpdateYear(snapshot.updateYear)
         // Locked runs no capability, so there's nothing to set up.
         if !snapshot.isEntitled { endPermissionWalkthrough(); dismissDictationSetupCards() }
         guard wasLicensed != snapshot.isEntitled, isStarted, preferences.didCompleteOnboarding else { return }

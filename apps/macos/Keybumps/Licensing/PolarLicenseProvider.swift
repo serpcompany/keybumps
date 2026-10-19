@@ -1,12 +1,20 @@
 import Foundation
 
+/// What Polar says about a granted key's dates: its own expiry, when it was granted (`created_at`),
+/// and the last day its customer's renewals paid for (`keybumps_updates_until` metadata, ADR 0011).
+struct LicenseKeyDates: Equatable, Sendable {
+    var expiresAt: Date?
+    var purchasedAt: Date?
+    var renewedThrough: Date?
+}
+
 struct LicenseActivation: Equatable, Sendable {
     var activationID: String
-    var expiresAt: Date?
+    var dates = LicenseKeyDates()
 }
 
 enum LicenseValidation: Equatable, Sendable {
-    case granted(expiresAt: Date?)
+    case granted(LicenseKeyDates)
     /// Revoked or refunded, disabled, expired, unknown, or this activation removed. Polar answers
     /// all of these with 404, so they can't be told apart.
     case notAccepted
@@ -69,7 +77,7 @@ struct PolarLicenseProvider: LicenseProviding {
         switch response.statusCode {
         case 200:
             let body = try decode(ActivationBody.self, from: data)
-            return LicenseActivation(activationID: body.id, expiresAt: body.licenseKey.expiresAt.flatMap(PolarDates.parse))
+            return LicenseActivation(activationID: body.id, dates: body.licenseKey.dates)
         case 404, 422: throw LicenseActionError.invalidKey
         case 403: throw LicenseActionError.notPermitted
         default: throw LicenseActionError.unexpected
@@ -82,10 +90,9 @@ struct PolarLicenseProvider: LicenseProviding {
         )
         switch response.statusCode {
         case 200:
-            let body = try decode(ValidationBody.self, from: data)
-            return body.status == "granted"
-                ? .granted(expiresAt: body.expiresAt.flatMap(PolarDates.parse))
-                : .notAccepted
+            let body = try decode(KeyBody.self, from: data)
+            guard let status = body.status else { throw LicenseActionError.unexpected }
+            return status == "granted" ? .granted(body.dates) : .notAccepted
         case 404: return .notAccepted
         default: throw LicenseActionError.unexpected
         }
@@ -124,19 +131,32 @@ struct PolarLicenseProvider: LicenseProviding {
     }
 
     private struct ActivationBody: Decodable {
-        struct Key: Decodable {
-            let expiresAt: String?
-            enum CodingKeys: String, CodingKey { case expiresAt = "expires_at" }
-        }
         let id: String
-        let licenseKey: Key
+        let licenseKey: KeyBody
         enum CodingKeys: String, CodingKey { case id, licenseKey = "license_key" }
     }
 
-    private struct ValidationBody: Decodable {
-        let status: String
-        let expiresAt: String?
-        enum CodingKeys: String, CodingKey { case status, expiresAt = "expires_at" }
+    /// The key in a validate answer, or in an activate answer's `license_key`. A date Keybumps can't
+    /// read counts as unknown rather than failing the check; validation needs `status`.
+    private struct KeyBody: Decodable {
+        let status: String?
+        let dates: LicenseKeyDates
+
+        private enum CodingKeys: String, CodingKey { case status, expiresAt = "expires_at", createdAt = "created_at", customer }
+        private enum CustomerKeys: String, CodingKey { case metadata }
+        private enum MetadataKeys: String, CodingKey { case updatesUntil = "keybumps_updates_until" }
+
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            status = try? container.decodeIfPresent(String.self, forKey: .status)
+            let metadata = try? container.nestedContainer(keyedBy: CustomerKeys.self, forKey: .customer)
+                .nestedContainer(keyedBy: MetadataKeys.self, forKey: .metadata)
+            dates = LicenseKeyDates(
+                expiresAt: (try? container.decodeIfPresent(String.self, forKey: .expiresAt)).flatMap(PolarDates.parse),
+                purchasedAt: (try? container.decodeIfPresent(String.self, forKey: .createdAt)).flatMap(PolarDates.parse),
+                renewedThrough: (try? metadata?.decodeIfPresent(String.self, forKey: .updatesUntil)).flatMap(UpdateYear.day)
+            )
+        }
     }
 }
 

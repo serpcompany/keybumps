@@ -493,3 +493,90 @@ final class UpdateReleaseScriptTests: XCTestCase {
         try runProcess(executable, arguments, from: appFolder, environment: environment)
     }
 }
+
+/// ADR 0011: the release script adds the release date to the build's appcast item, which the app
+/// checks against the license's update year, and signs the feed again.
+@Suite("Appcast release date")
+struct AppcastReleaseDateTests {
+    private let script = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent("scripts/stamp-appcast-release-date.sh")
+
+    /// A folder with a signed-looking appcast for build 4033, and a `sign_update` that records its
+    /// arguments and signs by appending a signature comment, as Sparkle's does.
+    private func makeFixture() throws -> (work: URL, appcast: URL, tools: URL) {
+        let work = FileManager.default.temporaryDirectory.appendingPathComponent("release-date-\(UUID().uuidString)")
+        let tools = work.appendingPathComponent("tools")
+        try FileManager.default.createDirectory(at: tools, withIntermediateDirectories: true)
+        let signUpdate = tools.appendingPathComponent("sign_update")
+        try """
+        #!/bin/zsh
+        print -r -- "$@" >> "${0:h}/calls"
+        print '<!-- sparkle-signatures:\nedSignature: test\nlength: 1\n-->' >> "${@[-1]}"
+        """.write(to: signUpdate, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: signUpdate.path)
+        let appcast = work.appendingPathComponent("appcast.xml")
+        try """
+        <?xml version="1.0" standalone="yes"?><!-- sparkle-sign-warning:
+        IMPORTANT: This file was signed by Sparkle.
+        --><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+            <channel>
+                <item>
+                    <title>0.0.3-beta.28</title>
+                    <sparkle:version>4033</sparkle:version>
+                    <sparkle:shortVersionString>0.0.3-beta.28</sparkle:shortVersionString>
+                    <enclosure url="https://updates.keybumps.app/releases/4033/Keybumps-0.0.3-beta.28.zip" length="1" type="application/octet-stream" sparkle:edSignature="x"></enclosure>
+                </item>
+            </channel>
+        </rss><!-- sparkle-signatures:
+        edSignature: old
+        length: 1
+        -->
+        """.write(to: appcast, atomically: true, encoding: .utf8)
+        return (work, appcast, tools)
+    }
+
+    private func stamp(_ arguments: [String], in work: URL) throws -> (status: Int32, output: String) {
+        try runProcess(script, arguments, from: work, environment: ["KEYBUMPS_SPARKLE_KEY_FILE": "/fixture/key"])
+    }
+
+    @Test("The build's item gets the release date in Keybumps's namespace, and the feed is signed again")
+    func stampsAndSigns() throws {
+        let (work, appcast, tools) = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: work) }
+
+        let result = try stamp([appcast.path, "4033", "2026-10-19T12:00:00Z", tools.path], in: work)
+        #expect(result.status == 0, "\(result.output)")
+        let feed = try String(contentsOf: appcast, encoding: .utf8)
+        #expect(feed.contains(#"<rss xmlns:keybumps="https://keybumps.app/xml-namespaces/appcast" "#))
+        #expect(feed.contains("<sparkle:version>4033</sparkle:version>\n            <keybumps:releaseDate>2026-10-19T12:00:00Z</keybumps:releaseDate>"))
+        #expect(UpdateCandidate.releaseDateKey == "keybumps:releaseDate", "The name Sparkle gives the element")
+        let calls = try String(contentsOf: tools.appendingPathComponent("calls"), encoding: .utf8)
+        // The script resolves the path, which may add /private to a temporary folder.
+        #expect(calls.hasPrefix("--ed-key-file /fixture/key /") && calls.hasSuffix("/\(work.lastPathComponent)/appcast.xml\n"), "\(calls)")
+
+        // What validate-update-release.sh reads back.
+        let read = try runProcess(URL(fileURLWithPath: "/usr/bin/xmllint"), [
+            "--xpath", "string(//*[local-name()='item'][1]/*[local-name()='releaseDate'])", appcast.path
+        ], from: work)
+        #expect(read.output.trimmingCharacters(in: .whitespacesAndNewlines) == "2026-10-19T12:00:00Z")
+
+        let again = try stamp([appcast.path, "4033", "2026-10-19T12:00:00Z", tools.path], in: work)
+        #expect(again.status == 70)
+        #expect(again.output.contains("already carries a release date"))
+    }
+
+    @Test("A date that isn't a UTC time, or no item for the build, changes nothing", arguments: [
+        ["4033", "2026-10-19"], ["4033", "2026-10-19T12:00:00+02:00"], ["4034", "2026-10-19T12:00:00Z"],
+    ])
+    func failsClosed(arguments: [String]) throws {
+        let (work, appcast, tools) = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: work) }
+        let before = try Data(contentsOf: appcast)
+        let result = try stamp([appcast.path] + arguments + [tools.path], in: work)
+        #expect(result.status != 0, "\(result.output)")
+        #expect(try Data(contentsOf: appcast) == before)
+        #expect(!FileManager.default.fileExists(atPath: tools.appendingPathComponent("calls").path))
+    }
+}

@@ -47,6 +47,8 @@ actual_bundle=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$info_pl
 actual_build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$info_plist")
 actual_version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$info_plist")
 actual_feed=$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$info_plist")
+# Empty in builds made without build-update-release.sh, such as fixtures.
+actual_release_date=$(/usr/libexec/PlistBuddy -c 'Print :KBBuildReleaseDate' "$info_plist" 2>/dev/null || true)
 public_key=$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$info_plist")
 requires_signed_feed=$(/usr/libexec/PlistBuddy -c 'Print :SURequireSignedFeed' "$info_plist")
 verifies_before_extraction=$(/usr/libexec/PlistBuddy -c 'Print :SUVerifyUpdateBeforeExtraction' "$info_plist")
@@ -108,12 +110,19 @@ appcast_version=$(/usr/bin/xmllint --xpath "string(//*[local-name()='item'][1]/*
 appcast_short_version=$(/usr/bin/xmllint --xpath "string(//*[local-name()='item'][1]/*[local-name()='shortVersionString'])" "$appcast_path")
 minimum_system_version=$(/usr/bin/xmllint --xpath "string(//*[local-name()='item'][1]/*[local-name()='minimumSystemVersion'])" "$appcast_path")
 hardware_requirements=$(/usr/bin/xmllint --xpath "string(//*[local-name()='item'][1]/*[local-name()='hardwareRequirements'])" "$appcast_path")
+appcast_release_date=$(/usr/bin/xmllint --xpath "string(//*[local-name()='item'][1]/*[local-name()='releaseDate'])" "$appcast_path")
 [[ -n "$enclosure_url" && -n "$enclosure_signature" && -n "$enclosure_length" ]] || { print -u2 "appcast enclosure metadata is incomplete"; exit 70; }
 [[ -n "$release_notes_url" && -n "$release_notes_signature" && -n "$release_notes_length" ]] || { print -u2 "appcast linked release-note metadata is incomplete"; exit 70; }
 [[ "$appcast_version" == "$expected_build" ]] || { print -u2 "appcast build mismatch"; exit 70; }
 [[ "$appcast_short_version" == "$expected_version" ]] || { print -u2 "appcast marketing version mismatch"; exit 70; }
 [[ "$minimum_system_version" == 14.2 || "$minimum_system_version" == 14.2.0 ]] || { print -u2 "minimum macOS requirement missing"; exit 70; }
 [[ "$hardware_requirements" == arm64 ]] || { print -u2 "arm64 requirement missing"; exit 70; }
+# The app and its appcast item carry the same release date, which the update year is checked
+# against (ADR 0011). Releases must have one; fixtures may leave both out.
+if [[ "$fixture_mode" != --skip-apple-trust-for-fixture || -n "$actual_release_date$appcast_release_date" ]]; then
+  [[ "$actual_release_date" =~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' ]] || { print -u2 "the app doesn't carry a UTC release date (KBBuildReleaseDate)"; exit 70; }
+  [[ "$appcast_release_date" == "$actual_release_date" ]] || { print -u2 "appcast release date doesn't match the app's KBBuildReleaseDate"; exit 70; }
+fi
 
 actual_size=$(/usr/bin/stat -f '%z' "$archive_path")
 [[ "$enclosure_length" == "$actual_size" ]] || { print -u2 "appcast archive length does not match the local archive"; exit 70; }

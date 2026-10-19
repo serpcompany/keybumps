@@ -73,7 +73,7 @@ struct PolarLicenseProviderTests {
         http.responses = [(200, #"{"id":"act-1","license_key":{"status":"granted","expires_at":"2027-01-02T03:04:05.123Z"}}"#)]
         let activation = try await provider(http).activate(key: "KEYBUMPS-1", label: "mac-abc")
         #expect(activation.activationID == "act-1")
-        #expect(activation.expiresAt == PolarDates.parse("2027-01-02T03:04:05.123Z"))
+        #expect(activation.dates.expiresAt == PolarDates.parse("2027-01-02T03:04:05.123Z"))
         #expect(http.requests[0].url?.absoluteString == "https://polar.test/v1/customer-portal/license-keys/activate")
         #expect(http.requests[0].httpMethod == "POST")
         #expect(http.body(0) == ["key": "KEYBUMPS-1", "organization_id": "org-1", "label": "mac-abc"])
@@ -105,11 +105,43 @@ struct PolarLicenseProviderTests {
             (500, ""),
         ]
         let polar = provider(http)
-        #expect(try await polar.validate(key: "K", activationID: "A") == .granted(expiresAt: nil))
+        #expect(try await polar.validate(key: "K", activationID: "A") == .granted(LicenseKeyDates()))
         #expect(try await polar.validate(key: "K", activationID: "A") == .notAccepted)
         #expect(try await polar.validate(key: "K", activationID: "A") == .notAccepted)
         await #expect(throws: LicenseActionError.unexpected) { try await polar.validate(key: "K", activationID: "A") }
         #expect(http.body(0) == ["key": "K", "organization_id": "org-1", "activation_id": "A"])
+    }
+
+    @Test("Activation and validation read the purchase date and the renewal metadata (ADR 0011)")
+    func updateYearDates() async throws {
+        let http = RecordingHTTPClient()
+        let key = #""created_at":"2026-11-05T10:00:00.123Z","expires_at":null,"customer":{"id":"c","metadata":{"keybumps_updates_until":"2028-11-05","other":3}}"#
+        http.responses = [
+            (200, #"{"id":"act-1","license_key":{"status":"granted",\#(key)}}"#),
+            (200, #"{"status":"granted",\#(key)}"#),
+        ]
+        let expected = LicenseKeyDates(
+            expiresAt: nil,
+            purchasedAt: PolarDates.parse("2026-11-05T10:00:00.123Z"),
+            renewedThrough: UpdateYear.day("2028-11-05")
+        )
+        let polar = provider(http)
+        #expect(try await polar.activate(key: "K", label: "L").dates == expected)
+        #expect(try await polar.validate(key: "K", activationID: "A") == .granted(expected))
+    }
+
+    @Test("Dates Keybumps can't read count as unknown; validation still needs a status")
+    func unreadableDates() async throws {
+        let http = RecordingHTTPClient()
+        http.responses = [
+            (200, #"{"status":"granted","created_at":12,"customer":{"metadata":{"keybumps_updates_until":20281105}}}"#),
+            (200, #"{"status":"granted","customer":null}"#),
+            (200, #"{"created_at":"2026-11-05T10:00:00Z"}"#),
+        ]
+        let polar = provider(http)
+        #expect(try await polar.validate(key: "K", activationID: "A") == .granted(LicenseKeyDates()))
+        #expect(try await polar.validate(key: "K", activationID: "A") == .granted(LicenseKeyDates()))
+        await #expect(throws: LicenseActionError.unexpected) { try await polar.validate(key: "K", activationID: "A") }
     }
 
     @Test("Deactivation succeeds when removed or already gone")
@@ -126,8 +158,8 @@ struct PolarLicenseProviderTests {
 // MARK: - Controller
 
 private final class FakeProvider: LicenseProviding, @unchecked Sendable {
-    var activation: Result<LicenseActivation, LicenseActionError> = .success(LicenseActivation(activationID: "act-1", expiresAt: nil))
-    var validation: Result<LicenseValidation, LicenseActionError> = .success(.granted(expiresAt: nil))
+    var activation: Result<LicenseActivation, LicenseActionError> = .success(LicenseActivation(activationID: "act-1"))
+    var validation: Result<LicenseValidation, LicenseActionError> = .success(.granted(LicenseKeyDates()))
     var deactivation: Result<Void, LicenseActionError> = .success(())
     private(set) var activatedLabels: [String] = []
     private(set) var validations = 0
@@ -226,7 +258,7 @@ struct LicenseControllerTests {
         let relaunched = LicenseController(provider: provider, store: store, device: FakeDevice(), now: { clock.now })
         #expect(relaunched.snapshot.state == .locked(.notAccepted))
 
-        provider.validation = .success(.granted(expiresAt: nil))
+        provider.validation = .success(.granted(LicenseKeyDates()))
         await controller.refresh(force: false)
         #expect(controller.snapshot.isEntitled)
     }
@@ -274,7 +306,7 @@ struct LicenseControllerTests {
         await controller.refresh(force: false)
         #expect(controller.snapshot.state == .locked(.needsCheck))
 
-        provider.validation = .success(.granted(expiresAt: nil))
+        provider.validation = .success(.granted(LicenseKeyDates()))
         await controller.refresh(force: false)
         #expect(controller.snapshot.isEntitled)
     }
@@ -296,6 +328,176 @@ struct LicenseControllerTests {
         await controller.deactivate()
         #expect(controller.snapshot.state == .unlicensed)
         #expect(store.check == nil)
+    }
+
+    @Test("Checks keep the purchase date and follow renewals up and down")
+    func updateYearFromChecks() async {
+        let clock = Clock()
+        let store = InMemoryLicenseStore(LicenseCheck(key: "K", activationID: "A", validatedAt: clock.now, expiresAt: nil))
+        let provider = FakeProvider()
+        let purchased = PolarDates.parse("2026-11-05T10:00:00Z")!
+        provider.validation = .success(.granted(LicenseKeyDates(purchasedAt: purchased, renewedThrough: UpdateYear.day("2028-11-05"))))
+        let (controller, _, _, _) = make(store: store, provider: provider, clock: clock)
+        #expect(controller.snapshot.updateYear == nil)
+        #expect(LicensePolicy.needsUpdateYear(store.check), "Launch checks at once to learn it")
+
+        await controller.refresh(force: true)
+        #expect(store.check?.purchasedAt == purchased)
+        #expect(controller.snapshot.updateYear?.lastDay == UpdateYear.day("2028-11-05"))
+        #expect(!LicensePolicy.needsUpdateYear(store.check))
+
+        // A refunded renewal takes its year back; an answer without the purchase date keeps the one known.
+        provider.validation = .success(.granted(LicenseKeyDates()))
+        await controller.refresh(force: true)
+        #expect(store.check?.purchasedAt == purchased)
+        #expect(controller.snapshot.updateYear?.lastDay == UpdateYear.day("2027-11-05"))
+    }
+
+    @Test("A build released after the update year Locks once activated, and a renewal unlocks it")
+    func newerBuildThanUpdateYear() async {
+        let clock = Clock()
+        let purchased = PolarDates.parse("2026-11-05T10:00:00Z")
+        let provider = FakeProvider()
+        provider.activation = .success(LicenseActivation(activationID: "act-1", dates: LicenseKeyDates(purchasedAt: purchased)))
+        let store = InMemoryLicenseStore()
+        let controller = LicenseController(
+            provider: provider, store: store, device: FakeDevice(), now: { clock.now },
+            releaseDate: PolarDates.parse("2027-12-01T09:00:00Z")
+        )
+        await controller.activate(key: "KEYBUMPS-1")
+        #expect(controller.snapshot.state == .locked(.releasedAfterUpdateYear))
+        #expect(controller.snapshot.updateYear?.lastDay == UpdateYear.day("2027-11-05"))
+
+        // While Locked, every chance to check is taken, so a renewal unlocks without Check Again.
+        provider.validation = .success(.granted(LicenseKeyDates(purchasedAt: purchased, renewedThrough: UpdateYear.day("2028-12-01"))))
+        await controller.refresh(force: false)
+        #expect(controller.snapshot.isEntitled)
+
+        await controller.deactivate()
+        #expect(controller.snapshot.updateYear == nil)
+    }
+
+    @Test("A QA candidate's test update year replaces the license's")
+    func testUpdateYear() {
+        let clock = Clock()
+        let store = InMemoryLicenseStore(LicenseCheck(
+            key: "K", activationID: "A", validatedAt: clock.now, expiresAt: nil, purchasedAt: PolarDates.parse("2026-11-05T10:00:00Z")
+        ))
+        let ended = UpdateYear(lastDay: UpdateYear.day("2026-10-01")!)
+        let controller = LicenseController(
+            provider: FakeProvider(), store: store, device: FakeDevice(), now: { clock.now },
+            releaseDate: UpdateYear.day("2026-10-19"), testUpdateYear: ended
+        )
+        #expect(controller.snapshot.updateYear == ended)
+        #expect(controller.snapshot.state == .locked(.releasedAfterUpdateYear))
+    }
+}
+
+// MARK: - Update year (ADR 0011)
+
+@Suite("Update year")
+struct UpdateYearTests {
+    private func day(_ value: String) -> Date { UpdateYear.day(value)! }
+    private func time(_ value: String) -> Date { PolarDates.parse(value)! }
+
+    @Test("A license bought before 2026-10-19 gets updates through 2027-10-19")
+    func earlierLicenses() {
+        #expect(UpdateYear(purchasedAt: time("2026-09-01T12:00:00Z"), renewedThrough: nil)?.lastDay == day("2027-10-19"))
+        #expect(UpdateYear(purchasedAt: time("2026-10-18T23:59:59Z"), renewedThrough: nil)?.lastDay == day("2027-10-19"))
+        #expect(UpdateYear(purchasedAt: time("2026-10-19T15:00:00Z"), renewedThrough: nil)?.lastDay == day("2027-10-19"))
+    }
+
+    @Test("Later licenses get the UTC day a year after purchase")
+    func laterLicenses() {
+        #expect(UpdateYear(purchasedAt: time("2026-11-05T23:30:00Z"), renewedThrough: nil)?.lastDay == day("2027-11-05"))
+        #expect(UpdateYear(purchasedAt: time("2028-02-29T08:00:00Z"), renewedThrough: nil)?.lastDay == day("2029-02-28"))
+    }
+
+    @Test("A renewal extends the year; an earlier renewal date changes nothing")
+    func renewals() {
+        let purchased = time("2026-11-05T10:00:00Z")
+        #expect(UpdateYear(purchasedAt: purchased, renewedThrough: day("2028-11-05"))?.lastDay == day("2028-11-05"))
+        #expect(UpdateYear(purchasedAt: purchased, renewedThrough: day("2027-01-01"))?.lastDay == day("2027-11-05"))
+    }
+
+    @Test("Without a purchase date the update year is unknown")
+    func unknown() {
+        #expect(UpdateYear(purchasedAt: nil, renewedThrough: day("2028-11-05")) == nil)
+    }
+
+    @Test("Releases through the whole last UTC day are covered; the next day's aren't")
+    func coverage() {
+        let year = UpdateYear(lastDay: day("2027-10-19"))
+        #expect(year.covers(releaseDate: time("2027-10-19T23:59:59Z")))
+        #expect(!year.covers(releaseDate: time("2027-10-20T00:00:00Z")))
+        #expect(!year.hasEnded(at: time("2027-10-19T23:59:59Z")))
+        #expect(year.hasEnded(at: time("2027-10-20T00:00:00Z")))
+    }
+
+    @Test("Renewal dates read as UTC days, full times included")
+    func days() {
+        #expect(UpdateYear.day("2028-11-05") == time("2028-11-05T00:00:00Z"))
+        #expect(UpdateYear.day("2028-11-05T18:30:00Z") == time("2028-11-05T00:00:00Z"))
+        #expect(UpdateYear.day("next year") == nil)
+    }
+
+    @Test("The last day shows as its UTC date, whatever the time zone")
+    func lastDayText() {
+        let text = UpdateYear(lastDay: day("2027-10-19")).lastDayText
+        #expect(text.contains("19") && text.contains("2027"), "\(text)")
+    }
+}
+
+@Suite("Update year policy")
+struct UpdateYearPolicyTests {
+    private let now = PolarDates.parse("2028-01-15T12:00:00Z")!
+    private func check(purchased: String?) -> LicenseCheck {
+        LicenseCheck(key: "K", activationID: "A", validatedAt: now, expiresAt: nil, purchasedAt: purchased.flatMap(PolarDates.parse))
+    }
+
+    @Test("The update year ending never locks the versions it covers")
+    func endingNeverLocks() {
+        let lapsed = check(purchased: "2026-11-05T10:00:00Z")
+        #expect(LicensePolicy.state(for: lapsed, now: now) == .active(lapsed))
+        #expect(LicensePolicy.state(for: lapsed, now: now, releaseDate: PolarDates.parse("2027-11-05T20:00:00Z")) == .active(lapsed))
+    }
+
+    @Test("A build released after the update year is Locked until a renewal covers it")
+    func newerBuildLocks() {
+        var lapsed = check(purchased: "2026-11-05T10:00:00Z")
+        let release = PolarDates.parse("2027-12-01T09:00:00Z")
+        #expect(LicensePolicy.state(for: lapsed, now: now, releaseDate: release) == .locked(.releasedAfterUpdateYear))
+        lapsed.renewedThrough = UpdateYear.day("2028-12-01")
+        #expect(LicensePolicy.state(for: lapsed, now: now, releaseDate: release) == .active(lapsed))
+    }
+
+    @Test("An unknown update year or release date counts as covered")
+    func unknownIsCovered() {
+        let old = check(purchased: nil)
+        #expect(LicensePolicy.state(for: old, now: now, releaseDate: PolarDates.parse("2030-01-01T00:00:00Z")) == .active(old))
+        let known = check(purchased: "2026-11-05T10:00:00Z")
+        #expect(LicensePolicy.state(for: known, now: now, releaseDate: nil) == .active(known))
+        #expect(LicensePolicy.needsUpdateYear(old) && !LicensePolicy.needsUpdateYear(known) && !LicensePolicy.needsUpdateYear(nil))
+    }
+
+    @Test("A refusal or a missed check still comes first")
+    func otherLocksFirst() {
+        let release = PolarDates.parse("2027-12-01T09:00:00Z")
+        var refused = check(purchased: "2026-11-05T10:00:00Z")
+        refused.notAccepted = true
+        #expect(LicensePolicy.state(for: refused, now: now, releaseDate: release) == .locked(.notAccepted))
+        var offline = check(purchased: "2026-11-05T10:00:00Z")
+        offline.validatedAt = now.addingTimeInterval(-46 * 86_400)
+        #expect(LicensePolicy.state(for: offline, now: now, releaseDate: release) == .locked(.needsCheck))
+    }
+
+    @Test("A given update year replaces the license's")
+    func givenUpdateYear() {
+        let current = check(purchased: "2027-12-01T10:00:00Z")
+        let release = PolarDates.parse("2028-01-10T00:00:00Z")
+        #expect(LicensePolicy.state(for: current, now: now, releaseDate: release) == .active(current))
+        let ended = UpdateYear(lastDay: UpdateYear.day("2028-01-01")!)
+        #expect(LicensePolicy.state(for: current, now: now, releaseDate: release, updateYear: ended) == .locked(.releasedAfterUpdateYear))
     }
 }
 

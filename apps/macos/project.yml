@@ -16,6 +16,8 @@ settings:
     ENABLE_HARDENED_RUNTIME: YES
     KEYBUMPS_UPDATE_FEED_URL: ""
     KEYBUMPS_UPDATE_PUBLIC_KEY: ""
+    # When this release was built, in UTC (ADR 0011). build-update-release.sh sets it; other builds carry none.
+    KEYBUMPS_RELEASE_DATE: ""
     # Where crash reports go (ADR 0007). Empty, so off, everywhere but Release builds.
     KEYBUMPS_CRASH_REPORTS_DSN: ""
   configs:
@@ -139,6 +141,10 @@ targets:
               echo "error: KEYBUMPS_UPDATE_PUBLIC_KEY is required for Release builds"
               exit 1
             fi
+            case "$KEYBUMPS_RELEASE_DATE" in
+              ""|[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) ;;
+              *) echo "error: KEYBUMPS_RELEASE_DATE must be a UTC time like 2026-10-19T12:00:00Z"; exit 1 ;;
+            esac
           fi
   KeybumpsTests:
     type: bundle.unit-test

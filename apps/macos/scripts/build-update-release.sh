@@ -30,6 +30,9 @@ release_notes="$repository_root/docs/releases/v$release_version.md"
 # The disk image's layout tool (scripts/dmg/requirements.txt) needs Python 3.10+; check before the long build.
 python3 -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null || { print -u2 "packaging the disk image needs python3 3.10 or later on PATH"; exit 69; }
 
+# The release date the app and its appcast item carry (ADR 0011): when this build was made, in UTC.
+release_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
 mkdir -p "$output_directory/archive" "$output_directory/export" "$output_directory/feed" "$output_directory/publication/assets" "$output_directory/publication/publish-last"
 cd "$app_root"
 # CI (KEYBUMPS_MANUAL_SIGNING=1) signs explicitly with the imported Developer ID certificate;
@@ -45,7 +48,7 @@ xcodebuild -project Keybumps.xcodeproj -scheme Keybumps-Release -configuration R
   -archivePath "$output_directory/archive/Keybumps.xcarchive" \
   MARKETING_VERSION="$release_version" CURRENT_PROJECT_VERSION="$release_build" \
   KEYBUMPS_UPDATE_FEED_URL="$feed_url" KEYBUMPS_UPDATE_PUBLIC_KEY="$public_key" \
-  KEYBUMPS_RELEASE_NOTES="$release_notes" $signing_settings archive
+  KEYBUMPS_RELEASE_NOTES="$release_notes" KEYBUMPS_RELEASE_DATE="$release_date" $signing_settings archive
 xcodebuild -exportArchive \
   -archivePath "$output_directory/archive/Keybumps.xcarchive" \
   -exportPath "$output_directory/export" \
@@ -88,6 +91,7 @@ typeset -a dmg_check_mode
 # Production and staging feeds share immutable assets under releases/<build>/ (see docs/releases/cloudflare.md).
 release_download_prefix="https://updates.keybumps.app/releases/$release_build/"
 "$app_root/scripts/generate-staged-appcast.sh" "$output_directory/feed" "$release_download_prefix" "$sparkle_tools_directory" "$sparkle_key_account"
+"$app_root/scripts/stamp-appcast-release-date.sh" "$output_directory/feed/appcast.xml" "$release_build" "$release_date" "$sparkle_tools_directory" "$sparkle_key_account"
 "$app_root/scripts/validate-update-release.sh" \
   "$app_path" "$update_archive" "$output_directory/feed/appcast.xml" "$output_directory/feed/Keybumps-$release_version.md" \
   "$feed_url" "$feed_url" "$previous_build" "$release_build" "$release_version" "$sparkle_tools_directory" "$sparkle_key_account" \

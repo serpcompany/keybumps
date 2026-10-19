@@ -1,6 +1,6 @@
 # 0011: A license includes a year of updates, counted from the key's purchase date
 
-Status: Proposed (2026-10-19). Tracked by #548. Supersedes parts of [0002](0002-polar-native-license-keys.md); see "Superseded".
+Status: Accepted (2026-10-19). Tracked by #548. Supersedes parts of [0002](0002-polar-native-license-keys.md); see "Superseded".
 
 ## Context
 
