@@ -190,7 +190,7 @@ struct ScreenshotClipboardTests {
         #expect(written.count == 3 && off.clipboard.entries.isEmpty)
     }
 
-    @Test("Area and Edit (⇧⌘4, #545) adds its one file without copying it; a selection cancelled with Escape adds nothing and opens nothing")
+    @Test("Area and Edit (⇧⌘4, #545) adds its one file without copying it; a selection cancelled with Escape writes and adds nothing")
     func areaAndEditCapture() throws {
         let fixture = try Fixture()
         defer { fixture.tearDown() }

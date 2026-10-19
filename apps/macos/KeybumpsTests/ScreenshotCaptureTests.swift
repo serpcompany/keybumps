@@ -120,7 +120,7 @@ struct ScreenshotCaptureTests {
         #expect(owned.isEmpty)
     }
 
-    @Test("The screenshot hotkeys: ⇧⌘2 every screen; ⇧⌘3 every screen and ⇧⌘4 an area, each then opening the editor (#545), ⇧⌘4 still stored as Screenshot Area")
+    @Test("The screenshot hotkeys: ⇧⌘2 every screen; ⇧⌘3 every screen and ⇧⌘4 an area, both marked to open the editor (#545); ⇧⌘4 still stored as Screenshot Area")
     func captureShortcutsOpenTheEditor() {
         let hotkeys = ScreenshotToolsModule.captureShortcuts.map { "\($0.shortcut.title): \($0.mode == .area ? "area" : "screens")\($0.opensEditor ? ", edit" : "")" }
         #expect(hotkeys == [
