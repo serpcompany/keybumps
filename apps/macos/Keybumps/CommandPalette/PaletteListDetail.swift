@@ -47,8 +47,9 @@ extension PaletteListDetail where Placeholder == Spacer {
 /// The list half of `PaletteListDetail`: a section header, with an accessory such as Clear All,
 /// over rows, each a `PaletteRow` as in every other tab (#381). A click does what the tab's
 /// `clickAction` says: in the Dictation and Translate tabs it highlights a row, whose actions the
-/// detail shows, and a double-click chooses it (#552). The pointer highlights the row under it
-/// (#351), and the highlighted row stays on screen as the keys move it (#353).
+/// detail shows, and a double-click chooses it (#552). There the pointer only marks the row under it
+/// (`CommandPaletteController.hoverHighlights`), and the highlighted row stays on screen as the keys
+/// move it (#353).
 struct PaletteDetailList<Item: Identifiable, Accessory: View, Row: View>: View {
     let title: String
     let items: [Item]

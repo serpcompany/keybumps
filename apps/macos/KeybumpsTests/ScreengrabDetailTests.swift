@@ -18,7 +18,7 @@ struct ScreengrabDetailTests {
     // MARK: What it shows
 
     @Test("A screenshot: Copy ↵ ⌘C, Paste ⌘V, Edit ⌘E, Quick Look Space, Show in Finder, then Delete ⌫; Dimensions, Taken, and Size")
-    func screenshot() throws {
+    func screenshot() async throws {
         let fixture = RecordingsTabFixture()
         defer { fixture.tearDown() }
         let entry = try Self.addScreenshot(to: fixture, width: 12, height: 8, at: Self.start)
@@ -40,52 +40,64 @@ struct ScreengrabDetailTests {
         #expect(detail.warning == nil)
 
         let file = try #require(entry.sourceURL)
-        #expect(detail.information == [
+        let files = await ScreengrabFileFacts.read(detail.item)
+        #expect(files.savedFileExists == true)
+        #expect(detail.buttons(files: files) == detail.buttons)
+        #expect(detail.information(files: files) == [
             .init(title: "Dimensions", value: "12 × 8"),
             .init(title: "Taken", value: Self.taken(Self.start)),
             .init(title: "Size", value: Self.size(of: [file])),
         ], "No Source app: a screenshot has none")
+        #expect(detail.information(files: nil) == [
+            .init(title: "Dimensions", value: ""),
+            .init(title: "Taken", value: Self.taken(Self.start)),
+            .init(title: "Size", value: ""),
+        ], "Until its files are read, its rows are there to fill in")
         #expect(Self.footerNames(fixture, row: 0) == Self.keyedNames(detail), "Named and keyed as the footer names them")
     }
 
     @Test("A recording: Copy, Paste, Edit (the recording window), Quick Look, Show in Finder, then Move to Trash ⌫; Length, Displays, Taken, and Size")
-    func recording() throws {
+    func recording() async throws {
         let fixture = RecordingsTabFixture()
         defer { fixture.tearDown() }
         let recording = try fixture.addRecording(at: Self.start)
         let detail = try #require(fixture.content.detail(row: 0, query: ""))
+        let files = await ScreengrabFileFacts.read(detail.item)
 
         #expect(detail.buttons.map(\.action) == [.copy, .paste, .edit, .quickLook, .showInFinder, .delete])
         #expect(detail.buttons.map(\.title) == ["Copy", "Paste", "Edit", "Quick Look", "Show in Finder", "Move to Trash"])
         #expect(detail.buttons.map(\.shortcuts) == [[["↵"], ["⌘", "C"]], [["⌘", "V"]], [["⌘", "E"]], [["Space"]], [], [["⌫"]]])
         #expect(detail.buttons.last?.isDestructive == true)
-        #expect(detail.information == [
+        #expect(detail.buttons(files: files) == detail.buttons)
+        #expect(detail.information(files: files) == [
             .init(title: "Length", value: "0:42"),
             .init(title: "Displays", value: "1"),
             .init(title: "Taken", value: Self.taken(Self.start)),
             .init(title: "Size", value: Self.size(of: recording.files)),
         ])
+        #expect(detail.information(files: nil).map(\.value).last == "", "Its Size fills in once its files are read")
         #expect(recording.files.map(\.lastPathComponent) == ["video-1.mov", "video-1-mixdown.mp4"], "The video and its mixdown")
         #expect(Self.footerNames(fixture, row: 0) == Self.keyedNames(detail))
     }
 
     @Test("A recording of two screens: Copy 2 Videos, and 2 Displays")
-    func twoDisplays() throws {
+    func twoDisplays() async throws {
         let fixture = RecordingsTabFixture()
         defer { fixture.tearDown() }
         let recording = try fixture.addRecording(at: Self.start, displays: 2)
         let detail = try #require(fixture.content.detail(row: 0, query: ""))
+        let information = detail.information(files: await ScreengrabFileFacts.read(detail.item))
 
         #expect(detail.buttons.map(\.title) == ["Copy 2 Videos", "Paste", "Edit", "Quick Look", "Show in Finder", "Move to Trash"])
-        #expect(detail.information.map(\.title) == ["Length", "Displays", "Taken", "Size"])
-        #expect(detail.information[1].value == "2")
-        #expect(detail.information[3].value == Self.size(of: recording.files), "Both displays' videos and mixdowns")
+        #expect(information.map(\.title) == ["Length", "Displays", "Taken", "Size"])
+        #expect(information[1].value == "2")
+        #expect(information[3].value == Self.size(of: recording.files), "Both displays' videos and mixdowns")
         #expect(recording.files.count == 4)
         #expect(Self.footerNames(fixture, row: 0) == Self.keyedNames(detail))
     }
 
     @Test("A recording moved or deleted: only Remove ⌫, Moved or deleted, and what the index still knows")
-    func missing() throws {
+    func missing() async throws {
         let fixture = RecordingsTabFixture()
         defer { fixture.tearDown() }
         let recording = try fixture.addRecording(at: Self.start)
@@ -98,11 +110,13 @@ struct ScreengrabDetailTests {
         #expect(detail.buttons.map(\.title) == ["Remove"])
         #expect(detail.buttons.map(\.shortcuts) == [[["⌫"]]])
         #expect(detail.warning == "Moved or deleted")
-        #expect(detail.information == [
+        let expected: [ScreengrabDetail.Fact] = [
             .init(title: "Length", value: "0:42"),
             .init(title: "Displays", value: "1"),
             .init(title: "Taken", value: Self.taken(Self.start)),
-        ], "No Size: its files are gone")
+        ]
+        #expect(detail.information(files: nil) == expected, "No Size, even before its files are read: they're gone")
+        #expect(detail.information(files: await ScreengrabFileFacts.read(detail.item)) == expected)
         #expect(Self.footerNames(fixture, row: 0) == Self.keyedNames(detail))
     }
 
@@ -121,7 +135,7 @@ struct ScreengrabDetailTests {
         #expect(ScreengrabDetail.hint(for: [video]) == "Press ↓ or click a recording to see it here", "With Clipboard History off")
     }
 
-    @Test("While the search field has text or a filter, Delete reads ⌘⌫ and Quick Look has no key, as in the footer")
+    @Test("While the search field has text, Quick Look has no key; with text or a filter, Delete reads ⌘⌫, as in the footer")
     func whileSearching() throws {
         let fixture = RecordingsTabFixture()
         defer { fixture.tearDown() }
@@ -134,22 +148,68 @@ struct ScreengrabDetailTests {
         #expect(Self.footerNames(fixture, row: 0, query: "recording") == Self.keyedNames(typed))
 
         fixture.filter = .today
+        fixture.palette.state.filter = .today
         let filtered = try #require(fixture.content.detail(row: 0, query: ""))
-        #expect(filtered.buttons.first { $0.action == .quickLook }?.shortcuts == [["Space"]])
+        #expect(filtered.buttons.first { $0.action == .quickLook }?.shortcuts == [["Space"]], "Space still opens Quick Look")
         #expect(filtered.buttons.last?.shortcuts == [["⌘", "⌫"]], "⌫ removes the filter chip here")
+        #expect(Self.footerNames(fixture, row: 0) == Self.keyedNames(filtered))
     }
 
     @Test("A screenshot names its Source app only where Clipboard History recorded one, and leaves out what its files can't say")
-    func sourceAppAndUnreadableFiles() {
+    func sourceAppAndUnreadableFiles() async {
         let shot = ClipboardEntry(
             id: UUID(), text: "", capturedAt: Self.start, kind: .image, sourcePath: "/made-up/Screenshot.png", isScreenCapture: true,
             sourceApp: ClipboardSourceApp(bundleIdentifier: "com.example.capture", name: "Example Capture")
         )
-        #expect(ScreengrabDetail.information(of: .screenshot(shot)) == [
+        let detail = ScreengrabDetail(item: .screenshot(shot), buttons: [])
+        let files = await ScreengrabFileFacts.read(.screenshot(shot))
+        #expect(files == ScreengrabFileFacts(dimensions: nil, size: nil, savedFileExists: false))
+        #expect(detail.information(files: files) == [
             .init(title: "Taken", value: Self.taken(Self.start)),
             .init(title: "Source app", value: "Example Capture"),
         ], "Neither its file nor a copy is there, so no Dimensions or Size")
-        #expect(ScreengrabDetail.size(of: []) == nil)
+        #expect(ScreengrabFileFacts.size(of: []) == nil)
+    }
+
+    @Test("A screenshot whose file moved: Dimensions and Size from Clipboard History's copy, and no Show in Finder once its files are read")
+    func savedFileMoved() async throws {
+        let fixture = RecordingsTabFixture()
+        defer { fixture.tearDown() }
+        let entry = try Self.addScreenshot(to: fixture, width: 12, height: 8, at: Self.start)
+        try FileManager.default.removeItem(at: try #require(entry.sourceURL))
+        let copy = try #require(entry.imageURL)
+        let detail = try #require(fixture.content.detail(row: 0, query: ""))
+        #expect(detail.buttons.map(\.action) == [.copy, .paste, .edit, .quickLook, .showInFinder, .delete], "Nothing's read yet")
+
+        let files = await ScreengrabFileFacts.read(detail.item)
+        #expect(files.savedFileExists == false)
+        #expect(detail.buttons(files: files).map(\.action) == [.copy, .paste, .edit, .quickLook, .delete])
+        #expect(detail.information(files: files) == [
+            .init(title: "Dimensions", value: "12 × 8"),
+            .init(title: "Taken", value: Self.taken(Self.start)),
+            .init(title: "Size", value: Self.size(of: [copy])),
+        ])
+    }
+
+    @Test("What a screengrab's files say is read once, kept by the tab while it shows, and read again after it shows again")
+    func fileFactsAreKept() async throws {
+        let fixture = RecordingsTabFixture()
+        defer { fixture.tearDown() }
+        let entry = try Self.addScreenshot(to: fixture, width: 12, height: 8, at: Self.start)
+        let content = fixture.content
+        let item = try #require(content.item(at: 0, query: ""))
+        #expect(content.fileFacts(for: item) == nil, "Nothing read before it's highlighted")
+
+        let read = await content.loadFileFacts(for: item)
+        #expect(read.dimensions == "12 × 8")
+        #expect(content.fileFacts(for: item) == read)
+
+        // Its file goes: the tab keeps what it read until it shows again.
+        try FileManager.default.removeItem(at: try #require(entry.sourceURL))
+        #expect(await content.loadFileFacts(for: item) == read)
+        content.didShow(palette: fixture.log.actions)
+        #expect(content.fileFacts(for: item) == nil)
+        #expect(await content.loadFileFacts(for: item).savedFileExists == false)
     }
 
     // MARK: What its buttons do
@@ -173,15 +233,15 @@ struct ScreengrabDetailTests {
         content.didShow(palette: buttons.actions)
         let item = try #require(content.item(at: 0, query: ""))
         for action in [ScreengrabAction.copy, .paste, .edit, .quickLook] {
-            content.run(action, on: item, at: 0, palette: buttons.actions)
+            content.run(action, on: item, query: "", palette: buttons.actions)
         }
         #expect(buttons.calls == keys.calls)
         #expect(keys.calls == [.copyEntry(entry.id), .pasteEntry(entry.id), .edit(entry.id), .dismiss])
         #expect(fixture.quickLook.previews == [[file], [file]])
 
-        content.run(.showInFinder, on: item, at: 0, palette: buttons.actions)
+        content.run(.showInFinder, on: item, query: "", palette: buttons.actions)
         #expect(fixture.revealed == [[file]])
-        content.run(.delete, on: item, at: 0, palette: buttons.actions)
+        content.run(.delete, on: item, query: "", palette: buttons.actions)
         #expect(buttons.calls.suffix(2) == [.dismiss, .deleteRow(0)], "Finder closes the palette; Delete goes the Delete key's way")
     }
 
@@ -203,34 +263,39 @@ struct ScreengrabDetailTests {
         content.didShow(palette: buttons.actions)
         let item = try #require(content.item(at: 0, query: ""))
         for action in [ScreengrabAction.copy, .paste, .edit, .quickLook] {
-            content.run(action, on: item, at: 0, palette: buttons.actions)
+            content.run(action, on: item, query: "", palette: buttons.actions)
         }
         #expect(buttons.calls == keys.calls)
         #expect(keys.calls == [.copyFiles(recording.sharingURLs), .pasteFiles(recording.sharingURLs), .dismiss, .dismiss])
         #expect(fixture.opened == [recording.id, recording.id], "Edit opens the recording window, as ⌘E does")
         #expect(fixture.quickLook.previews == [recording.sharingURLs, recording.sharingURLs])
 
-        content.run(.showInFinder, on: item, at: 0, palette: buttons.actions)
+        content.run(.showInFinder, on: item, query: "", palette: buttons.actions)
         #expect(fixture.revealed == [recording.sharingURLs])
-        content.run(.delete, on: item, at: 0, palette: buttons.actions)
+        content.run(.delete, on: item, query: "", palette: buttons.actions)
         #expect(buttons.calls.last == .deleteRow(0))
         #expect(fixture.trashed.isEmpty, "Never without the question")
     }
 
-    @Test("A moved or deleted recording's Remove is the Delete key's, which removes it at once")
-    func missingRemove() throws {
+    @Test("A moved or deleted recording's Remove, pressed in the detail, is the Delete key's, which removes it at once")
+    func missingRemove() async throws {
         let fixture = RecordingsTabFixture()
         defer { fixture.tearDown() }
         let recording = try fixture.addRecording(at: Self.start)
         try FileManager.default.removeItem(at: recording.folder)
         let palette = fixture.palette
-        palette.selectOnOpening(.screenshots)
+        let ax = try await PaletteAccessibility.layOut(palette, tab: .screenshots)
+        defer { ax.close() }
         #expect(palette.handleKeyDown(Self.key(kVK_DownArrow)) == nil)
         let detail = try #require(fixture.content.detail(row: palette.state.selection, query: ""))
         #expect(detail.buttons.map(\.action) == [.delete])
-        #expect(palette.handleKeyDown(Self.key(kVK_Delete, "\u{7f}")) == nil)
+
+        let remove = try await ax.require("palette.screengrabs.detail.delete")
+        #expect(PaletteAccessibility.label(of: remove) == "Remove")
+        PaletteAccessibility.press(remove)
         #expect(fixture.recordings.recordings.isEmpty)
         #expect(palette.state.contentPendingDeletion == nil, "No question: nothing's left to trash")
+        #expect(fixture.trashed.isEmpty)
     }
 
     // MARK: In the palette
@@ -307,10 +372,102 @@ struct ScreengrabDetailTests {
         #expect(fixture.trashed.isEmpty)
         palette.contentDeletionDidClose()
 
+        #expect(palette.isVisible, "The question's Cancel leaves the palette open")
         PaletteAccessibility.press(try await ax.require("palette.screengrabs.detail.copy"))
         let copied = fixture.library.pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL]
         #expect(copied?.map(\.lastPathComponent) == recording.sharingURLs.map(\.lastPathComponent))
+        #expect(!palette.isVisible, "Copy closes the palette")
         #expect(fixture.notices.messages == ["Copied to Clipboard"])
+    }
+
+    @Test("The pointer crossing the grid's right column on its way to the detail changes nothing: the highlight, the footer, and the detail stay on the tile clicked, and the detail's Delete deletes that one (#552)")
+    func hoverChangesNothing() async throws {
+        let fixture = RecordingsTabFixture()
+        defer { fixture.tearDown() }
+        let older = try Self.addScreenshot(to: fixture, width: 12, height: 8, at: Self.start.addingTimeInterval(-60))
+        let newer = try Self.addScreenshot(to: fixture, width: 16, height: 9, at: Self.start)
+        let palette = fixture.palette
+        var pointer = NSPoint(x: -1000, y: -1000)
+        palette.state.mouseLocation = { pointer }
+        let ax = try await PaletteAccessibility.layOut(palette, tab: .screenshots)
+        defer { ax.close() }
+        #expect(!palette.hoverHighlights)
+
+        // A click on the left column's tile, the newer one; then the pointer moves right, over the
+        // older one, toward the detail.
+        palette.clickContentRow(.click(), row: 0)
+        let footer = palette.footerActions
+        let detail = try #require(fixture.content.detail(row: palette.state.selection, query: ""))
+        #expect(detail.item.id == newer.id)
+        pointer = NSPoint(x: 300, y: 200)
+        palette.hover(row: 1)
+        #expect(palette.state.selection == 0)
+        #expect(!palette.state.selectionFollowsPointer)
+        #expect(palette.footerActions == footer)
+        #expect(fixture.content.detail(row: palette.state.selection, query: "") == detail)
+
+        // Its Delete removes the one clicked, with no question, and leaves the other.
+        PaletteAccessibility.press(try await ax.require("palette.screengrabs.detail.delete"))
+        #expect(fixture.library.clipboard.entries.map(\.id) == [older.id])
+    }
+
+    @Test("A tile's menu acts on its own screengrab, found by its id: one landing at the top while the menu is open moves it on, and its Delete still removes it; once it's gone, the menu does nothing (#552)")
+    func menuFindsItsScreengrabByID() throws {
+        let fixture = RecordingsTabFixture()
+        defer { fixture.tearDown() }
+        let first = try Self.addScreenshot(to: fixture, width: 12, height: 8, at: Self.start)
+        let content = fixture.content
+        let palette = fixture.palette
+        palette.selectOnOpening(.screenshots)
+        // The menu opens on the only tile, at row 0.
+        let item = try #require(content.item(at: 0, query: ""))
+        #expect(item.id == first.id)
+
+        // A screenshot taken a moment before lands at the top while the menu is open.
+        let arrived = try Self.addScreenshot(to: fixture, width: 16, height: 9, at: Self.start.addingTimeInterval(60))
+        #expect(content.item(at: 0, query: "")?.id == arrived.id)
+        #expect(content.row(of: item, query: "") == 1)
+
+        let log = RecordingsTabLog()
+        content.runOnTile(.delete, on: item, query: "", palette: log.actions)
+        #expect(log.selections == [1], "The tile is highlighted where it is now")
+        #expect(log.calls == [.deleteRow(1)], "and Delete goes to its row now, not the one the menu opened at")
+
+        // Through the palette, the menu's screenshot goes, with no question, and the new one stays.
+        content.runOnTile(.delete, on: item, query: "", palette: palette.contentActions)
+        #expect(fixture.library.clipboard.entries.map(\.id) == [arrived.id])
+        #expect(palette.state.selection == 0)
+
+        // Once it's gone, a menu still open on it, or the detail's button, does nothing.
+        let after = RecordingsTabLog()
+        content.runOnTile(.delete, on: item, query: "", palette: after.actions)
+        content.run(.delete, on: item, query: "", palette: after.actions)
+        content.runOnTile(.copy, on: item, query: "", palette: after.actions)
+        #expect(after.calls.isEmpty)
+        #expect(after.selections.isEmpty)
+    }
+
+    @Test("A recording's menu asks about its own recording after one lands at the top, with it highlighted, and Move to Trash trashes it (#552)")
+    func menuAsksAboutItsOwnRecording() throws {
+        let fixture = RecordingsTabFixture()
+        defer { fixture.tearDown() }
+        let recording = try fixture.addRecording(at: Self.start)
+        let content = fixture.content
+        let palette = fixture.palette
+        palette.selectOnOpening(.screenshots)
+        let item = try #require(content.item(at: 0, query: ""))
+
+        try Self.addScreenshot(to: fixture, width: 12, height: 8, at: Self.start.addingTimeInterval(60))
+        content.runOnTile(.delete, on: item, query: "", palette: palette.contentActions)
+        let asked = try #require(palette.state.contentPendingDeletion)
+        #expect(asked.title == "Move this recording to the Trash?")
+        #expect(palette.state.selection == 1, "The recording it asks about is the one highlighted, so the detail shows it")
+        #expect(content.detail(row: palette.state.selection, query: "")?.item.id == recording.id)
+
+        palette.confirmContentDeletion(asked)
+        palette.contentDeletionDidClose()
+        #expect(fixture.trashed.map(\.lastPathComponent) == [recording.folder.lastPathComponent])
+        #expect(content.content(query: "").items.allSatisfy { $0.recording == nil }, "Only the screenshot is left")
     }
 
     @Test("With no screenshots or recordings, the tab keeps its empty state across the whole tab, with no detail")
@@ -374,16 +531,21 @@ struct ScreengrabDetailTests {
         return ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
     }
 
-    /// What the footer names on `row`, as the palette resolves it, with Space's and Delete's keys as
-    /// they are with `query` typed: "Copy ↵", "Paste ⌘V", and so on.
+    /// What the palette's footer names with `row` highlighted and `query` typed, read from the
+    /// palette itself (`CommandPaletteController.footerActions`), with its filter as the test set it:
+    /// "Copy ↵", "Paste ⌘V", and so on.
     static func footerNames(_ fixture: RecordingsTabFixture, row: Int, query: String = "") -> [String] {
-        let content = fixture.content
-        let playback = content.playback(row: row, query: query)
-        let footer = PaletteFooterActions.resolve(
-            tab: .screenshots, searchItem: nil, content: content.footerActions(row: row, query: query),
-            playback: query.isEmpty ? playback.flatMap { $0.listsInFooter ? $0.title : nil } : nil,
-            deleteNeedsCommand: !query.isEmpty || fixture.filter != nil
-        )
+        let palette = fixture.palette
+        if palette.state.tab != .screenshots {
+            let filter = palette.state.filter
+            palette.selectOnOpening(.screenshots)
+            palette.state.filter = filter
+        }
+        // The search first: a new one leaves the grid.
+        palette.state.historyQuery = query
+        palette.state.isBrowsingGrid = true
+        palette.state.selection = row
+        let footer = palette.footerActions
         return (footer.primary.map { ["\($0) ↵"] } ?? []) + footer.secondary.map(\.description)
     }
 

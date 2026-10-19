@@ -5,7 +5,8 @@ import Testing
 @testable import Keybumps
 
 /// Moving the pointer over a Command Palette row highlights it, as in Raycast (#347), but rows that
-/// scroll or appear under a still pointer don't take the highlight from the keyboard.
+/// scroll or appear under a still pointer don't take the highlight from the keyboard, and in the
+/// tabs where one click selects it moves no highlight at all (#552).
 @MainActor
 @Suite("Command Palette: hover highlights a row")
 struct PaletteHoverTests {
@@ -97,7 +98,7 @@ struct PaletteHoverTests {
         #expect(state.selection == 6, "Moving again counts at once")
     }
 
-    @Test("Deleting a recording asks first, from the Delete key too, so a hover can't retarget it unseen")
+    @Test("Deleting a recording asks first, from the Delete key too, and the pointer behind the question changes nothing")
     func dictationDeleteAsks() throws {
         let fixture = HoverFixture()
         defer { fixture.tearDown() }
@@ -152,6 +153,52 @@ struct PaletteHoverTests {
 
     private static func scrollViews(in view: NSView) -> [NSScrollView] {
         ((view as? NSScrollView).map { [$0] } ?? []) + view.subviews.flatMap(scrollViews(in:))
+    }
+
+    @Test("Where one click selects (Dictation, Translate, ScreenGrabs, Hotkeys), the pointer moves no highlight, but `/`'s list of filters there still follows it; where a click acts, it does (#552)")
+    func hoverWhereAClickSelects() throws {
+        let fixture = HoverFixture()
+        defer { fixture.tearDown() }
+        let state = fixture.palette.state
+        for tab in CommandPaletteTab.allCases {
+            fixture.palette.selectOnOpening(tab)
+            #expect(fixture.palette.hoverHighlights == (tab.clickAction == .acts), "\(tab.rawValue)")
+        }
+        #expect(Set(CommandPaletteTab.allCases.filter { $0.clickAction == .selects }) == [.dictation, .translate, .screenshots, .keyboardShortcutter])
+
+        let audio = fixture.folder.url.appendingPathComponent("made-up.wav")
+        try Data(count: 64).write(to: audio)
+        for index in 1...3 {
+            try fixture.dictationHistory.record("made-up words \(index)", language: "en-US", duration: 1, audioSourceURL: audio)
+        }
+        fixture.palette.selectOnOpening(.dictation)
+        let footer = fixture.palette.footerActions
+        fixture.pointer = NSPoint(x: 10, y: 20)
+        fixture.palette.hover(row: 2)
+        #expect(state.selection == 0, "The highlight stays where it was")
+        #expect(!state.selectionFollowsPointer)
+        #expect(fixture.palette.footerActions == footer)
+
+        // A click moves it; the pointer then crossing another row still doesn't.
+        state.selection = 1
+        fixture.pointer = NSPoint(x: 10, y: 60)
+        fixture.palette.hover(row: 2)
+        #expect(state.selection == 1)
+
+        // `/`'s list of filters, where a click chooses one, follows the pointer in this tab too.
+        state.historyQuery = "/"
+        #expect(fixture.palette.hoverHighlights)
+        fixture.pointer = NSPoint(x: 10, y: 90)
+        fixture.palette.hover(row: 1)
+        #expect(state.selection == 1)
+        #expect(state.selectionFollowsPointer)
+
+        // In the Clipboard tab, where a click copies, the pointer highlights the row under it.
+        for index in 1...3 { fixture.clipboard.ingestForTesting("made-up text \(index)") }
+        fixture.palette.selectOnOpening(.clipboard)
+        fixture.pointer = NSPoint(x: 10, y: 120)
+        fixture.palette.hover(row: 2)
+        #expect(state.selection == 2)
     }
 
     @Test("A row that's no longer in the list can't take the highlight")

@@ -146,13 +146,30 @@ extension View {
             .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
     }
 
-    /// Raycast's selected result: a rounded neutral highlight inset from the list edges.
+    /// Raycast's selected result: a rounded neutral highlight inset from the list edges. Where the
+    /// pointer doesn't move the highlight (`CommandPaletteHover.highlights`, #552), a row under it
+    /// that isn't highlighted shows a hairline ring in the keycaps' border instead, so you see what
+    /// a click would pick while the highlight, the detail, and the keys stay where they are.
     func paletteRowBackground(isSelected: Bool) -> some View {
-        listRowBackground(
-            RoundedRectangle(cornerRadius: PaletteTheme.rowRadius, style: .continuous)
-                .fill(isSelected ? PaletteTheme.selection : .clear)
-                .padding(.horizontal, 6)
-        )
+        modifier(PaletteRowBackground(isSelected: isSelected))
+    }
+}
+
+private struct PaletteRowBackground: ViewModifier {
+    let isSelected: Bool
+    @Environment(\.paletteHover) private var hover
+    @State private var isHovered = false
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: PaletteTheme.rowRadius, style: .continuous)
+        let marksHover = isHovered && !isSelected && !hover.highlights
+        content
+            .onHover { isHovered = $0 }
+            .listRowBackground(
+                shape.fill(isSelected ? PaletteTheme.selection : .clear)
+                    .overlay(shape.strokeBorder(marksHover ? PaletteTheme.keycapBorder : .clear, lineWidth: 1))
+                    .padding(.horizontal, 6)
+            )
     }
 }
 

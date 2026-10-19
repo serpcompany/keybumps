@@ -77,6 +77,25 @@ enum Screengrab: Equatable, Identifiable {
         }
     }
 
+    /// Whether Space has something to show in Quick Look (`previewFiles`), looking at the disk only
+    /// for a screenshot with no copy in Clipboard History, so the footer and the detail never wait
+    /// on a file as they redraw.
+    var hasPreviewFiles: Bool {
+        switch self {
+        case .screenshot(let entry): entry.imageURL != nil || entry.existingSourceURL != nil
+        case .recording(let recording): !recording.sharingURLs.isEmpty
+        }
+    }
+
+    /// Whether Show in Finder may have something to select (`finderFiles`), without looking at the
+    /// disk: a screenshot saved to a file, which may have moved since, or a recording's videos.
+    var mayShowInFinder: Bool {
+        switch self {
+        case .screenshot(let entry): entry.sourceURL != nil
+        case .recording(let recording): !recording.sharingURLs.isEmpty
+        }
+    }
+
     /// What Show in Finder selects: a screenshot's file where it was saved, if it's still there;
     /// a recording's videos.
     var finderFiles: [URL] {
@@ -250,10 +269,12 @@ enum ScreengrabsTabContent: Equatable {
 ///
 /// - The grid is two columns, with the highlighted screengrab in full beside it, in the Dictation
 ///   tab's list-and-detail layout (#552): its picture, a button for each of its keys, its name, and
-///   its information (`detail(row:query:)`, `ScreengrabDetail`). Until Down or a click goes into the
+///   its information (`detail(of:query:)`, `ScreengrabDetail`). Until Down or a click goes into the
 ///   grid, the detail says how to show one there.
 /// - A click highlights a screengrab, going into the grid as Down does, and the detail and the
-///   footer name its actions (`PaletteClickAction.selects`, #552).
+///   footer name its actions (`PaletteClickAction.selects`, #552). The pointer only rings the tile
+///   under it: the highlight, and with it the detail, follows clicks and keys alone, so the pointer
+///   crossing the grid's right column to the detail's Delete never changes what it deletes.
 /// - **Return** or a double-click copies: a screenshot as Clipboard History restores it, a recording
 ///   as its files, every display's, as the recording window's Copy does, kept out of Clipboard
 ///   History. **⌘V** pastes it.
@@ -264,7 +285,8 @@ enum ScreengrabsTabContent: Equatable {
 /// - **Delete** removes a screenshot from the tab and leaves its file. On a recording it asks, then
 ///   moves its folder to the Trash (`RecordingTrash`). Clear All clears screenshots only.
 /// - The footer, the detail's buttons, and the context menu name these keys in that order, Delete's
-///   last (#552), and each button does what its key does (`run(_:on:at:palette:)`).
+///   last (#552), and each button does what its key does (`run(_:on:query:palette:)`), on the
+///   screengrab it shows, found by its id when it runs.
 /// - A recording moved or deleted outside Keybumps, its folder or a display's video, stays, dimmed,
 ///   marked "Moved or deleted" (`IndexedRecording.isMissing`, looked at again each time the tab
 ///   shows): its keys say it couldn't open, as the recording window can't, and Delete removes it
@@ -288,6 +310,10 @@ final class ScreengrabsPaletteContent: CapabilityPaletteContent {
     private let showInFinder: @MainActor ([URL]) -> Void
     /// What the palette offered when it last showed the tab, for a Delete's question answered later.
     private var palette: PaletteContentActions?
+    /// What each screengrab's files said, by `Screengrab.thumbnailKey`, for the detail's
+    /// Information (#552): read off the main thread the first time one is highlighted, and again
+    /// after the tab shows again, so a file moved or deleted since shows as such.
+    private var fileFacts: [String: ScreengrabFileFacts] = [:]
 
     static let missingMessage = "Couldn’t open the recording: it was moved or deleted."
     static let trashFailedMessage = ScreencastReviewFailure.trashFailed.message
@@ -383,12 +409,15 @@ final class ScreengrabsPaletteContent: CapabilityPaletteContent {
     /// Space: Quick Look, which closes the palette. A moved or deleted recording only says so, and
     /// the footer doesn't list it.
     func playback(row: Int, query: String) -> PalettePlayback? {
-        guard let item = item(at: row, query: query) else { return nil }
+        item(at: row, query: query).flatMap(playback(of:))
+    }
+
+    /// Space on `item`: Quick Look, where there's a file to show (`Screengrab.hasPreviewFiles`).
+    func playback(of item: Screengrab) -> PalettePlayback? {
         if item.isMissing {
             return PalettePlayback(title: "Quick Look", toggle: { [weak self] in self?.palette?.warn(Self.missingMessage) }, listsInFooter: false)
         }
-        let files = item.previewFiles
-        guard !files.isEmpty else { return nil }
+        guard item.hasPreviewFiles else { return nil }
         return PalettePlayback(title: "Quick Look") { [weak self] in self?.preview(item) }
     }
 
@@ -430,7 +459,12 @@ final class ScreengrabsPaletteContent: CapabilityPaletteContent {
     /// of two screens; only Remove ⌫ on one moved or deleted. Space's Quick Look comes from
     /// `playback(row:query:)`, before Delete's. ⌘Return edits too, unlisted.
     func footerActions(row: Int, query: String) -> PaletteFooterActions {
-        switch item(at: row, query: query) {
+        footerActions(of: item(at: row, query: query))
+    }
+
+    /// The footer's actions on `item`, or the tab's own while none is highlighted.
+    func footerActions(of item: Screengrab?) -> PaletteFooterActions {
+        switch item {
         case .recording(let recording) where recording.isMissing:
             PaletteFooterActions(primary: nil, secondary: [.remove])
         case .recording(let recording):
@@ -442,15 +476,22 @@ final class ScreengrabsPaletteContent: CapabilityPaletteContent {
 
     /// The screengrab at `row` as the detail beside the grid shows it (#552), or nil where there's
     /// none, as before Down or a click goes into the grid, when the palette highlights no row.
+    func detail(row: Int, query: String) -> ScreengrabDetail? {
+        item(at: row, query: query).map { detail(of: $0, query: query) }
+    }
+
+    /// `item` as the detail beside the grid shows it (#552). The grid hands over the item it drew,
+    /// so a redraw works out the tab's contents once, and nothing here reads a file: what its files
+    /// say comes later, off the main thread (`loadFileFacts(for:)`).
     ///
     /// Its buttons are the footer's actions, in its order, with its names and keys: Copy ↵ (⌘C
     /// too), Paste ⌘V, Edit ⌘E, and Quick Look Space; then Show in Finder, which no key does, where
     /// the context menu has it; then Delete ⌫, last, Move to Trash on a recording. One moved or
-    /// deleted has only Remove. While the search field has text or a filter, Delete reads ⌘⌫ and
-    /// Quick Look has no key, as in the footer, since ⌫ and Space edit the search there.
-    func detail(row: Int, query: String) -> ScreengrabDetail? {
-        guard let item = item(at: row, query: query) else { return nil }
-        let footer = footerActions(row: row, query: query)
+    /// deleted has only Remove. While the search field has text, Quick Look has no key, since Space
+    /// types there; with text or a filter, Delete reads ⌘⌫, since ⌫ edits the search or removes the
+    /// filter's chip there. Both as in the footer.
+    func detail(of item: Screengrab, query: String) -> ScreengrabDetail {
+        let footer = footerActions(of: item)
         var buttons: [ScreengrabDetail.ActionButton] = []
         if let copy = footer.primary {
             buttons.append(.init(action: .copy, title: copy, systemImage: "doc.on.doc", shortcuts: [["↵"], ["⌘", "C"]]))
@@ -461,11 +502,13 @@ final class ScreengrabsPaletteContent: CapabilityPaletteContent {
         if let edit = footer.secondary.first(where: { $0 == .edit }) {
             buttons.append(.init(action: .edit, title: edit.title, systemImage: "pencil", shortcuts: [edit.keys]))
         }
-        if let playback = playback(row: row, query: query), playback.listsInFooter {
+        if let playback = playback(of: item), playback.listsInFooter {
             let space = PaletteKeyAction.space(playback.title)
             buttons.append(.init(action: .quickLook, title: space.title, systemImage: "eye", shortcuts: query.isEmpty ? [space.keys] : []))
         }
-        if !item.isMissing, !item.finderFiles.isEmpty {
+        // A screenshot's own file may have moved since it was saved: the detail leaves the button
+        // out once its files say so (`ScreengrabDetail.buttons(files:)`), never looking here.
+        if !item.isMissing, item.mayShowInFinder {
             buttons.append(.init(action: .showInFinder, title: "Show in Finder", systemImage: "folder", shortcuts: []))
         }
         if let delete = footer.secondary.last(where: \.isDelete) {
@@ -474,7 +517,22 @@ final class ScreengrabsPaletteContent: CapabilityPaletteContent {
                 action: .delete, title: delete.title, systemImage: item.isMissing ? "minus.circle" : "trash", shortcuts: [keys], isDestructive: true
             ))
         }
-        return ScreengrabDetail(item: item, buttons: buttons, information: ScreengrabDetail.information(of: item))
+        return ScreengrabDetail(item: item, buttons: buttons)
+    }
+
+    /// What `item`'s files said, if they've been read since the tab last showed: the detail starts
+    /// with them, so one highlighted before fills in at once.
+    func fileFacts(for item: Screengrab) -> ScreengrabFileFacts? {
+        fileFacts[item.thumbnailKey]
+    }
+
+    /// What `item`'s files say (`ScreengrabFileFacts`), read off the main thread unless they've
+    /// been read since the tab last showed.
+    func loadFileFacts(for item: Screengrab) async -> ScreengrabFileFacts {
+        if let known = fileFacts[item.thumbnailKey] { return known }
+        let facts = await ScreengrabFileFacts.read(item)
+        fileFacts[item.thumbnailKey] = facts
+        return facts
     }
 
     /// Delete on a recording, which asks, then moves its folder to the Trash.
@@ -497,25 +555,49 @@ final class ScreengrabsPaletteContent: CapabilityPaletteContent {
     /// A ⌘-click edits, as ⌘Return and ⌘E do.
     var commandClicks: Bool { true }
 
-    /// A tile's context menu or trash button, or one of the detail's buttons, on the screengrab it
-    /// shows, at `row`: each does what its key does, and nothing of its own. Copy is Return's and
-    /// ⌘C's, Paste ⌘V's, Edit ⌘E's, Quick Look Space's, and Delete the Delete key's on `row`, which
-    /// asks first on a recording; Show in Finder has no key.
-    func run(_ action: ScreengrabAction, on item: Screengrab, at row: Int, palette: PaletteContentActions) {
+    /// One of the detail's buttons, or a tile's context menu or trash button
+    /// (`runOnTile(_:on:query:palette:)`), on the screengrab it shows: each does what its key does,
+    /// and nothing of its own. Copy is Return's and ⌘C's, Paste ⌘V's, Edit ⌘E's, Quick Look Space's,
+    /// and Delete the Delete key's, which asks first on a recording; Show in Finder has no key.
+    /// Delete finds `item` by its id when it runs, never by a row worked out before, and does
+    /// nothing once it's gone: a screenshot's Delete doesn't ask, so it must never land on another.
+    func run(_ action: ScreengrabAction, on item: Screengrab, query: String, palette: PaletteContentActions) {
         switch action {
         case .copy: choose(item, withCommand: false, palette: palette)
         case .paste: paste(item, palette: palette)
         case .edit: choose(item, withCommand: true, palette: palette)
         case .quickLook: preview(item)
         case .showInFinder: reveal(item)
-        case .delete: palette.deleteRow(row)
+        case .delete:
+            // The row it's at now, which the palette's Delete looks up again at once, on the main
+            // thread, with the same search.
+            guard let row = row(of: item, query: query) else { return }
+            palette.deleteRow(row)
         }
+    }
+
+    /// A tile's context menu or trash button on the screengrab the tile shows: highlights it where
+    /// it is now, then does what the detail's button does (`run(_:on:query:palette:)`). A menu
+    /// stays open while a screenshot taken a moment before lands at the top and moves every tile
+    /// on, so the row the tile had when the menu opened may be another's by then; the item is
+    /// found by its id instead, and a menu on one that's gone since does nothing.
+    func runOnTile(_ action: ScreengrabAction, on item: Screengrab, query: String, palette: PaletteContentActions) {
+        guard let row = row(of: item, query: query) else { return }
+        palette.selectRow(row)
+        run(action, on: item, query: query, palette: palette)
+    }
+
+    /// Where `item` is in the tab now, found by its id: a screenshot's Clipboard History item, or a
+    /// recording's. Nil once it's gone.
+    func row(of item: Screengrab, query: String) -> Int? {
+        content(query: query).items.firstIndex { $0.id == item.id }
     }
 
     /// Each time the tab shows, the index looks at each recording's folder again, so one moved or
     /// deleted since shows as such.
     func didShow(palette: PaletteContentActions) {
         self.palette = palette
+        fileFacts = [:]
         guard listsRecordings, let recordings else { return }
         recordings.load()
         recordings.refresh()
@@ -669,10 +751,13 @@ private struct ScreengrabsResultsView: View {
             }
         case .items(let items):
             // The grid on the left and the highlighted screengrab in full on the right (#552), the
-            // hint there until Down or a click goes into the grid.
-            PaletteListDetail(listWidth: ScreengrabGrid.width, highlighted: content.detail(row: selection, query: query)) {
+            // hint there until Down or a click goes into the grid. The detail is of the item the
+            // grid draws, so the tab's contents are worked out once.
+            let highlighted = items.indices.contains(selection) ? content.detail(of: items[selection], query: query) : nil
+            PaletteListDetail(listWidth: ScreengrabGrid.width, highlighted: highlighted) {
                 ScreengrabGrid(
                     items: items,
+                    query: query,
                     selection: selection,
                     listsScreenshots: content.listsScreenshots,
                     listsRecordings: content.listsRecordings,
@@ -684,8 +769,13 @@ private struct ScreengrabsResultsView: View {
                     confirmationPresentationChanged: confirmationPresentationChanged
                 )
             } detail: { detail in
-                ScreengrabDetailPane(detail: detail, recordings: recordings) { action in
-                    content.run(action, on: detail.item, at: selection, palette: actions)
+                ScreengrabDetailPane(
+                    detail: detail,
+                    recordings: recordings,
+                    files: content.fileFacts(for: detail.item),
+                    loadFiles: { await content.loadFileFacts(for: detail.item) }
+                ) { action in
+                    content.run(action, on: detail.item, query: query, palette: actions)
                 }
                 .id(detail.item.id)
             } placeholder: {
@@ -704,6 +794,8 @@ private struct ScreengrabGrid: View {
     static let width: CGFloat = 478
 
     let items: [Screengrab]
+    /// The search the grid shows, which a tile's menu finds its screengrab in by its id.
+    let query: String
     let selection: Int
     let listsScreenshots: Bool
     let listsRecordings: Bool
@@ -763,10 +855,9 @@ private struct ScreengrabGrid: View {
                                     copyTitle: item.recording.map(ScreengrabsPaletteContent.copyTitle(for:)) ?? "Copy",
                                     clickAction: content.tab.clickAction,
                                     click: { click($0, index) },
-                                    run: { action in
-                                        actions.selectRow(index)
-                                        content.run(action, on: item, at: index, palette: actions)
-                                    }
+                                    // By its id, not `index`, which may be another's by the time the
+                                    // menu's chosen (`runOnTile`).
+                                    run: { content.runOnTile($0, on: item, query: query, palette: actions) }
                                 )
                                 .paletteHoverHighlights(row: index)
                                 .id(item.id)
@@ -784,7 +875,7 @@ private struct ScreengrabGrid: View {
 }
 
 /// What a tile's trash button and context menu, and the detail's buttons, do: each what its key
-/// does (`ScreengrabsPaletteContent.run(_:on:at:palette:)`). Its raw value names the detail's button
+/// does (`ScreengrabsPaletteContent.run(_:on:query:palette:)`). Its raw value names the detail's button
 /// (`palette.screengrabs.detail.<action>`).
 enum ScreengrabAction: String, CaseIterable {
     case copy, paste, edit, quickLook, showInFinder, delete
@@ -802,15 +893,23 @@ private struct ScreengrabCard: View {
     let click: (PaletteClick) -> Void
     let run: (ScreengrabAction) -> Void
     @State private var isHovering = false
+    @Environment(\.paletteHover) private var hover
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        // Where the pointer doesn't move the highlight (#552), the tile under it that isn't
+        // highlighted gets a ring of its own: thicker than the well's hairline, in the keycaps'
+        // gray, never the highlight's accent.
+        let marksHover = isHovering && !isSelected && !hover.highlights
         VStack(alignment: .leading, spacing: 6) {
             PaletteClickButton(clickAction: clickAction, click: click) {
                 ScreengrabPicture(item: item, recordings: recordings, maxPixelSize: ScreengrabPicture.tilePixelSize)
                     .aspectRatio(16 / 10, contentMode: .fit)
                     .clipShape(shape)
-                    .overlay(shape.strokeBorder(isSelected ? Color.accentColor : PaletteTheme.border, lineWidth: isSelected ? 3 : 1))
+                    .overlay(shape.strokeBorder(
+                        isSelected ? Color.accentColor : marksHover ? PaletteTheme.keycapBorder : PaletteTheme.border,
+                        lineWidth: isSelected ? 3 : marksHover ? 2 : 1
+                    ))
                     .contentShape(shape)
             }
             .paletteLayoutProbe(.gridItem)

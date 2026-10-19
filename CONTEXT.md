@@ -27,7 +27,7 @@ The internal, first-party unit that implements one Capability for the app shell.
 _Avoid_: Extension
 
 **Command Palette**:
-The single floating, keyboard-first surface whose tabs present the capabilities' searchable content. One click on a row does what Return does, except in the tabs that show the highlighted row's actions (Dictation, Translate, and ScreenGrabs), where it highlights the row and a double-click does what Return does, and in the Hotkeys tab, whose rows have no Return action, where it only highlights.
+The single floating, keyboard-first surface whose tabs present the capabilities' searchable content. One click on a row does what Return does, except in the tabs that show the highlighted row's actions (Dictation, Translate, and ScreenGrabs), where it highlights the row and a double-click does what Return does, and in the Hotkeys tab, whose rows have no Return action, where it only highlights. Moving the pointer over a row highlights it, as in Raycast, except in those four tabs: there the highlight, and with it the detail, the footer, and the keys, follows only clicks and keys, and the row under the pointer is only outlined, so the pointer crossing a row on its way to the detail's buttons never changes which row they act on.
 _Avoid_: Quick Search panel, Clipboard panel, Alfred clone, Raycast clone
 
 **Notch notice**:

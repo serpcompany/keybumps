@@ -261,15 +261,13 @@ struct CapabilityPaletteContentTests {
         #expect(fixture.palette.state.tab == .search)
     }
 
-    @Test("A grid takes only the plain arrow keys, as Emoji's does: with a modifier, Up and Down step one item and wrap, as in a list, and Left and Right stay with the search field; spaces alone in the field leave the grid its arrow keys; Down at the last row after a hover leaves Left switching tabs, but Shift-Down gives Left to the grid")
+    @Test("A grid takes only the plain arrow keys, as Emoji's does: with a modifier, Up and Down step one item and wrap, as in a list, and Left and Right stay with the search field; spaces alone in the field leave the grid its arrow keys")
     func gridArrowsWithModifiers() {
         let fixture = ModuleTabFixture()
         defer { fixture.tearDown() }
         fixture.content.isGrid = true
         fixture.content.rows = 6
         let palette = fixture.palette
-        var pointer = NSPoint(x: -1000, y: -1000)
-        palette.state.mouseLocation = { pointer }
         palette.selectOnOpening(.keyboardShortcutter)
 
         #expect(palette.handleKeyDown(Self.key(kVK_DownArrow, modifiers: .shift)) == nil)
@@ -294,22 +292,33 @@ struct CapabilityPaletteContentTests {
         #expect(palette.state.isBrowsingGrid)
         #expect(palette.handleKeyDown(Self.key(kVK_RightArrow)) == nil)
         #expect(palette.state.selection == 1, "Right moves within the grid")
+    }
+
+    @Test("Where a click acts, the pointer bringing the highlight to a grid's last row leaves Left switching tabs, as Down there has nowhere to go; Shift-Down, or Down at the edge of a grid that owns Up and Down, gives Left and Right to the grid (#347)")
+    func gridArrowsAfterAHover() {
+        // The Emoji tab, where a click copies, so the pointer moves the highlight.
+        let fixture = ModuleTabFixture(tab: .emoji)
+        defer { fixture.tearDown() }
+        fixture.content.isGrid = true
+        fixture.content.rows = 6
+        let palette = fixture.palette
+        var pointer = NSPoint(x: -1000, y: -1000)
+        palette.state.mouseLocation = { pointer }
 
         // The pointer brings the highlight to the last row. Down has nowhere to go, so no key has
-        // moved within the grid yet, and Left still switches tabs (Hotkeys is the last tab).
-        palette.state.historyQuery = ""
-        palette.selectOnOpening(.keyboardShortcutter)
+        // moved within the grid yet, and Left still switches tabs.
+        palette.selectOnOpening(.emoji)
         pointer = NSPoint(x: 10, y: 20)
         palette.hover(row: 4)
         #expect(palette.state.gridEnteredByPointer)
         #expect(palette.handleKeyDown(Self.downKey) == nil)
         #expect(palette.state.selection == 4)
         _ = palette.handleKeyDown(Self.key(kVK_LeftArrow))
-        #expect(palette.state.tab != .keyboardShortcutter)
+        #expect(palette.state.tab != .emoji)
 
         // Shift-Down after the pointer came in is a key moving the highlight, so Left moves within
         // the grid from then on instead of switching tabs.
-        palette.selectOnOpening(.keyboardShortcutter)
+        palette.selectOnOpening(.emoji)
         pointer = NSPoint(x: 30, y: 40)
         palette.hover(row: 1)
         #expect(palette.state.gridEnteredByPointer)
@@ -318,9 +327,23 @@ struct CapabilityPaletteContentTests {
         #expect(!palette.state.gridEnteredByPointer)
         let moves = fixture.content.moves.count
         #expect(palette.handleKeyDown(Self.key(kVK_LeftArrow)) == nil)
-        #expect(palette.state.tab == .keyboardShortcutter, "Left stays in the grid")
+        #expect(palette.state.tab == .emoji, "Left stays in the grid")
         #expect(fixture.content.moves.count == moves + 1)
         #expect(palette.state.selection == 1)
+
+        // In a grid that owns Up and Down, as ScreenGrabs' does, Down at its edge counts as moving
+        // within it, so Right moves on.
+        fixture.content.ownsUpAndDown = true
+        palette.selectOnOpening(.emoji)
+        pointer = NSPoint(x: 50, y: 60)
+        palette.hover(row: 4)
+        #expect(palette.state.gridEnteredByPointer)
+        #expect(palette.handleKeyDown(Self.downKey) == nil)
+        #expect(palette.state.selection == 4)
+        #expect(!palette.state.gridEnteredByPointer)
+        #expect(palette.handleKeyDown(Self.key(kVK_RightArrow)) == nil)
+        #expect(palette.state.tab == .emoji)
+        #expect(palette.state.selection == 5)
     }
 
     @Test("While an input method composes, a grid's Up and Down step one item and wrap, as in a list, and Left and Right stay with the input method")
@@ -504,26 +527,25 @@ struct CapabilityPaletteContentTests {
         #expect(content.rowCount(query: "") == 0)
     }
 
-    @Test("Hovering a grid tile highlights it; Up and Down go on from it, but Left and Right still switch tabs (#347)")
+    @Test("Where a click acts, hovering a grid tile highlights it; Up and Down go on from it, but Left and Right still switch tabs (#347)")
     func hoverInAGrid() {
-        let fixture = ModuleTabFixture()
+        let fixture = ModuleTabFixture(tab: .emoji)
         defer { fixture.tearDown() }
         fixture.content.isGrid = true
         fixture.content.rows = 9
         var pointer = NSPoint(x: -1000, y: -1000)
         fixture.palette.state.mouseLocation = { pointer }
-        fixture.palette.selectOnOpening(.keyboardShortcutter)
+        fixture.palette.selectOnOpening(.emoji)
 
         pointer = NSPoint(x: 10, y: 20)
         fixture.palette.hover(row: 4)
         #expect(fixture.palette.state.isBrowsingGrid)
         #expect(fixture.palette.state.selection == 4)
 
-        // Hotkeys is the last tab, so Left is the one that can switch.
         _ = fixture.palette.handleKeyDown(Self.key(kVK_LeftArrow))
-        #expect(fixture.palette.state.tab != .keyboardShortcutter, "Left switches tabs after the pointer passed over a tile")
+        #expect(fixture.palette.state.tab != .emoji, "Left switches tabs after the pointer passed over a tile")
 
-        fixture.palette.selectOnOpening(.keyboardShortcutter)
+        fixture.palette.selectOnOpening(.emoji)
         pointer = NSPoint(x: 10, y: 40)
         fixture.palette.hover(row: 4)
         _ = fixture.palette.handleKeyDown(Self.downKey)
@@ -536,8 +558,36 @@ struct CapabilityPaletteContentTests {
         fixture.palette.hover(row: 2)
         #expect(fixture.palette.state.selection == 2)
         _ = fixture.palette.handleKeyDown(Self.key(kVK_LeftArrow))
-        #expect(fixture.palette.state.tab == .keyboardShortcutter)
+        #expect(fixture.palette.state.tab == .emoji)
         #expect(fixture.palette.state.selection == 1)
+    }
+
+    @Test("Where a click selects, as in Hotkeys, hovering a grid tile neither highlights it nor goes into the grid, so Left and Right still switch tabs (#552)")
+    func hoverInAGridWhereAClickSelects() {
+        let fixture = ModuleTabFixture()
+        defer { fixture.tearDown() }
+        fixture.content.isGrid = true
+        fixture.content.rows = 9
+        var pointer = NSPoint(x: -1000, y: -1000)
+        fixture.palette.state.mouseLocation = { pointer }
+        fixture.palette.selectOnOpening(.keyboardShortcutter)
+        #expect(CommandPaletteTab.keyboardShortcutter.clickAction == .selects)
+
+        pointer = NSPoint(x: 10, y: 20)
+        fixture.palette.hover(row: 4)
+        #expect(!fixture.palette.state.isBrowsingGrid)
+        #expect(!fixture.palette.state.gridEnteredByPointer)
+        #expect(fixture.palette.state.selection == 0)
+
+        // A click goes into the grid, and the pointer then crossing another tile leaves it there.
+        fixture.palette.clickContentRow(.click(), row: 4)
+        #expect(fixture.palette.state.isBrowsingGrid)
+        pointer = NSPoint(x: 10, y: 40)
+        fixture.palette.hover(row: 2)
+        #expect(fixture.palette.state.selection == 4)
+        _ = fixture.palette.handleKeyDown(Self.key(kVK_LeftArrow))
+        #expect(fixture.palette.state.tab == .keyboardShortcutter, "Left moves in the grid, after a click")
+        #expect(fixture.palette.state.selection == 3)
     }
 
     @Test("A click on a module tab's row reaches its rows with the search as it is, as its tab's click says (#552)")
@@ -583,7 +633,9 @@ private final class ModuleTabFixture {
     let clipboard: ClipboardHistoryService
     let palette: CommandPaletteController
 
-    init(resetsSelectionWhileTyping: Bool = false) {
+    /// - Parameter tab: The tab the fake rows fill: Hotkeys, where a click selects, or another, such as
+    ///   Emoji, where a click acts and the pointer moves the highlight.
+    init(tab: CommandPaletteTab = .keyboardShortcutter, resetsSelectionWhileTyping: Bool = false) {
         let root = folder.url
         clipboard = ClipboardHistoryService(
             storageURL: root.appendingPathComponent("clipboard-history.json"),
@@ -611,9 +663,9 @@ private final class ModuleTabFixture {
             notices: SilentNotices(),
             search: search
         )
-        content = RecordingPaletteContent(resetsSelectionWhileTyping: resetsSelectionWhileTyping)
+        content = RecordingPaletteContent(tab: tab, resetsSelectionWhileTyping: resetsSelectionWhileTyping)
         palette.tabContents = [
-            .keyboardShortcutter: content,
+            tab: content,
             .screenshots: ScreengrabsPaletteContent(clipboard: clipboard, preferences: preferences) { [weak palette] in palette?.state.filter },
         ]
     }
@@ -639,12 +691,14 @@ private final class RecordingPaletteContent: CapabilityPaletteContent {
         let query: String
     }
 
-    let tab = CommandPaletteTab.keyboardShortcutter
+    let tab: CommandPaletteTab
     let resetsSelectionWhileTyping: Bool
     var rows = 3
     var refusesDelete = false
     var clearsQueryOnActivate = false
     var isGrid = false
+    /// Whether the grid takes Up and Down whatever else is going on, as ScreenGrabs' does.
+    var ownsUpAndDown = false
     var copiesOnActivate: String?
     /// Whether every row has audio for Space to play.
     var hasAudio = false
@@ -658,11 +712,14 @@ private final class RecordingPaletteContent: CapabilityPaletteContent {
     private(set) var toggles: [Int] = []
     private(set) var deletions: [Int] = []
 
-    init(resetsSelectionWhileTyping: Bool) {
+    init(tab: CommandPaletteTab, resetsSelectionWhileTyping: Bool) {
+        self.tab = tab
         self.resetsSelectionWhileTyping = resetsSelectionWhileTyping
     }
 
     func rowCount(query: String) -> Int { rows }
+
+    var gridOwnsUpAndDown: Bool { ownsUpAndDown }
 
     /// A grid only while the search is empty or only spaces, as emoji to browse.
     func isGrid(query: String) -> Bool { isGrid && query.trimmingCharacters(in: .whitespaces).isEmpty }

@@ -866,11 +866,13 @@ final class RecordingsTabLog {
 
     private(set) var calls: [Call] = []
     private(set) var warnings: [String] = []
+    /// Each row a tile highlighted (`selectRow`).
+    private(set) var selections: [Int] = []
 
     var actions: PaletteContentActions {
         PaletteContentActions(
             dismiss: { [weak self] in self?.calls.append(.dismiss) },
-            selectRow: { _ in },
+            selectRow: { [weak self] in self?.selections.append($0) },
             clearQuery: {},
             deleteRow: { [weak self] in self?.calls.append(.deleteRow($0)) },
             copyClipboardEntry: { [weak self] in self?.calls.append(.copyEntry($0.id)) },

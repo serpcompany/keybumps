@@ -113,18 +113,22 @@ extension CapabilityPaletteContent {
 }
 
 /// What one click on a tab's row or tile does, which the tab's registration declares
-/// (`CapabilityPaletteTab.clickAction`, #552). A right-click's context menu, the pointer's highlight,
-/// and the keys are the same either way.
+/// (`CapabilityPaletteTab.clickAction`, #552), and so whether the pointer moving over a row
+/// highlights it (`CommandPaletteController.hoverHighlights`). A right-click's context menu and the
+/// keys are the same either way.
 enum PaletteClickAction: Equatable {
     /// One click does what Return does, where a row has one obvious job and no detail pane: Search
     /// opens or runs it, Clipboard, Snippets, and Emoji copy it, and Timers starts, pauses, resumes,
     /// or restarts it. The second click of a double-click does nothing, so a double-click never does
-    /// it twice, as pausing a timer, then resuming it.
+    /// it twice, as pausing a timer, then resuming it. The pointer moving over a row highlights it,
+    /// as in Raycast (#347).
     case acts
     /// One click highlights the row, and a double-click does what Return does, where the tab shows
     /// the highlighted row's actions in the detail beside the list or grid (Dictation, Translate,
     /// ScreenGrabs). A click in a grid goes into it, as Down does. The Hotkeys tab's rows have no
-    /// action, so they only highlight.
+    /// action, so they only highlight. The highlight follows only clicks and keys: the pointer
+    /// moving over a row only marks it, so on its way to the detail's buttons it never changes
+    /// which row they act on.
     case selects
 
     /// Does what a click does here: `select` highlights the row, `activate` does what Return does,

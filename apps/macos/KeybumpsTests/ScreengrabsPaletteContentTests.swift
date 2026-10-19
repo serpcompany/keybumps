@@ -58,8 +58,10 @@ struct ScreengrabsPaletteContentTests {
         #expect(fixture.move(.up, from: 3) == 1)
         #expect(fixture.move(.up, from: 1) == nil, "The top row: the palette leaves the grid")
         #expect(fixture.move(.right, from: 2) == 3)
+        #expect(fixture.move(.right, from: 1) == 2, "From the end of a row to the start of the next")
         #expect(fixture.move(.right, from: 4) == nil)
         #expect(fixture.move(.left, from: 3) == 2)
+        #expect(fixture.move(.left, from: 2) == 1, "From the start of a row to the end of the one above")
         #expect(fixture.move(.left, from: 0) == nil)
     }
 
@@ -173,7 +175,7 @@ struct ScreengrabsPaletteContentTests {
         #expect(edited == [ids[0]])
     }
 
-    @Test("A click on a tile goes into the grid, as Down does: the footer names its actions, and the arrow keys move on from it, even after the pointer passed over it; a double-click copies it (#552)")
+    @Test("A click on a tile goes into the grid, as Down does: the footer names its actions, and the arrow keys move on from it; the pointer passing over a tile first changes nothing; a double-click copies it (#552)")
     func clickThroughThePalette() throws {
         let fixture = ScreengrabsTabFixture()
         defer { fixture.tearDown() }
@@ -192,12 +194,16 @@ struct ScreengrabsPaletteContentTests {
         #expect(palette.handleKeyDown(Self.key(kVK_RightArrow)) == nil)
         #expect(palette.state.selection == 2)
 
-        // Again, with the pointer passing over the first tile on its way into the grid, then a click.
+        // Again, with the pointer passing over the first tile on its way, then a click. The pointer
+        // only rings the tile: nothing's highlighted, and the footer still names no tile's actions.
         palette.selectOnOpening(.screenshots)
         pointer = NSPoint(x: 10, y: 20)
         palette.hover(row: 0)
-        #expect(palette.state.gridEnteredByPointer)
+        #expect(!palette.state.isBrowsingGrid)
+        #expect(!palette.state.gridEnteredByPointer)
+        #expect(palette.footerActions.secondary.map(\.description) == ["Edit ⌘E"])
         palette.clickContentRow(.click(), row: 0)
+        #expect(palette.state.isBrowsingGrid)
         #expect(!palette.state.gridEnteredByPointer)
         #expect(palette.handleKeyDown(Self.key(kVK_RightArrow)) == nil)
         #expect(palette.state.tab == .screenshots, "Right moves on in the grid")
@@ -269,13 +275,15 @@ struct ScreengrabsPaletteContentTests {
         #expect(palette.handleKeyDown(Self.key(kVK_RightArrow)) != nil)
         #expect(palette.state.selection == 0)
 
-        // The pointer brings the highlight to a screenshot with none below it. Down has nowhere to
-        // go, but it counts as moving within the grid, so Right moves on to the next screenshot.
+        // A click highlights a screenshot with none below it: Down has nowhere to go and stays put,
+        // and Right moves on to the next screenshot. The pointer passing over another first changes
+        // nothing (#552); a grid the pointer can go into is `CapabilityPaletteContentTests`'.
         palette.state.historyQuery = ""
         palette.selectOnOpening(.screenshots)
         pointer = NSPoint(x: 10, y: 20)
-        palette.hover(row: 3)
-        #expect(palette.state.gridEnteredByPointer)
+        palette.hover(row: 1)
+        #expect(!palette.state.isBrowsingGrid)
+        palette.clickContentRow(.click(), row: 3)
         #expect(palette.handleKeyDown(Self.key(kVK_DownArrow)) == nil)
         #expect(palette.state.selection == 3)
         #expect(palette.handleKeyDown(Self.key(kVK_RightArrow)) == nil)
