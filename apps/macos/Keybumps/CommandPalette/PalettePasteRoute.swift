@@ -17,7 +17,7 @@ struct PasteTarget: Equatable {
     }
 }
 
-/// Whether the palette pastes the highlighted row (⌘P, #370), or copies it and says why. It pastes
+/// Whether the palette pastes the highlighted row (⌘V, #370, #552), or copies it and says why. It pastes
 /// only into the app that was in front when the palette opened (`CommandPaletteController.pasteTarget`;
 /// the non-activating palette never takes it over), and only while that app is still in front after
 /// the palette closes and a short wait, with the palette not reopened. Posting ⌘V into another app
@@ -52,7 +52,7 @@ enum PalettePasteRoute: Equatable {
         return reason.notice
     }
 
-    /// Decided when ⌘P is pressed, before the palette closes.
+    /// Decided when ⌘V is pressed, before the palette closes.
     static func beforeClosing(canPaste: Bool, target: PasteTarget?) -> PalettePasteRoute {
         guard let target, !target.isKeybumps else { return .copy(.noOtherApp) }
         guard canPaste else { return .copy(.needsAccessibility) }

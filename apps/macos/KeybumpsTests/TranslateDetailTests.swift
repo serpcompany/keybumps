@@ -156,6 +156,62 @@ struct TranslateDetailTests {
         #expect(await ax.waitFor { inDetail("made-up first transcript") } != nil, "The detail follows the highlight")
     }
 
+    @Test("The Dictation detail's buttons show their keys as a saved translation's do: Copy ↵ ⌘C, Paste ⌘V, Show in Finder, then Delete ⌫; the footer reads Paste, Command V (#552)")
+    func dictationDetailButtonsAndFooter() async throws {
+        let fixture = TranslatePaletteFixture()
+        defer { fixture.tearDown() }
+        let palette = fixture.palette
+        var offered: [Capability] = []
+        palette.offerPasteSetup = { offered.append($0) }
+        palette.frontmostApp = { PasteTarget(processIdentifier: 4242, isKeybumps: false) }
+        let audio = fixture.folder.url.appendingPathComponent("made-up-\(UUID().uuidString).wav")
+        try Data("made-up audio".utf8).write(to: audio)
+        _ = try fixture.dictationHistory.record("made-up transcript", language: "en-US", duration: 1, audioSourceURL: audio)
+        let ax = try await PaletteAccessibility.layOut(palette, tab: .dictation)
+        defer {
+            palette.dictationPlayer.stop()
+            ax.close()
+        }
+
+        let copy = try await ax.require("palette.dictation.detail.copy")
+        #expect(PaletteAccessibility.label(of: copy) == "Copy")
+        #expect(PaletteAccessibility.hint(of: copy) == "Return, or Command C")
+        let paste = try await ax.require("palette.dictation.detail.paste")
+        #expect(PaletteAccessibility.label(of: paste) == "Paste")
+        #expect(PaletteAccessibility.hint(of: paste) == "Command V")
+        #expect(PaletteAccessibility.label(of: try await ax.require("palette.dictation.detail.showInFinder")) == "Show in Finder")
+        let delete = try await ax.require("palette.dictation.detail.delete")
+        #expect(PaletteAccessibility.label(of: delete) == "Delete")
+        #expect(PaletteAccessibility.hint(of: delete) == "Delete")
+
+        // In order: Copy and Paste first, Translate (where this Mac can) before Show in Finder, Delete last.
+        let buttons = PaletteAccessibility.identifiersInNavigationOrder(in: ax.root).filter { $0.hasPrefix("palette.dictation.detail.") }
+        #expect(buttons.filter { $0 != "palette.dictation.detail.translate" } == [
+            "palette.dictation.detail.copy",
+            "palette.dictation.detail.paste",
+            "palette.dictation.detail.showInFinder",
+            "palette.dictation.detail.delete",
+        ])
+        if let translate = buttons.firstIndex(of: "palette.dictation.detail.translate") {
+            #expect(translate == 2, "Between Paste and Show in Finder")
+        }
+
+        // VoiceOver reads the footer's keys as words, Delete's last.
+        func labels(in object: NSObject) -> [String] {
+            [PaletteAccessibility.text(of: object)].compactMap { $0 } + PaletteAccessibility.children(of: object).flatMap(labels)
+        }
+        let footer = ["Copy, Return", "Paste, Command V", "Play, Space", "Delete, Delete"]
+        #expect(await ax.waitFor { labels(in: ax.root).contains("Paste, Command V") ? true : nil } == true)
+        #expect(labels(in: ax.root).filter(footer.contains) == footer)
+        #expect(!labels(in: ax.root).contains { $0.contains("Command P") })
+
+        // Paste: as ⌘V does. Without Accessibility, it copies instead and offers setup for Dictation.
+        palette.rememberPasteTarget()
+        PaletteAccessibility.press(paste)
+        #expect(fixture.pasteboard.string(forType: .string) == "made-up transcript")
+        #expect(offered == [.dictation])
+    }
+
     @Test("Moving the highlight shows that record in the detail")
     func detailFollowsTheHighlight() async throws {
         let fixture = TranslatePaletteFixture()
@@ -176,7 +232,7 @@ struct TranslateDetailTests {
         #expect(try await ax.texts(in: "palette.translate.detail.languages").contains("English → Japanese"))
     }
 
-    @Test("The detail's buttons do what the keys do: Copy (↵, ⌘C), Paste (⌘P), Read Aloud (Space), and Delete, which asks first")
+    @Test("The detail's buttons do what the keys do: Copy (↵, ⌘C), Paste (⌘V), Read Aloud (Space), and Delete (⌫), which asks first")
     func buttonsDoWhatTheKeysDo() async throws {
         let fixture = TranslatePaletteFixture()
         defer { fixture.tearDown() }
@@ -199,12 +255,13 @@ struct TranslateDetailTests {
         #expect(fixture.clipboard.entries.isEmpty, "Kept out of Clipboard History")
         ax.close()
 
-        // Paste: as ⌘P does. Without Accessibility, it copies instead and offers setup.
+        // Paste: as ⌘V does. Without Accessibility, it copies instead and offers setup.
         fixture.pasteboard.clearContents()
         ax = try await PaletteAccessibility.layOut(palette)
         palette.rememberPasteTarget()
         let paste = try await ax.require("palette.translate.detail.paste")
-        #expect(PaletteAccessibility.hint(of: paste) == "Command P")
+        #expect(PaletteAccessibility.label(of: paste) == "Paste")
+        #expect(PaletteAccessibility.hint(of: paste) == "Command V")
         PaletteAccessibility.press(paste)
         #expect(fixture.pasteboard.string(forType: .string) == "Merci")
         #expect(offered == [.translation])
@@ -227,7 +284,8 @@ struct TranslateDetailTests {
 
         // Delete: asks first, as the Delete key does; nothing goes until the alert's Delete.
         let delete = try await ax.require("palette.translate.detail.delete")
-        #expect(PaletteAccessibility.hint(of: delete) == "Command Delete")
+        #expect(PaletteAccessibility.label(of: delete) == "Delete")
+        #expect(PaletteAccessibility.hint(of: delete) == "Delete", "The footer's ⌫, as every tab's Delete")
         PaletteAccessibility.press(delete)
         let asked = try #require(palette.state.contentPendingDeletion)
         #expect(asked.title == "Delete this translation?")

@@ -7,7 +7,10 @@ struct DictationPaletteResults: View {
     let entries: [DictationHistoryEntry]
     let selection: Int
     let select: (Int) -> Void
+    /// Copies a transcript, as Return and ⌘C do.
     let choose: (String) -> Void
+    /// Pastes a transcript into the app you were using, as ⌘V does.
+    let paste: (String) -> Void
     let transcribe: (DictationHistoryEntry) -> Void
     let retryingEntryID: String?
     /// The palette's player, so Space plays and pauses the highlighted recording too.
@@ -112,6 +115,7 @@ struct DictationPaletteResults: View {
             togglePlayback: { audioPlayer.toggle(entry) },
             setPlaybackRate: audioPlayer.setPlaybackRate,
             copy: { choose(entry.text) },
+            paste: { paste(entry.text) },
             transcribe: { transcribe(entry) },
             reveal: { NSWorkspace.shared.activateFileViewerSelecting([entry.directoryURL]) },
             delete: { requestDelete(entry) }
@@ -167,6 +171,7 @@ private struct DictationPaletteDetail: View {
     let togglePlayback: () -> Void
     let setPlaybackRate: (Float) -> Void
     let copy: () -> Void
+    let paste: () -> Void
     let transcribe: () -> Void
     let reveal: () -> Void
     let delete: () -> Void
@@ -218,24 +223,36 @@ private struct DictationPaletteDetail: View {
         }
     }
 
+    /// The actions, each with the keys that do the same, as a saved translation's are (#552): Copy
+    /// and Paste on a transcript, then Transcribe, Translate, and Show in Finder, and Delete last.
     private var actions: some View {
         HStack(spacing: 6) {
-            if entry.canTranscribe || isTranscribing {
-                Button(isTranscribing ? "Transcribing…" : "Transcribe", systemImage: "waveform.badge.magnifyingglass", action: transcribe)
-                    .disabled(isTranscribing)
-            }
             if !entry.text.isEmpty {
-                Button("Copy", systemImage: "doc.on.doc", action: copy)
+                PaletteActionButton(title: "Copy", systemImage: "doc.on.doc", shortcuts: [["↵"], ["⌘", "C"]], action: copy)
+                    .accessibilityIdentifier("palette.dictation.detail.copy")
+                PaletteActionButton(title: "Paste", systemImage: "doc.on.clipboard", shortcuts: [PaletteKeyAction.paste().keys], action: paste)
+                    .accessibilityIdentifier("palette.dictation.detail.paste")
+            }
+            if entry.canTranscribe || isTranscribing {
+                PaletteActionButton(
+                    title: isTranscribing ? "Transcribing…" : "Transcribe",
+                    systemImage: "waveform.badge.magnifyingglass",
+                    shortcuts: [],
+                    action: transcribe
+                )
+                .disabled(isTranscribing)
+                .accessibilityIdentifier("palette.dictation.detail.transcribe")
             }
             if #available(macOS 15.0, *), TranslationLanguagePolicy.canTranslate(entry.text) {
-                Button("Translate", systemImage: "translate") { showsTranslation.toggle() }
+                PaletteActionButton(title: "Translate", systemImage: "translate", shortcuts: []) { showsTranslation.toggle() }
+                    .accessibilityIdentifier("palette.dictation.detail.translate")
             }
-            Button("Show in Finder", systemImage: "folder", action: reveal)
+            PaletteActionButton(title: "Show in Finder", systemImage: "folder", shortcuts: [], action: reveal)
+                .accessibilityIdentifier("palette.dictation.detail.showInFinder")
             Spacer(minLength: 0)
-            Button("Delete", systemImage: "trash", role: .destructive, action: delete)
-                .help("Delete (⌫)")
+            PaletteActionButton(title: "Delete", systemImage: "trash", shortcuts: [PaletteKeyAction.delete().keys], role: .destructive, action: delete)
+                .accessibilityIdentifier("palette.dictation.detail.delete")
         }
-        .buttonStyle(PalettePillButtonStyle(showsIcon: true))
     }
 
     private var information: some View {

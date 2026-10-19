@@ -113,10 +113,10 @@ struct PluginManifestTests {
         }
     }
 
-    @Test("Every plugin whose tab pastes with ⌘P declares Accessibility, which pasting into another app needs (#370)")
+    @Test("Every plugin whose tab pastes with ⌘V declares Accessibility, which pasting into another app needs (#370, #552)")
     func pastingPluginsDeclareAccessibility() {
         let pasting = CapabilityCatalog.descriptors.filter { descriptor in
-            descriptor.paletteTab?.secondaryActions.contains { $0.keys == PaletteKeyAction.paste().keys } == true
+            descriptor.paletteTab?.secondaryActions.contains(where: \.isPaste) == true
         }
         #expect(pasting.map(\.capability) == [.clipboardHistory, .screenshotTools, .dictation, .snippets, .emojiPicker, .translation])
         for descriptor in pasting {
@@ -126,6 +126,10 @@ struct PluginManifestTests {
         #expect(CapabilityDescriptor.clipboardHistory.optionalPermissions.map(\.permission) == [.accessibility])
         #expect(CapabilityDescriptor.screenshotTools.optionalPermissions.map(\.permission) == [.accessibility, .microphone, .inputMonitoring])
         #expect(CapabilityDescriptor.dictation.requiredPermissions.contains(.accessibility), "Dictation needs it anyway")
+        // Their reasons name the key that pastes now (#552).
+        let reasons = pasting.flatMap(\.optionalPermissions).filter { $0.permission == .accessibility }.map(\.reason)
+        #expect(!reasons.isEmpty && reasons.allSatisfy { $0.contains("⌘V") && !$0.contains("⌘P") })
+        #expect(MacPermission.accessibility.explanation.contains("⌘V in the Command Palette"))
     }
 
     @Test("A new install starts with every plugin on except those that ship off")

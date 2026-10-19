@@ -9,14 +9,15 @@ import SwiftUI
 /// detected in my language also becomes Other language.
 ///
 /// Return saves the translation to recent translations (`RecentTranslations`, the last 50, kept on
-/// this Mac) and clears the field; ⌘P saves it and pastes it into the app you were using, putting
-/// the clipboard back (#362, #370). With the field empty, the tab lists them, newest first, laid out
-/// like the Dictation tab (#377): a compact row each on the left, and the highlighted one in full on
-/// the right (`detail(row:query:)`), its translation and source text selectable and scrolling, its
-/// languages and when it was saved, and a button for each key. Return or ⌘C copies one, kept out of
-/// Clipboard History; ⌘P pastes it; Delete asks, then deletes it. Read Aloud, or Space, reads it
-/// aloud (`TranslationSpeaking`) until the palette closes, the tab or the text changes, another is
-/// read, or it's deleted. Text selected with the pointer is Edit › Copy's, so ⌘C copies just that.
+/// this Mac) and clears the field; ⌘Return saves it and pastes it into the app you were using,
+/// putting the clipboard back (#362, #370). While you type, ⌘V pastes into the field, as in any
+/// text field (#552). With the field empty, the tab lists them, newest first, laid out like the
+/// Dictation tab (#377): a compact row each on the left, and the highlighted one in full on the right
+/// (`detail(row:query:)`), its translation and source text selectable and scrolling, its languages
+/// and when it was saved, and a button for each key. Return or ⌘C copies one, kept out of Clipboard
+/// History; ⌘V pastes it; Delete asks, then deletes it. Read Aloud, or Space, reads it aloud
+/// (`TranslationSpeaking`) until the palette closes, the tab or the text changes, another is read,
+/// or it's deleted. Text selected with the pointer is Edit › Copy's, so ⌘C copies just that.
 @MainActor
 @Observable
 final class TranslatePaletteContent: CapabilityPaletteContent {
@@ -387,13 +388,17 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
         palette.copy(record.translatedText)
     }
 
-    /// ⌘P pastes a saved translation, or saves the translation being typed and pastes it, then
-    /// puts the clipboard back.
+    /// ⌘V pastes a saved translation, then puts the clipboard back. While you type, ⌘V is the
+    /// search field's (`pastes(row:query:)`), and ⌘Return saves and pastes (`commandActivate`).
     func paste(row: Int, query: String, palette: PaletteContentActions) {
-        if let record = record(row: row, query: query) {
-            palette.paste(record.translatedText, true)
-            return
-        }
+        guard let record = record(row: row, query: query) else { return }
+        palette.paste(record.translatedText, true)
+    }
+
+    /// ⌘Return saves the translation being typed and pastes it, then puts the clipboard back (#552).
+    /// On a saved translation it copies, as Return does.
+    func commandActivate(row: Int, query: String, palette: PaletteContentActions) {
+        guard record(row: row, query: query) == nil else { return activate(row: row, query: query, palette: palette) }
         guard row == 0, let record = saveCurrentTranslation(query: query) else { return }
         palette.paste(record.translatedText, true)
     }
@@ -416,14 +421,19 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
         )
     }
 
+    /// On a saved translation: Copy ↵, Paste ⌘V, then Read Aloud Space and Delete ⌫. On the
+    /// translation being typed: Save ↵ and Save and Paste ⌘↵.
     func footerActions(row: Int, query: String) -> PaletteFooterActions {
         if record(row: row, query: query) != nil {
-            return PaletteFooterActions(primary: "Copy", secondary: [.paste()])
+            return PaletteFooterActions(primary: "Copy", secondary: [.paste(), .delete()])
         }
         return currentTranslation(query: query) == nil
             ? PaletteFooterActions(primary: nil)
-            : PaletteFooterActions(primary: "Save", secondary: [.paste("Save and Paste")])
+            : PaletteFooterActions(primary: "Save", secondary: [Self.saveAndPaste])
     }
+
+    /// ⌘Return on the translation being typed, which leaves ⌘V to the search field (#552).
+    static let saveAndPaste = PaletteKeyAction(title: "Save and Paste", keys: ["⌘", "↵"])
 
     /// ⌘T swaps the languages. It's the tab's even with nothing to swap, so it never reaches the
     /// search field.
@@ -717,7 +727,7 @@ private struct RecentTranslationDetail: View {
         HStack(spacing: 6) {
             PaletteActionButton(title: "Copy", systemImage: "doc.on.doc", shortcuts: [["↵"], ["⌘", "C"]], action: copy)
                 .accessibilityIdentifier("palette.translate.detail.copy")
-            PaletteActionButton(title: "Paste", systemImage: "doc.on.clipboard", shortcuts: [["⌘", "P"]], action: paste)
+            PaletteActionButton(title: "Paste", systemImage: "doc.on.clipboard", shortcuts: [PaletteKeyAction.paste().keys], action: paste)
                 .accessibilityIdentifier("palette.translate.detail.paste")
             PaletteActionButton(
                 title: detail.readAloudTitle,
@@ -727,7 +737,7 @@ private struct RecentTranslationDetail: View {
             )
             .accessibilityIdentifier("palette.translate.detail.readAloud")
             Spacer(minLength: 0)
-            PaletteActionButton(title: "Delete", systemImage: "trash", shortcuts: [["⌘", "⌫"]], role: .destructive, action: delete)
+            PaletteActionButton(title: "Delete", systemImage: "trash", shortcuts: [PaletteKeyAction.delete().keys], role: .destructive, action: delete)
                 .accessibilityIdentifier("palette.translate.detail.delete")
         }
     }

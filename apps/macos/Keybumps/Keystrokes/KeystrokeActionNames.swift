@@ -5,7 +5,8 @@ import Foundation
 /// and cheap: no Accessibility lookups of other apps' menus, so an app's own shortcuts go unnamed.
 enum KeystrokeActionNames {
     /// `palette` is the Command Palette's own key names while it's the key window (`paletteNames`),
-    /// where a standard shortcut may do something else (⌘P pastes there), or nil when it isn't.
+    /// where a standard shortcut may do something else (⌘E edits there, and ⌘P does nothing), or nil
+    /// when it isn't.
     static func name(for stroke: Keystroke, keybumps: String?, palette: [String: String]? = nil) -> String? {
         guard stroke.isShortcut else { return nil }
         if let keybumps { return keybumps }
@@ -13,7 +14,8 @@ enum KeystrokeActionNames {
         return standard[stroke.text]
     }
 
-    /// The names a palette tab's footer gives its keys, as the display writes them: "⌘P": "Paste".
+    /// The names the palette's footer gives its keys, as the display writes them: "⌘V": "Paste",
+    /// "⌘E": "Edit".
     static func paletteNames(_ actions: [PaletteKeyAction]) -> [String: String] {
         Dictionary(actions.map { ($0.keys.joined().replacingOccurrences(of: "↵", with: "↩"), $0.title) }) { first, _ in first }
     }

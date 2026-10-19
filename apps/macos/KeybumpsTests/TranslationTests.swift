@@ -278,7 +278,7 @@ struct TranslateTabTests {
         #expect(CommandPaletteTab.translate.title == "Translate")
         #expect(CommandPaletteTab.translate.shortcutLabel == "⌘8")
         #expect(CommandPaletteTab.translate.primaryActionTitle == "Copy")
-        #expect(CommandPaletteTab.translate.secondaryActions == [.paste()])
+        #expect(CommandPaletteTab.translate.secondaryActions == [.paste(), .delete()])
         #expect(CommandPaletteTab.keyboardShortcutter.shortcutLabel == "⌘9", "Hotkeys moved to stay last")
         #expect(descriptor.shortcuts == [.translation])
         #expect(CapabilityShortcut.translation.title == "Open Translate")
@@ -311,7 +311,9 @@ struct TranslateTabTests {
         #expect(translator.calls == [.init(text: Self.english, source: "en", target: "ja")])
         #expect(tab.currentTranslation(query: Self.english) == "[ja] \(Self.english)")
         #expect(tab.rowCount(query: Self.english) == 1)
-        #expect(tab.footerActions(row: 0, query: Self.english) == PaletteFooterActions(primary: "Save", secondary: [.paste("Save and Paste")]))
+        #expect(tab.footerActions(row: 0, query: Self.english) == PaletteFooterActions(primary: "Save", secondary: [TranslatePaletteContent.saveAndPaste]))
+        #expect(TranslatePaletteContent.saveAndPaste.description == "Save and Paste ⌘↵", "⌘V is the field's while you type (#552)")
+        #expect(!tab.pastes(row: 0, query: Self.english))
 
         tab.update(query: "  \(Self.japanese)\n")
         await tab.work?.value
@@ -339,7 +341,8 @@ struct TranslateTabTests {
         #expect(record.sourceLanguage == "en" && record.targetLanguage == "ja")
         #expect(tab.rowCount(query: "") == 1, "With the field empty, the tab lists it")
         #expect(tab.record(row: 0, query: "") == record)
-        #expect(tab.footerActions(row: 0, query: "") == PaletteFooterActions(primary: "Copy", secondary: [.paste()]))
+        #expect(tab.footerActions(row: 0, query: "") == PaletteFooterActions(primary: "Copy", secondary: [.paste(), .delete()]))
+        #expect(tab.pastes(row: 0, query: ""), "⌘V pastes a saved translation")
 
         // Typed on since: the translation is of older text, so Return waits for the new one.
         tab.activate(row: 0, query: Self.english + " Thanks", palette: actions.actions)
@@ -347,8 +350,8 @@ struct TranslateTabTests {
         #expect(tab.rowCount(query: Self.english + " Thanks") == 0)
     }
 
-    @Test("⌘P saves the translation too, then pastes it and puts the clipboard back; ⌘C and Space leave it alone (#370)")
-    func commandPSavesAndPastes() async {
+    @Test("⌘Return saves the translation too, then pastes it and puts the clipboard back; ⌘V, ⌘C, and Space leave it alone (#370, #552)")
+    func commandReturnSavesAndPastes() async {
         let recents = RecentTranslations(storageURL: nil)
         let tab = Self.tab(FakeTranslator(), recents: recents)
         let actions = RecordingActions()
@@ -360,6 +363,9 @@ struct TranslateTabTests {
         #expect(tab.playback(row: 0, query: Self.japanese) == nil, "Nothing to read aloud until it's saved")
 
         tab.paste(row: 0, query: Self.japanese, palette: actions.actions)
+        #expect(actions.pasted.isEmpty && recents.records.isEmpty, "⌘V is the search field's while you type")
+
+        tab.commandActivate(row: 0, query: Self.japanese, palette: actions.actions)
         #expect(actions.pasted.map(\.text) == ["[en] \(Self.japanese)"])
         #expect(actions.pasted.map(\.restoresClipboard) == [true])
         #expect(actions.copied.isEmpty)
@@ -638,7 +644,7 @@ struct TranslateTabLanguageTests {
         #expect(fixture.tab.request?.source == "ja", "Swapped once")
     }
 
-    @Test("In the Translate tab, the palette's own keys still work: ⌘P pastes, ⌘2 and ⌘8 switch tabs, ⌘, opens Settings")
+    @Test("In the Translate tab, the palette's own keys still work: ⌘Return saves and pastes, ⌘V and ⌘P don't, ⌘2 and ⌘8 switch tabs, ⌘, opens Settings")
     func paletteKeysStillWork() async {
         let fixture = TranslatePaletteFixture()
         defer { fixture.tearDown() }
@@ -654,10 +660,15 @@ struct TranslateTabLanguageTests {
         fixture.tab.update(query: Self.english)
         await fixture.tab.work?.value
 
-        // Without Accessibility, ⌘P's paste copies instead and offers setup for Translation.
-        #expect(palette.handleKeyDown(fixture.commandKey(kVK_ANSI_P, "p")) == nil)
+        // While you type, ⌘V pastes into the search field, and ⌘P does nothing (#552).
+        #expect(palette.handleKeyDown(fixture.commandKey(kVK_ANSI_V, "v")) != nil, "⌘V goes on to the search field")
+        #expect(palette.handleKeyDown(fixture.commandKey(kVK_ANSI_P, "p")) == nil, "⌘P is swallowed")
+        #expect(offered.isEmpty && fixture.recents.records.isEmpty, "Neither saved nor pasted")
+
+        // Without Accessibility, ⌘Return's paste copies instead and offers setup for Translation.
+        #expect(palette.handleKeyDown(fixture.commandKey(kVK_Return, "\r")) == nil)
         #expect(fixture.pasteboard.string(forType: .string) == "[ja] \(Self.english)")
-        #expect(offered == [.translation], "⌘P went to the paste")
+        #expect(offered == [.translation], "⌘Return went to the paste")
         #expect(fixture.recents.records.map(\.translatedText) == ["[ja] \(Self.english)"], "and saved it")
         #expect(fixture.translator.calls.count == 1, "Nothing swapped")
 
@@ -1017,7 +1028,7 @@ struct RecentTranslationTests {
         #expect(fixture.pasteboard.string(forType: .string) == nil, "Nothing copied")
     }
 
-    @Test("On a saved translation, Return and ⌘C copy it, kept out of Clipboard History, ⌘P pastes it, and ⌘Return only copies")
+    @Test("On a saved translation, Return and ⌘C copy it, kept out of Clipboard History, ⌘V pastes it, and ⌘Return only copies")
     func rowsCopyAndPaste() {
         let fixture = TranslatePaletteFixture()
         defer { fixture.tearDown() }
@@ -1050,7 +1061,7 @@ struct RecentTranslationTests {
 
         palette.selectOnOpening(.translate)
         palette.rememberPasteTarget()
-        #expect(palette.handleKeyDown(fixture.commandKey(kVK_ANSI_P, "p")) == nil)
+        #expect(palette.handleKeyDown(fixture.commandKey(kVK_ANSI_V, "v")) == nil)
         // Without Accessibility, the paste copies instead and offers setup.
         #expect(fixture.pasteboard.string(forType: .string) == "Merci")
         #expect(offered == [.translation])

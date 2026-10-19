@@ -57,7 +57,8 @@ struct CapabilityPaletteTab {
     let prompt: String
     /// What Return does, shown first in the footer with ↵.
     let primaryActionTitle: String?
-    /// The other keys the footer names after Return, with their keys, such as Paste ⌘P.
+    /// The other keys the footer names after Return, with their keys, such as Paste ⌘V, ending with
+    /// Delete ⌫ where Delete removes the row.
     let secondaryActions: [PaletteKeyAction]
     let dataSource: Capability?
     /// Whether the tab also lists the module's own recordings, as the ScreenGrabs tab does (#494), so

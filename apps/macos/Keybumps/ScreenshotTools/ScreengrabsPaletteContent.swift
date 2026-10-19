@@ -242,12 +242,14 @@ enum ScreengrabsTabContent: Equatable {
 ///
 /// - **Return** or a click copies: a screenshot as Clipboard History restores it, a recording as its
 ///   files, every display's, as the recording window's Copy does, kept out of Clipboard History.
-///   **⌘P** pastes it.
-/// - **⌘Return**, **⌘E**, or a ⌘-click opens a screenshot in the Screenshot Editor and a recording in
-///   the recording window, with Move to Trash and Done (`ScreencastReviewMode.saved`).
+///   **⌘V** pastes it.
+/// - **⌘E** (Edit), **⌘Return**, or a ⌘-click opens a screenshot in the Screenshot Editor and a
+///   recording in the recording window, where it's trimmed, cropped, and blurred, with Move to Trash
+///   and Done (`ScreencastReviewMode.saved`).
 /// - **Space** opens it in Quick Look (`ScreengrabsQuickLooking`).
 /// - **Delete** removes a screenshot from the tab and leaves its file. On a recording it asks, then
 ///   moves its folder to the Trash (`RecordingTrash`). Clear All clears screenshots only.
+/// - The footer and the context menu name these keys in that order, Delete's last (#552).
 /// - A recording moved or deleted outside Keybumps, its folder or a display's video, stays, dimmed,
 ///   marked "Moved or deleted" (`IndexedRecording.isMissing`, looked at again each time the tab
 ///   shows): its keys say it couldn't open, as the recording window can't, and Delete removes it
@@ -346,7 +348,7 @@ final class ScreengrabsPaletteContent: CapabilityPaletteContent {
         paste(item, palette: palette)
     }
 
-    /// ⌘P and the context menu's Paste: a screenshot as Clipboard History restores it, a recording
+    /// ⌘V and the context menu's Paste: a screenshot as Clipboard History restores it, a recording
     /// as its files.
     func paste(_ item: Screengrab, palette: PaletteContentActions) {
         switch item {
@@ -355,6 +357,12 @@ final class ScreengrabsPaletteContent: CapabilityPaletteContent {
             guard let files = sharingFiles(of: recording, palette: palette) else { return }
             palette.pasteFiles(files)
         }
+    }
+
+    /// Every screengrab takes ⌘V: a moved or deleted recording's only says so, as its other keys do,
+    /// though the footer doesn't list it.
+    func pastes(row: Int, query: String) -> Bool {
+        item(at: row, query: query) != nil
     }
 
     /// Space: Quick Look, which closes the palette. A moved or deleted recording only says so, and
@@ -402,26 +410,31 @@ final class ScreengrabsPaletteContent: CapabilityPaletteContent {
         )
     }
 
-    /// What the footer names on the highlighted screengrab: Copy ↵, Paste ⌘P, and Edit ⌘↵ on a
-    /// screenshot; on a recording, Open ⌘↵, and Copy 2 Videos for a recording of two screens; only
-    /// Remove ⌫ on one moved or deleted. Space's Quick Look comes from `playback(row:query:)`.
+    /// What the footer names on the highlighted screengrab: Copy ↵, Paste ⌘V, Edit ⌘E, and Delete ⌫
+    /// on a screenshot; on a recording, Move to Trash ⌫ for Delete, and Copy 2 Videos for a recording
+    /// of two screens; only Remove ⌫ on one moved or deleted. Space's Quick Look comes from
+    /// `playback(row:query:)`, before Delete's. ⌘Return edits too, unlisted.
     func footerActions(row: Int, query: String) -> PaletteFooterActions {
         switch item(at: row, query: query) {
         case .recording(let recording) where recording.isMissing:
             PaletteFooterActions(primary: nil, secondary: [.remove])
         case .recording(let recording):
-            PaletteFooterActions(primary: Self.copyTitle(for: recording), secondary: [.paste(), .open])
+            PaletteFooterActions(primary: Self.copyTitle(for: recording), secondary: [.paste(), .edit, Self.moveToTrash])
         case .screenshot, nil:
             PaletteFooterActions(tab: tab)
         }
     }
+
+    /// Delete on a recording, which asks, then moves its folder to the Trash.
+    static let moveToTrash = PaletteKeyAction.delete("Move to Trash")
 
     /// Return's name on a recording: Copy, or Copy 2 Videos for one of two screens.
     static func copyTitle(for recording: IndexedRecording) -> String {
         recording.sharingURLs.count > 1 ? "Copy \(recording.sharingURLs.count) Videos" : "Copy"
     }
 
-    /// ⌘E edits the selected screenshot, as ⌘Return does, and opens a recording in its window.
+    /// ⌘E edits the selected screengrab, as ⌘Return does: a screenshot in the Screenshot Editor, a
+    /// recording in its window.
     var commandKeys: Set<String> { ["e"] }
 
     func handleCommandKey(_ characters: String, row: Int, query: String, palette: PaletteContentActions) {
@@ -514,7 +527,7 @@ final class ScreengrabsPaletteContent: CapabilityPaletteContent {
         recordings?.remove(folder: recording.folder)
     }
 
-    /// The one check before Return, ⌘P, Space, and ⌘Return use a recording: it's taken as the
+    /// The one check before Return, ⌘V, Space, ⌘E, and ⌘Return use a recording: it's taken as the
     /// recording window opens it (`IndexedRecording.savedCapture()`), and what's copied, pasted, or
     /// previewed is each display's mixdown, else its full video, as the window's Copy does. Nil when
     /// it can't open, and the notch says why: moved or deleted (its folder or a display's video,
@@ -664,7 +677,7 @@ private struct ScreengrabGrid: View {
                                         switch action {
                                         case .copy: content.choose(item, withCommand: false, palette: actions)
                                         case .paste: content.paste(item, palette: actions)
-                                        case .open: content.choose(item, withCommand: true, palette: actions)
+                                        case .edit: content.choose(item, withCommand: true, palette: actions)
                                         case .quickLook: content.preview(item)
                                         case .showInFinder: content.reveal(item)
                                         case .delete: actions.deleteRow(index)
@@ -688,7 +701,7 @@ private struct ScreengrabGrid: View {
 
 /// What a tile's trash button and context menu do.
 private enum ScreengrabCardAction {
-    case copy, paste, open, quickLook, showInFinder, delete
+    case copy, paste, edit, quickLook, showInFinder, delete
 }
 
 /// A screengrab's tile: its thumbnail fitted on the gray well, the name and age under it. A
@@ -795,21 +808,27 @@ private struct ScreengrabCard: View {
         }
     }
 
-    /// The stock context menu: Copy, Paste, Edit or Open in Recording Window, Quick Look, Show in
-    /// Finder, then Delete, or Move to Trash… for a recording; only Remove for one moved or deleted.
+    /// The stock context menu, with the footer's names and keys (#552): Copy ⌘C, Paste ⌘V, Edit ⌘E
+    /// (a recording's opens the recording window, where it's edited), Quick Look, Show in Finder,
+    /// then Delete ⌫, or Move to Trash… for a recording; only Remove for one moved or deleted.
     @ViewBuilder private var menu: some View {
         if item.isMissing {
-            Button("Remove") { run(.delete) }
+            Button(PaletteKeyAction.remove.title) { run(.delete) }
+                .paletteMenuKeys(PaletteKeyAction.remove.keys)
         } else {
             Button(copyTitle) { run(.copy) }
+                .paletteMenuKeys(["⌘", "C"])
             Button("Paste") { run(.paste) }
-            Button(item.recording == nil ? "Edit" : "Open in Recording Window") { run(.open) }
+                .paletteMenuKeys(PaletteKeyAction.paste().keys)
+            Button(PaletteKeyAction.edit.title) { run(.edit) }
+                .paletteMenuKeys(PaletteKeyAction.edit.keys)
             Button("Quick Look") { run(.quickLook) }
             if !item.finderFiles.isEmpty {
                 Button("Show in Finder") { run(.showInFinder) }
             }
             Divider()
             Button(item.recording == nil ? "Delete" : "Move to Trash…", role: .destructive) { run(.delete) }
+                .paletteMenuKeys(PaletteKeyAction.delete().keys)
         }
     }
 

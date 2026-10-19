@@ -104,10 +104,10 @@ final class ScreencastReviewFlow {
         await panelForReview()?.show(input, context: context)
     }
 
-    /// The ⌘3 tab's ⌘Return on a saved recording (#494): the recording window opens on it, with Move
-    /// to Trash and Done (`ScreencastReviewMode.saved`), once the one under review is closed, which
-    /// saves it. Returns false, opening nothing, when its `meta.json` can't be read or a video is
-    /// gone, or with no services (a module test's composition).
+    /// The ⌘3 tab's Edit (⌘E or ⌘Return) on a saved recording (#494, #552): the recording window opens
+    /// on it, with Move to Trash and Done (`ScreencastReviewMode.saved`), once the one under review is
+    /// closed, which saves it. Returns false, opening nothing, when its `meta.json` can't be read or a
+    /// video is gone, or with no services (a module test's composition).
     @discardableResult
     func open(_ recording: IndexedRecording) -> Bool {
         guard let capture = recording.savedCapture(), let panel = panelForReview() else { return false }

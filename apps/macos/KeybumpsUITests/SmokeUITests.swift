@@ -833,7 +833,7 @@ final class SmokeUITests: XCTestCase {
         let expansion = element("snippets.expansion")
         XCTAssertTrue(expansion.waitForExistence(timeout: 20))
         XCTAssertFalse(app.buttons["Allow Input Monitoring so keywords expand"].exists, "Off by default, so it needs nothing")
-        XCTAssertTrue(app.staticTexts["Accessibility (Optional)"].exists, "⌘P pastes with it (#379)")
+        XCTAssertTrue(app.staticTexts["Accessibility (Optional)"].exists, "⌘V pastes with it (#379)")
 
         expansion.click()
         XCTAssertTrue(app.buttons["Allow Input Monitoring so keywords expand"].waitForExistence(timeout: 5))

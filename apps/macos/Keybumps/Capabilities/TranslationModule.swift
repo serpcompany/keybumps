@@ -15,7 +15,7 @@ extension CapabilityDescriptor {
             systemImage: "translate",
             prompt: "Type or paste text to translate",
             primaryActionTitle: "Copy",
-            secondaryActions: [.paste()],
+            secondaryActions: [.paste(), .delete()],
             dataSource: nil
         ),
         settingsPage: CapabilitySettingsPage(
@@ -31,7 +31,7 @@ extension CapabilityDescriptor {
         optionalPermissions: [
             PluginOptionalPermission(
                 permission: .accessibility,
-                reason: "Lets ⌘P paste the translation into the app you’re using. Without it, ⌘P copies the translation instead."
+                reason: "Lets ⌘V paste the translation into the app you’re using. Without it, ⌘V copies the translation instead."
             ),
         ],
         isOnByDefault: false,

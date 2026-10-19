@@ -65822,7 +65822,8 @@
       "primaryAction" : "Copy",
       "prompt" : "Search clipboard history",
       "secondaryActions" : [
-        "Paste ⌘P"
+        "Paste ⌘V",
+        "Delete ⌫"
       ],
       "systemImage" : "clipboard",
       "tab" : "clipboard"
@@ -65834,8 +65835,9 @@
       "primaryAction" : "Copy",
       "prompt" : "Search ScreenGrabs",
       "secondaryActions" : [
-        "Paste ⌘P",
-        "Edit ⌘↵"
+        "Paste ⌘V",
+        "Edit ⌘E",
+        "Delete ⌫"
       ],
       "systemImage" : "camera.viewfinder",
       "tab" : "screenshots"
@@ -65847,7 +65849,8 @@
       "primaryAction" : "Copy",
       "prompt" : "Search dictation history",
       "secondaryActions" : [
-        "Paste ⌘P"
+        "Paste ⌘V",
+        "Delete ⌫"
       ],
       "systemImage" : "waveform",
       "tab" : "dictation"
@@ -65859,7 +65862,9 @@
       "primaryAction" : "Copy",
       "prompt" : "Search snippets",
       "secondaryActions" : [
-        "Paste ⌘P"
+        "Paste ⌘V",
+        "Edit ⌘E",
+        "Delete ⌫"
       ],
       "systemImage" : "text.quote",
       "tab" : "snippets"
@@ -65871,7 +65876,7 @@
       "primaryAction" : "Start",
       "prompt" : "Start a timer: 5m, 1h30m, tea 25",
       "secondaryActions" : [
-
+        "Delete ⌫"
       ],
       "systemImage" : "timer",
       "tab" : "timers"
@@ -65883,7 +65888,7 @@
       "primaryAction" : "Copy",
       "prompt" : "Search emoji by name, keyword, or :shortcode:",
       "secondaryActions" : [
-        "Paste ⌘P"
+        "Paste ⌘V"
       ],
       "systemImage" : "face.smiling",
       "tab" : "emoji"
@@ -65895,7 +65900,8 @@
       "primaryAction" : "Copy",
       "prompt" : "Type or paste text to translate",
       "secondaryActions" : [
-        "Paste ⌘P"
+        "Paste ⌘V",
+        "Delete ⌫"
       ],
       "systemImage" : "translate",
       "tab" : "translate"

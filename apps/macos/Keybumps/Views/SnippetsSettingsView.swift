@@ -101,7 +101,7 @@ struct SnippetsSettingsView: View {
                 } else if store.snippets.isEmpty {
                     SettingsRowLabel(
                         title: "No snippets yet",
-                        subtitle: "Click + to save text you reuse. In the Command Palette’s Snippets tab, Return copies it and ⌘P pastes it."
+                        subtitle: "Click + to save text you reuse. In the Command Palette’s Snippets tab, Return copies it and ⌘V pastes it."
                     )
                 } else if rows.isEmpty {
                     SettingsNote("No matching snippets")
@@ -138,7 +138,7 @@ struct SnippetsSettingsView: View {
                 SettingsNote("Some saved snippets couldn’t be read. Keybumps kept a copy of the file as \(copyName) in its Application Support folder.", tint: .orange)
             }
             // Last, so the snippets stay at the top of the page. Accessibility is optional: without
-            // it, ⌘P copies instead of pasting. Expanding needs it too; while auto-expansion is on,
+            // it, ⌘V copies instead of pasting. Expanding needs it too; while auto-expansion is on,
             // its section above says so but asks only here.
             PluginPermissionsGroup(capability: .snippets)
         }

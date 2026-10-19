@@ -63,7 +63,7 @@ struct ScreengrabsPaletteContentTests {
 
     // MARK: Keys
 
-    @Test("Return and ⌘C copy, ⌘P pastes, and ⌘Return and ⌘E edit the selected screenshot")
+    @Test("Return and ⌘C copy, ⌘V pastes, and ⌘Return and ⌘E edit the selected screenshot")
     func keys() throws {
         let fixture = ScreengrabsTabFixture()
         defer { fixture.tearDown() }
@@ -78,6 +78,8 @@ struct ScreengrabsPaletteContentTests {
         content.handleCommandKey("e", row: 0, query: "", palette: log.actions)
         #expect(log.calls == [.copy(ids[0]), .copy(ids[1]), .paste(ids[0]), .edit(ids[1]), .edit(ids[0])])
         #expect(content.commandKeys == ["e"])
+        #expect(content.pastes(row: 0, query: ""), "⌘V pastes a screenshot")
+        #expect(!content.pastes(row: 2, query: ""), "No row, so ⌘V is the search field's")
     }
 
     @Test("Keys on a row that isn't there do nothing")
@@ -107,16 +109,19 @@ struct ScreengrabsPaletteContentTests {
         #expect(log.calls == [.copy(ids[0]), .edit(ids[0])])
     }
 
-    @Test("Space opens Quick Look (#494), and the footer names Copy ↵, Paste ⌘P, and Edit ⌘↵")
+    @Test("Space opens Quick Look (#494), and the footer names Copy ↵, Paste ⌘V, Edit ⌘E, Quick Look, then Delete ⌫ (#552)")
     func spaceAndFooter() throws {
         let fixture = ScreengrabsTabFixture()
         defer { fixture.tearDown() }
         try fixture.addScreenshots(["First"])
 
-        #expect(fixture.content.playback(row: 0, query: "")?.title == "Quick Look")
+        let playback = try #require(fixture.content.playback(row: 0, query: ""))
+        #expect(playback.title == "Quick Look")
         let footer = fixture.content.footerActions(row: 0, query: "")
         #expect(footer.primary == "Copy")
-        #expect(footer.secondary.map(\.description) == ["Paste ⌘P", "Edit ⌘↵"])
+        #expect(footer.secondary.map(\.description) == ["Paste ⌘V", "Edit ⌘E", "Delete ⌫"])
+        let resolved = PaletteFooterActions.resolve(tab: .screenshots, searchItem: nil, content: footer, playback: playback.title)
+        #expect(resolved.secondary.map(\.description) == ["Paste ⌘V", "Edit ⌘E", "Quick Look Space", "Delete ⌫"], "Space's before Delete's")
     }
 
     @Test("Delete removes the screenshot from the tab and leaves its file")

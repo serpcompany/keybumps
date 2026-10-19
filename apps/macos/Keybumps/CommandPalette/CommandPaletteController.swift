@@ -74,7 +74,7 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
 
     var primaryActionTitle: String? { registration.primaryActionTitle }
 
-    /// Shown in the footer after the primary action, each with its key, such as Paste ⌘P.
+    /// Shown in the footer after the primary action, each with its key, such as Paste ⌘V.
     var secondaryActions: [PaletteKeyAction] { registration.secondaryActions }
 }
 
@@ -415,7 +415,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         restorer.didRestore = { [weak clipboard] in clipboard?.suppressCurrentChange() }
         return restorer
     }()
-    /// The app that was in front when the palette opened: the only app ⌘P pastes into.
+    /// The app that was in front when the palette opened: the only app ⌘V pastes into.
     private(set) var pasteTarget: PasteTarget?
     /// The paste waiting out `pasteDelay`; opening the palette again cancels it.
     private var pendingPaste: UUID?
@@ -657,6 +657,10 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 copyDictationText: { [weak self] text in
                     self?.copy(text, suppressClipboardHistory: true)
                 },
+                pasteDictationText: { [weak self] text in
+                    self?.pasteText(text, restoresClipboard: false, for: .dictation)
+                },
+                pasteClipboardEntry: { [weak self] entry in self?.pasteClipboardEntry(entry, for: .clipboardHistory) },
                 snippetActions: SnippetPaletteActions(
                     copy: { [weak self] snippet in self?.copySnippet(snippet) },
                     paste: { [weak self] snippet in self?.pasteSnippet(snippet) },
@@ -675,6 +679,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 },
                 chooseFilter: { [weak self] filter in self?.chooseFilter(filter) },
                 chooseEmoji: { [weak self] emoji, paste in self?.chooseQuickSearchEmoji(emoji, paste: paste) },
+                footerActions: { [weak self] in self?.footerActions ?? PaletteFooterActions(primary: nil) },
                 dismiss: dismiss
             )
             .frame(width: size.width, height: size.height)
@@ -756,12 +761,14 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     /// The palette's keys: returns nil for a key it handled, or the event to pass on. Tests call it
     /// with synthesized events, so no real keystroke is posted.
     ///
-    /// On the highlighted row (#370), ⌘C copies it and ⌘P pastes it into the app you were using
-    /// (`PalettePasteRoute`): a Clipboard History or Screenshots item, a snippet, or a transcript stays
-    /// on the clipboard; an emoji or a translation puts the clipboard back. With the search field
-    /// empty, Space plays or pauses the row's audio. ⌘Return does what Return does, except Reveal in
-    /// Quick Search and Edit in Screenshots. Text selected where the keys go, and an input method
-    /// that's composing, keep their keys.
+    /// On the highlighted row (#370), ⌘C copies it and ⌘V pastes it into the app you were using
+    /// (`PalettePasteRoute`, #552): a Clipboard History or Screenshots item, a snippet, or a transcript
+    /// stays on the clipboard; an emoji or a translation puts the clipboard back. On a row that doesn't
+    /// paste, ⌘V pastes into the search field, as in any text field, and ⌘P does nothing. ⌘E edits a
+    /// screenshot, an image, a recording, or a snippet. With the search field empty, Space plays or
+    /// pauses the row's audio. ⌘Return does what Return does, except Reveal in Quick Search, Edit in
+    /// Screenshots, and Save and Paste in Translate. Text selected where the keys go, and an input
+    /// method that's composing, keep their keys.
     func handleKeyDown(_ event: NSEvent) -> NSEvent? {
         // A confirmation alert handles its own keys: Return confirms, Escape cancels.
         guard !isPresentingConfirmation else { return event }
@@ -794,11 +801,16 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 if hasSelectedText || isComposingText { return event }
                 if !event.isARepeat { copySelection() }
                 return nil
-            case "p":
-                // ⌘P pastes the highlighted row into the app you were using, or does nothing. While
-                // an input method is composing, the keys are its.
-                if isComposingText { return event }
+            case "v":
+                // ⌘V pastes the highlighted row into the app you were using, where it pastes. With
+                // text selected where the keys go, while an input method is composing, with no row
+                // highlighted, or on a row that doesn't paste, it's the search field's, as in any
+                // text field.
+                if hasSelectedText || isComposingText || !selectionPastes { return event }
                 if !event.isARepeat { pasteSelection() }
+                return nil
+            case "p":
+                // ⌘P pasted until ⌘V took over (#552). It does nothing, so it never beeps or prints.
                 return nil
             default:
                 break
@@ -861,8 +873,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             return nil
         case 36:
             // While an input method is composing, Return commits its candidate in the search field.
-            // ⌘Return does what Return does, except Reveal in Quick Search and Edit in Screenshots;
-            // it never pastes, which is ⌘P's (#370).
+            // ⌘Return does what Return does, except Reveal in Quick Search, Edit in Screenshots, and
+            // Save and Paste in Translate, whose search field keeps ⌘V (#370, #552).
             guard !isComposingText else { return event }
             activateSelection(reveal: event.modifierFlags.contains(.command))
             return nil
@@ -1245,7 +1257,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         }
     }
 
-    /// Whether a row is highlighted for ⌘C, ⌘P, and Space: one of the tab's rows, not `/`'s list,
+    /// Whether a row is highlighted for ⌘C, ⌘V, and Space: one of the tab's rows, not `/`'s list,
     /// and in a grid only once the arrow keys or the pointer went into it.
     private var hasHighlightedRow: Bool {
         filterMenu == nil && (0..<itemCount).contains(state.selection) && (!isGridTab || state.isBrowsingGrid)
@@ -1281,9 +1293,33 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         }
     }
 
-    /// ⌘P: pastes the highlighted row into the app you were using (#370), with each tab's clipboard
-    /// behavior: an emoji or a translation puts the clipboard back afterwards; a Clipboard History or
-    /// Screenshots item, a snippet, or a transcript stays on it. Rows that don't paste do nothing.
+    /// Whether ⌘V pastes the highlighted row (#552): a Clipboard History item, a screengrab, a
+    /// transcript, a snippet, an emoji, a saved translation, or Quick Search's snippet or emoji. On any
+    /// other row, or with none highlighted, ⌘V is the search field's.
+    private var selectionPastes: Bool {
+        guard hasHighlightedRow else { return false }
+        if let tabContent { return tabContent.pastes(row: state.selection, query: state.historyQuery) }
+        switch state.tab {
+        case .search:
+            switch selectedSearchItem {
+            case .snippet, .emoji: return true
+            default: return false
+            }
+        case .clipboard, .snippets:
+            return true
+        case .dictation:
+            // A recording that wasn't transcribed has nothing to paste.
+            return !filteredDictations[state.selection].text.isEmpty
+        default:
+            // Module tabs answer above.
+            return false
+        }
+    }
+
+    /// ⌘V: pastes the highlighted row into the app you were using (#370, #552), with each tab's
+    /// clipboard behavior: an emoji or a translation puts the clipboard back afterwards; a Clipboard
+    /// History or Screenshots item, a snippet, or a transcript stays on it. Rows that don't paste do
+    /// nothing; `selectionPastes` sends ⌘V to the search field there.
     private func pasteSelection() {
         guard hasHighlightedRow else { return }
         let index = state.selection
@@ -1327,6 +1363,50 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         guard let title = DictationPaletteResults.playbackTitle(of: entry, player: dictationPlayer) else { return nil }
         let toggle = toggleDictationPlayback
         return PalettePlayback(title: title) { toggle(entry) }
+    }
+
+    /// What the footer names for the highlighted row (#370, #552): Filter while `/`'s list shows,
+    /// else the tab's actions for that row, then Space's, then Delete's
+    /// (`PaletteFooterActions.resolve`). The key display names the palette's keys from it too.
+    var footerActions: PaletteFooterActions {
+        if filterMenu != nil { return PaletteFooterActions(primary: "Filter") }
+        return PaletteFooterActions.resolve(
+            tab: state.tab,
+            searchItem: selectedSearchItem,
+            content: tabContent?.footerActions(row: state.selection, query: state.historyQuery) ?? drawnTabFooterActions,
+            playback: footerPlaybackTitle,
+            isRowHighlighted: !isGridTab || state.isBrowsingGrid
+        )
+    }
+
+    /// The footer's actions where a tab the palette draws names them by row: Remove ⌫ on a Recent
+    /// Item, which only takes it off the list, and Edit ⌘E on a Clipboard History image while
+    /// ScreenGrabs is on. Nil keeps Quick Search's result's, or the tab's registered ones.
+    private var drawnTabFooterActions: PaletteFooterActions? {
+        switch state.tab {
+        case .search:
+            guard search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  recentSearchItems.indices.contains(state.selection) else { return nil }
+            return PaletteFooterActions(primary: CommandPaletteTab.search.primaryActionTitle, secondary: [.remove])
+        case .clipboard:
+            guard preferences.enabledCapabilities.contains(.screenshotTools),
+                  filteredClipboard.indices.contains(state.selection),
+                  filteredClipboard[state.selection].kind == .image else { return nil }
+            return PaletteFooterActions(primary: CommandPaletteTab.clipboard.primaryActionTitle, secondary: [.paste(), .edit, .delete()])
+        default:
+            return nil
+        }
+    }
+
+    /// What Space does on the highlighted row, for the footer: only while the search field is
+    /// empty, as the Space key does, and not where Space only says why it can't (`listsInFooter`).
+    private var footerPlaybackTitle: String? {
+        guard state.tab != .search, state.historyQuery.isEmpty else { return nil }
+        if let tabContent {
+            return tabContent.playback(row: state.selection, query: state.historyQuery).flatMap { $0.listsInFooter ? $0.title : nil }
+        }
+        guard state.tab == .dictation, filteredDictations.indices.contains(state.selection) else { return nil }
+        return DictationPaletteResults.playbackTitle(of: filteredDictations[state.selection], player: dictationPlayer)
     }
 
     /// Opens an app, file, or folder from Quick Search's results or Recent Items. A copy of Keybumps
@@ -1376,7 +1456,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         confirmCopy()
     }
 
-    /// ⌘P on a module tab's files: copies them, as Return's copy does, then pastes them into the app
+    /// ⌘V on a module tab's files: copies them, as Return's copy does, then pastes them into the app
     /// that was in front when the palette opened. They stay on the clipboard afterwards. When it
     /// can't paste, the notch notice says why, and they're still copied.
     private func pasteFiles(_ files: [URL], for plugin: Capability) {
@@ -1411,7 +1491,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         _ = copy(text, suppressClipboardHistory: true)
     }
 
-    /// ⌘P on a snippet: pastes it (`pasteText`), counting it as used either way. The snippet stays
+    /// ⌘V on a snippet: pastes it (`pasteText`), counting it as used either way. The snippet stays
     /// on the clipboard afterwards.
     func pasteSnippet(_ snippet: Snippet) {
         guard let text = snippetText(snippet) else { return }
@@ -1424,7 +1504,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     /// (the non-activating palette never took it over). When it can't paste, it copies instead and
     /// the notch notice says why (`PalettePasteRoute`). `used` runs once, either way. With
     /// `restoresClipboard`, what was on the clipboard comes back once the paste has been read, unless
-    /// something else was copied by then. ⌘P on a snippet, a transcript, or a module tab's row comes
+    /// something else was copied by then. ⌘V on a snippet, a transcript, or a module tab's row comes
     /// here; `plugin` is the one pasting, named in the Accessibility setup offer.
     func pasteText(_ text: String, concealed: Bool = false, restoresClipboard: Bool, for plugin: Capability, used: @escaping () -> Void = {}) {
         let paster = paster
@@ -1440,7 +1520,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         )
     }
 
-    /// ⌘P on a Clipboard History or Screenshots item: puts it back on the clipboard, as Return's copy
+    /// ⌘V on a Clipboard History or Screenshots item: puts it back on the clipboard, as Return's copy
     /// does, then pastes it into the app that was in front when the palette opened. It stays on the
     /// clipboard afterwards. When it can't paste, the notch notice says why, and it's still copied.
     func pasteClipboardEntry(_ entry: ClipboardEntry, for plugin: Capability) {
@@ -1655,6 +1735,10 @@ private struct CommandPaletteView: View {
     let copyClipboardEntry: (ClipboardEntry) -> Void
     let editClipboardEntry: (ClipboardEntry) -> Void
     let copyDictationText: (String) -> Void
+    /// Pastes a transcript, as ⌘V does on the Dictation tab (the detail's Paste).
+    let pasteDictationText: (String) -> Void
+    /// Pastes a Clipboard History item, as ⌘V does on the Clipboard tab (the context menu's Paste).
+    let pasteClipboardEntry: (ClipboardEntry) -> Void
     let snippetActions: SnippetPaletteActions
     /// Delete on a recording asks first (`requestDictationDeletion`); the alert's Delete deletes.
     let requestDictationDeletion: (DictationHistoryEntry) -> Void
@@ -1666,6 +1750,8 @@ private struct CommandPaletteView: View {
     let chooseFilter: (PaletteFilter) -> Void
     /// Copies (false) or pastes (true) an emoji from Quick Search's results.
     let chooseEmoji: (QuickSearchEmoji, Bool) -> Void
+    /// What the footer names for the highlighted row (`CommandPaletteController.footerActions`).
+    let footerActions: () -> PaletteFooterActions
     let dismiss: () -> Void
 
     @FocusState private var inputFocused: Bool
@@ -1698,19 +1784,11 @@ private struct CommandPaletteView: View {
                 .contentMargins(.bottom, 56, for: .scrollContent)
                 .overlay(alignment: .bottom) {
                     PaletteFooter(
-                        tab: state.tab,
                         isGrid: PaletteFilter.menu(in: state.tab, query: state.tab == .search ? search.query : state.historyQuery) == nil
                             && tabContents[state.tab]?.isGrid(query: state.historyQuery) == true,
                         isBrowsingGrid: state.isBrowsingGrid,
-                        isChoosingFilter: PaletteFilter.menu(
-                            in: state.tab, query: state.tab == .search ? search.query : state.historyQuery, searchFindsEmoji: preferences.quickSearchFindsEmoji
-                        ) != nil,
                         isSearchEmpty: (state.tab == .search ? search.query : state.historyQuery).isEmpty,
-                        selectedSearchItem: state.tab == .search
-                            ? QuickSearchModel.highlightedItem(in: searchItems, query: search.query, selection: state.selection)
-                            : nil,
-                        contentActions: tabContents[state.tab]?.footerActions(row: state.selection, query: state.historyQuery),
-                        playbackTitle: playbackTitle,
+                        actions: footerActions(),
                         openSettings: { runCommand(.keybumpsSettings) }
                     )
                 }
@@ -1806,6 +1884,7 @@ private struct CommandPaletteView: View {
                 selection: state.selection,
                 choose: chooseClipboardEntry,
                 copy: copyClipboardEntry,
+                paste: pasteClipboardEntry,
                 edit: preferences.enabledCapabilities.contains(.screenshotTools) ? editClipboardEntry : nil,
                 delete: clipboard.removeFromClipboardTab,
                 clear: clipboard.clearClipboardTab,
@@ -1817,6 +1896,7 @@ private struct CommandPaletteView: View {
                 selection: state.selection,
                 select: { state.selection = $0 },
                 choose: copyDictationText,
+                paste: pasteDictationText,
                 transcribe: { entry in Task { await dictationService.transcribe(entry) } },
                 retryingEntryID: dictationService.retryingEntryID,
                 audioPlayer: dictationPlayer,
@@ -1866,17 +1946,6 @@ private struct CommandPaletteView: View {
 
     private var recentSearchItems: [RecentItem] {
         state.filter.apply(search.displayedRecentItems) { $0.matches(.result($1.result)) }
-    }
-
-    /// What Space does on the highlighted row, for the footer: only while the search field is
-    /// empty, as the palette's Space key does.
-    private var playbackTitle: String? {
-        guard state.tab != .search, state.historyQuery.isEmpty else { return nil }
-        if let tabContent = tabContents[state.tab] {
-            return tabContent.playback(row: state.selection, query: state.historyQuery).flatMap { $0.listsInFooter ? $0.title : nil }
-        }
-        guard state.tab == .dictation, filteredDictations.indices.contains(state.selection) else { return nil }
-        return DictationPaletteResults.playbackTitle(of: filteredDictations[state.selection], player: dictationPlayer)
     }
 }
 
@@ -2042,7 +2111,8 @@ private struct SearchResultsView: View {
                         }
 
                         // No per-row trash button: Delete removes the highlighted Recent Item, and the
-                        // context menu and VoiceOver's Delete action cover mouse and VoiceOver users.
+                        // context menu and VoiceOver's Remove action cover mouse and VoiceOver users.
+                        // Remove, as the footer says: the app or file stays where it is.
                         ScrollViewReader { proxy in
                             List(Array(recentItems.enumerated()), id: \.element.id) { index, item in
                                 Button { open(item.result) } label: {
@@ -2053,9 +2123,10 @@ private struct SearchResultsView: View {
                                     Button("Open") { open(item.result) }
                                     Button("Reveal in Finder") { reveal(item.result) }
                                     Divider()
-                                    Button("Delete", role: .destructive) { deleteRecentItem(item) }
+                                    Button(PaletteKeyAction.remove.title, role: .destructive) { deleteRecentItem(item) }
+                                        .paletteMenuKeys(PaletteKeyAction.remove.keys)
                                 }
-                                .accessibilityAction(named: "Delete") { deleteRecentItem(item) }
+                                .accessibilityAction(named: PaletteKeyAction.remove.title) { deleteRecentItem(item) }
                                 .listRowInsets(.init())
                                 .listRowSeparator(.hidden)
                                 .paletteHoverHighlights(row: index)
@@ -2105,7 +2176,9 @@ private struct SearchResultsView: View {
                                 .buttonStyle(.plain)
                                 .contextMenu {
                                     Button("Copy") { snippetActions.copy(snippet) }
+                                        .paletteMenuKeys(["⌘", "C"])
                                     Button("Paste") { snippetActions.paste(snippet) }
+                                        .paletteMenuKeys(PaletteKeyAction.paste().keys)
                                 }
                                 .accessibilityAction(named: "Paste") { snippetActions.paste(snippet) }
                                 .accessibilityHint("Copies the snippet")
@@ -2119,7 +2192,9 @@ private struct SearchResultsView: View {
                                 .buttonStyle(.plain)
                                 .contextMenu {
                                     Button("Copy") { chooseEmoji(emoji, false) }
+                                        .paletteMenuKeys(["⌘", "C"])
                                     Button("Paste") { chooseEmoji(emoji, true) }
+                                        .paletteMenuKeys(PaletteKeyAction.paste().keys)
                                 }
                                 .accessibilityAction(named: "Paste") { chooseEmoji(emoji, true) }
                                 .accessibilityHint("Copies the emoji")
@@ -2295,6 +2370,7 @@ private struct ClipboardResultsView: View {
     let selection: Int
     let choose: (ClipboardEntry) -> Void
     let copy: (ClipboardEntry) -> Void
+    let paste: (ClipboardEntry) -> Void
     /// Opens an image in the Screenshot Editor; nil while ScreenGrabs is off.
     let edit: ((ClipboardEntry) -> Void)?
     let delete: (ClipboardEntry) -> Void
@@ -2326,19 +2402,22 @@ private struct ClipboardResultsView: View {
                     ScrollViewReader { proxy in
                         List(Array(entries.enumerated()), id: \.element.id) { index, entry in
                             Button { choose(entry) } label: {
-                                ClipboardRow(
-                                    entry: entry,
-                                    showsEditHint: edit != nil && index == selection && entry.kind == .image
-                                )
+                                ClipboardRow(entry: entry)
                             }
                             .buttonStyle(.plain)
+                            // The footer's keys, in its order (#552).
                             .contextMenu {
                                 Button("Copy") { copy(entry) }
+                                    .paletteMenuKeys(["⌘", "C"])
+                                Button("Paste") { paste(entry) }
+                                    .paletteMenuKeys(PaletteKeyAction.paste().keys)
                                 if let edit, entry.kind == .image {
-                                    Button("Edit") { edit(entry) }
+                                    Button(PaletteKeyAction.edit.title) { edit(entry) }
+                                        .paletteMenuKeys(PaletteKeyAction.edit.keys)
                                 }
                                 Divider()
                                 Button("Delete", role: .destructive) { delete(entry) }
+                                    .paletteMenuKeys(PaletteKeyAction.delete().keys)
                             }
                             .accessibilityAction(named: "Delete") { delete(entry) }
                             .listRowInsets(.init())
@@ -2366,8 +2445,6 @@ struct ClipboardRow: View {
     static let accessoryMaxWidth: CGFloat = 360
 
     let entry: ClipboardEntry
-    /// Only the selected image row shows ⌘E, since the footer doesn't list it.
-    let showsEditHint: Bool
 
     var body: some View {
         PaletteRow {
@@ -2394,22 +2471,11 @@ struct ClipboardRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Right to left: the app icon column, the app name, the domain, then Edit ⌘E on the selected
-    /// image row. Only the name and domain give way when space runs out.
+    /// Right to left: the app icon column, the app name, then the domain. Only the name and domain
+    /// give way when space runs out. An image's Edit ⌘E is in the footer (#552).
     private var accessories: some View {
         HStack(spacing: 10) {
             HStack(spacing: 14) {
-                if showsEditHint {
-                    HStack(spacing: 6) {
-                        Text("Edit").fixedSize()
-                        HStack(spacing: 3) {
-                            PaletteKeycap("⌘")
-                            PaletteKeycap("E")
-                        }
-                    }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Edit with Command-E")
-                }
                 if let domain = entry.sourceDomain {
                     ClipboardSourceDomainLabel(domain: domain)
                 }
@@ -2665,10 +2731,11 @@ struct PaletteEmptyState: View {
 }
 
 extension PaletteFooterActions {
-    /// What the footer names: a module tab's actions for its selected row, else Quick Search's
-    /// highlighted row's (a snippet copies and pastes), else the tab's registered ones. Then Space's,
-    /// such as Play, when the selected row has audio and the search field is empty. Until a grid's
-    /// tile is highlighted, keys that need one, such as Paste ⌘P, are left out.
+    /// What the footer names: a module tab's actions for its selected row (or a tab the palette draws,
+    /// where they change by row), else Quick Search's highlighted row's (a snippet copies and pastes),
+    /// else the tab's registered ones. Then Space's, such as Play, when the selected row has audio and
+    /// the search field is empty, before Delete's, which the footer lists last (#552). Until a grid's
+    /// tile is highlighted, keys that need one, such as Paste ⌘V, are left out.
     static func resolve(
         tab: CommandPaletteTab,
         searchItem: QuickSearchItem?,
@@ -2680,7 +2747,9 @@ extension PaletteFooterActions {
             primary: searchItem?.primaryActionTitle ?? tab.primaryActionTitle,
             secondary: searchItem?.secondaryActions ?? tab.secondaryActions
         )
-        if let playback { actions.secondary.append(.space(playback)) }
+        if let playback {
+            actions.secondary.insert(.space(playback), at: actions.secondary.firstIndex(where: \.isDelete) ?? actions.secondary.endIndex)
+        }
         if !isRowHighlighted { actions.secondary.removeAll(where: \.needsHighlightedRow) }
         return actions
     }
@@ -2689,33 +2758,16 @@ extension PaletteFooterActions {
 /// Raycast's footer: a round Settings button at the bottom left, and a floating pill at the bottom
 /// right with the tab's actions and their keys.
 private struct PaletteFooter: View {
-    let tab: CommandPaletteTab
     /// Whether Left and Right move the selection too.
     let isGrid: Bool
     /// Whether Down has gone into the grid, so the arrow keys move through its items.
     let isBrowsingGrid: Bool
-    /// Whether `/`'s list of filters is showing, whose rows Return applies.
-    let isChoosingFilter: Bool
     /// Whether the search field is empty, so Left and Right switch tabs rather than move the caret.
     let isSearchEmpty: Bool
-    /// Quick Search's highlighted row, whose actions the footer names (a snippet copies and pastes).
-    let selectedSearchItem: QuickSearchItem?
-    /// A module tab's actions for its selected row; they replace the tab's registered ones.
-    let contentActions: PaletteFooterActions?
-    /// What Space does on the selected row, such as Play, while the search field is empty.
-    let playbackTitle: String?
+    /// What Return and the other keys do on the highlighted row, or Filter in `/`'s list
+    /// (`CommandPaletteController.footerActions`).
+    let actions: PaletteFooterActions
     let openSettings: () -> Void
-
-    private var actions: PaletteFooterActions {
-        if isChoosingFilter { return PaletteFooterActions(primary: "Filter") }
-        return PaletteFooterActions.resolve(
-            tab: tab,
-            searchItem: selectedSearchItem,
-            content: contentActions,
-            playback: playbackTitle,
-            isRowHighlighted: !isGrid || isBrowsingGrid
-        )
-    }
 
     var body: some View {
         HStack {
@@ -2750,7 +2802,7 @@ private struct PaletteFooter: View {
                 ForEach(keys, id: \.self) { PaletteKeycap($0) }
             }
         }
-        // One element read as words, "Paste, Command P", not the keycaps' symbols.
+        // One element read as words, "Paste, Command V", not the keycaps' symbols.
         .accessibilityElement(children: .combine)
         .accessibilityLabel(PaletteKeyAction.accessibilityLabel(title: title, keys: keys))
     }

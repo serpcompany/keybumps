@@ -18,7 +18,7 @@ extension CapabilityDescriptor {
             systemImage: "camera.viewfinder",
             prompt: "Search ScreenGrabs",
             primaryActionTitle: "Copy",
-            secondaryActions: [.paste(), .edit],
+            secondaryActions: [.paste(), .edit, .delete()],
             // Its screenshots; its recordings need neither (#494).
             dataSource: .clipboardHistory,
             listsRecordings: true
@@ -47,7 +47,7 @@ extension CapabilityDescriptor {
         optionalPermissions: [
             PluginOptionalPermission(
                 permission: .accessibility,
-                reason: "Lets ⌘P paste a screenshot into the app you were using. Without it, ⌘P copies the screenshot instead."
+                reason: "Lets ⌘V paste a screenshot into the app you were using. Without it, ⌘V copies the screenshot instead."
             ),
             PluginOptionalPermission(
                 permission: .microphone,

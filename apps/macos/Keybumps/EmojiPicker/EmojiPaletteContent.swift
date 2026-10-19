@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// The Emoji tab (#243). With the search empty it's a grid to browse: Recent, then Unicode's groups.
-/// Typing turns it into a ranked list, as the Search tab is. Return or ⌘C copies the emoji and ⌘P
+/// Typing turns it into a ranked list, as the Search tab is. Return or ⌘C copies the emoji and ⌘V
 /// pastes it into the app you were using, putting your clipboard back afterwards; a double-click
 /// copies too. The emoji takes the skin tone set in Settings when it has one.
 @MainActor
@@ -175,7 +175,7 @@ final class EmojiPaletteContent: CapabilityPaletteContent {
         PaletteGrid.selection(after: move, from: row, sectionCounts: sections.map(\.emoji.count), columns: Self.columns)
     }
 
-    /// Return and ⌘C copy; ⌘P pastes, then puts the clipboard back. Either way the emoji becomes
+    /// Return and ⌘C copy; ⌘V pastes, then puts the clipboard back. Either way the emoji becomes
     /// the most recent, unless recent emoji are turned off.
     func activate(row: Int, query: String, palette: PaletteContentActions) {
         copy(row: row, query: query, palette: palette)

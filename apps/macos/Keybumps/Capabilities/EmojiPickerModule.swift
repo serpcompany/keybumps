@@ -31,7 +31,7 @@ extension CapabilityDescriptor {
         optionalPermissions: [
             PluginOptionalPermission(
                 permission: .accessibility,
-                reason: "Lets ⌘P paste the emoji into the app you’re using. Without it, ⌘P copies the emoji instead."
+                reason: "Lets ⌘V paste the emoji into the app you’re using. Without it, ⌘V copies the emoji instead."
             ),
         ],
         isOnByDefault: false
