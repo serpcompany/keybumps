@@ -160,7 +160,9 @@ struct ScreengrabsMigrationTests {
         #expect(Self.shortcuts(in: defaults) == expected)
         let preferences = AppPreferences(defaults: defaults)
         #expect(preferences.capabilityShortcut(for: .screenshotScreen) == nil)
-        #expect(preferences.capabilityShortcut(for: .quickSearch) == DefaultShortcut.quickSearch)
+        #expect(preferences.capabilityShortcut(for: .clipboardHistory) == DefaultShortcut.clipboard)
+        // Quick Search was off in this install too, so #553's one-time step leaves ⌘Space free.
+        #expect(preferences.capabilityShortcut(for: .quickSearch) == nil)
     }
 
     @Test("A custom screenshot shortcut is kept, and one already cleared stays cleared, while one on its default key is unassigned")

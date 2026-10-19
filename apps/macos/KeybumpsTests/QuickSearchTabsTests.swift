@@ -13,7 +13,7 @@ struct QuickSearchTabsTests {
 
     // MARK: Moving the Quick Search switch to the Search tab
 
-    @Test("An install with Quick Search turned off starts with the Search tab hidden, and Quick Search on")
+    @Test("An install with Quick Search turned off starts with the Search tab hidden, Quick Search on, and ⌘Space unassigned")
     func quickSearchOffHidesTheSearchTab() {
         let defaults = InMemoryDefaults()
         defaults.set(["clipboardHistory", "dictation"], forKey: "enabledCapabilities")
@@ -24,22 +24,105 @@ struct QuickSearchTabsTests {
         #expect(defaults.stringArray(forKey: "enabledCapabilities")?.contains("quickSearch") == true)
         #expect(defaults.stringArray(forKey: "quickSearchHiddenTabs") == ["search"])
         #expect(defaults.bool(forKey: "didMoveQuickSearchSwitchToSearchTab"))
-        #expect(preferences.paletteOpeningTab == .clipboard, "⌘Space opens on the Clipboard tab, as it did")
-        #expect(!AppPreferences(defaults: defaults, compatibility: Self.mac15).showsTab(.search), "and it stays hidden")
+        #expect(preferences.capabilityShortcut(for: .quickSearch) == nil, "⌘Space stays free, as turning Quick Search off left it")
+        #expect(preferences.paletteOpeningTab == .clipboard, "The menu bar's Open Quick Search and the Dock open the Clipboard tab")
+        let relaunched = AppPreferences(defaults: defaults, compatibility: Self.mac15)
+        #expect(!relaunched.showsTab(.search), "and it stays hidden")
+        #expect(relaunched.capabilityShortcut(for: .quickSearch) == nil, "and ⌘Space stays unassigned")
     }
 
-    @Test("An install with Quick Search on, or a fresh install, shows the Search tab", arguments: [
+    @Test("Where Quick Search was off, its shortcut is unassigned, whatever key it had; every other shortcut stays")
+    func quickSearchOffUnassignsACustomShortcut() throws {
+        let custom = ShortcutBinding(keyCode: 49, modifiers: 2048, displayName: "⌥ Space")
+        let defaults = InMemoryDefaults()
+        defaults.set(["clipboardHistory"], forKey: "enabledCapabilities")
+        defaults.set(try JSONEncoder().encode(["quickSearch": custom, "clipboardHistory": DefaultShortcut.clipboard]), forKey: "capabilityShortcuts")
+        let preferences = AppPreferences(defaults: defaults, compatibility: Self.mac15)
+
+        #expect(preferences.capabilityShortcut(for: .quickSearch) == nil)
+        #expect(preferences.capabilityShortcut(for: .clipboardHistory) == DefaultShortcut.clipboard)
+    }
+
+    @Test("⌘Space stays assigned where Quick Search was on, and on a fresh install", arguments: [
         ["quickSearch", "clipboardHistory"],
         nil,
     ] as [[String]?])
-    func quickSearchOnShowsTheSearchTab(stored: [String]?) {
+    func quickSearchOnKeepsItsShortcut(stored: [String]?) {
         let defaults = InMemoryDefaults()
         if let stored { defaults.set(stored, forKey: "enabledCapabilities") }
         let preferences = AppPreferences(defaults: defaults, compatibility: Self.mac15)
+        #expect(preferences.capabilityShortcut(for: .quickSearch) == DefaultShortcut.quickSearch)
+    }
 
-        #expect(preferences.showsTab(.search))
-        #expect(preferences.paletteOpeningTab == .search)
-        #expect(defaults.bool(forKey: "didMoveQuickSearchSwitchToSearchTab"))
+    @Test("A key assigned after the move is never cleared, even if a later save lacks Quick Search")
+    func assignedShortcutIsKept() {
+        let defaults = InMemoryDefaults()
+        defaults.set(["dictation"], forKey: "enabledCapabilities")
+        let first = AppPreferences(defaults: defaults, compatibility: Self.mac15)
+        #expect(first.capabilityShortcut(for: .quickSearch) == nil)
+        first.setCapabilityShortcut(DefaultShortcut.quickSearch, for: .quickSearch)
+
+        // As a build from before #553 could save after a rollback, with Quick Search turned off there.
+        defaults.set(["dictation"], forKey: "enabledCapabilities")
+        let second = AppPreferences(defaults: defaults, compatibility: Self.mac15)
+        #expect(second.capabilityShortcut(for: .quickSearch) == DefaultShortcut.quickSearch)
+    }
+
+    @Test("After the update, an install that had Quick Search off doesn't register ⌘Space, and the Clipboard tab keeps ⇧⌘Space")
+    func upgradedInstallLeavesCommandSpaceFree() {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KeybumpsQuickSearchTabs-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let defaults = InMemoryDefaults()
+        defaults.set(CapabilityCatalog.defaultCapabilities.subtracting([.quickSearch]).map(\.rawValue), forKey: "enabledCapabilities")
+        defaults.set(Capability.allCases.map(\.rawValue), forKey: "knownCapabilities")
+        let harness = WiringHarness(enabled: CapabilityCatalog.defaultCapabilities, missing: nil, root: root, defaults: defaults)
+        harness.model.start()
+
+        #expect(harness.shortcuts()["quickSearch"] == nil, "⌘Space isn't registered")
+        #expect(harness.shortcuts()["clipboardHistory"] != nil)
+        #expect(harness.model.commandPalette.openingTab == .clipboard)
+    }
+
+    @Test("Every saved state the move can find: the Search tab hidden only where Quick Search was off, and the Hotkeys tab as it was", arguments: [
+        (["quickSearch", "clipboardHistory"] as [String]?, false),
+        (["quickSearch", "clipboardHistory"], true),
+        (["clipboardHistory"], false),
+        (["clipboardHistory"], true),
+        (nil, false),
+        (nil, true),
+    ])
+    func movePerSavedState(stored: [String]?, showsHotkeysTab: Bool) {
+        let defaults = InMemoryDefaults()
+        if let stored { defaults.set(stored, forKey: "enabledCapabilities") }
+        defaults.set(showsHotkeysTab, forKey: "showsHotkeysTab")
+        let preferences = AppPreferences(defaults: defaults, compatibility: Self.mac15)
+        let quickSearchWasOff = stored.map { !$0.contains("quickSearch") } ?? false
+
+        var expected: Set<CommandPaletteTab> = quickSearchWasOff ? [.search] : []
+        if !showsHotkeysTab { expected.insert(.keyboardShortcutter) }
+        #expect(preferences.hiddenTabs == expected)
+        #expect(defaults.bool(forKey: "showsHotkeysTab") == showsHotkeysTab, "The Hotkeys tab's switch is left alone")
+        #expect((preferences.capabilityShortcut(for: .quickSearch) == nil) == quickSearchWasOff)
+        #expect(preferences.paletteOpeningTab == (quickSearchWasOff ? .clipboard : .search))
+    }
+
+    @Test("Where Quick Search was off with every other plugin off, the Search tab shows anyway, as the only tab")
+    func quickSearchOffWithEveryPluginOff() {
+        let defaults = InMemoryDefaults()
+        defaults.set([String](), forKey: "enabledCapabilities")
+        defaults.set(Capability.allCases.map(\.rawValue), forKey: "knownCapabilities")
+        let preferences = AppPreferences(defaults: defaults, compatibility: Self.mac15)
+
+        #expect(preferences.enabledCapabilities == [.quickSearch])
+        #expect(!preferences.showsTab(.search), "It's saved hidden")
+        #expect(preferences.visiblePaletteTabs(selected: .search) == [.search])
+        #expect(preferences.paletteOpeningTab == .search, "The menu bar and the Dock still open a tab")
+        #expect(preferences.paletteTabsHiddenFromTabBar == [.keyboardShortcutter])
+        let row = QuickSearchTabList.rows(hidden: preferences.hiddenTabs, enabled: preferences.enabledCapabilities, compatibility: Self.mac15)
+            .first { $0.tab == .search }
+        #expect(row?.isShown == true)
+        #expect(row?.isOnlyShownTab == true)
     }
 
     @Test("The move runs once: a Search tab shown again stays shown, whatever is saved later")
@@ -150,6 +233,22 @@ struct QuickSearchTabsTests {
         #expect(left.first == .clipboard)
     }
 
+    @Test("A tab saved hidden is out of the tab bar, unless it shows anyway as the only tab, and Settings › Plugins shows its key as it is")
+    func hiddenFromTabBar() {
+        #expect(CommandPaletteTab.hiddenFromTabBar(hidden: [.search, .keyboardShortcutter], enabled: Self.everything, compatibility: Self.mac15) == [.search, .keyboardShortcutter])
+        let onlyTab = CommandPaletteTab.hiddenFromTabBar(hidden: [.search, .keyboardShortcutter], enabled: [.quickSearch], compatibility: Self.mac15)
+        #expect(onlyTab == [.keyboardShortcutter], "The Search tab shows as the only tab")
+        #expect(PluginsTable.tabKey(for: .quickSearch, hiddenTabs: onlyTab) == "⌘1")
+        #expect(PluginsTable.tabKey(for: .keyboardShortcutter, hiddenTabs: onlyTab) == "")
+
+        let preferences = AppPreferences(defaults: InMemoryDefaults(), compatibility: Self.mac15)
+        preferences.setShowsTab(.search, false)
+        #expect(preferences.paletteTabsHiddenFromTabBar == [.search, .keyboardShortcutter])
+        #expect(PluginsTable.tabKey(for: .quickSearch, hiddenTabs: preferences.paletteTabsHiddenFromTabBar) == "")
+        preferences.enabledCapabilities = [.quickSearch]
+        #expect(PluginsTable.tabKey(for: .quickSearch, hiddenTabs: preferences.paletteTabsHiddenFromTabBar) == "⌘1")
+    }
+
     // MARK: Settings › Quick Search's tab list
 
     @Test("The tab list shows every tab in tab-key order, its tab key while shown, and show switches on the Search and Hotkeys tabs")
@@ -172,7 +271,7 @@ struct QuickSearchTabsTests {
         #expect(timers?.hasShowSwitch == false)
     }
 
-    @Test("A tab whose plugin is off says which, with no show switch")
+    @Test("A tab whose plugin is off says which, or that the plugin needs a newer macOS, with no show switch")
     func tabListPluginOff() {
         let rows = QuickSearchTabList.rows(hidden: [], enabled: [.quickSearch, .screenshotTools], compatibility: Self.mac14)
         let hotkeys = rows.first { $0.tab == .keyboardShortcutter }
@@ -180,9 +279,14 @@ struct QuickSearchTabsTests {
         #expect(hotkeys?.hasShowSwitch == false)
         #expect(rows.first { $0.tab == .screenshots }?.pluginOff == .clipboardHistory, "Its screenshots are Clipboard History's on macOS 14")
 
+        #expect(hotkeys?.note == "\(Capability.keyboardShortcutter.title) is turned off")
+        #expect(rows.first { $0.tab == .translate }?.note == "Requires macOS 15", "Translation can't be turned on on macOS 14")
+
         let mac15 = QuickSearchTabList.rows(hidden: [], enabled: [.quickSearch, .screenshotTools], compatibility: Self.mac15)
         #expect(mac15.first { $0.tab == .screenshots }?.pluginOff == nil)
+        #expect(mac15.first { $0.tab == .screenshots }?.note == nil)
         #expect(mac15.first { $0.tab == .screenshots }?.isShown == true)
+        #expect(mac15.first { $0.tab == .translate }?.note == "\(Capability.translation.title) is turned off")
     }
 
     @Test("The only shown tab's switch can't turn off, even the Search tab's while it's saved hidden")

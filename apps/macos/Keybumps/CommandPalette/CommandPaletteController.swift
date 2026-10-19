@@ -56,6 +56,16 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
         return shown.isEmpty ? [.search] : shown
     }
 
+    /// The tabs their show switches keep out of the tab bar: those saved hidden, less one that
+    /// shows anyway as the only tab left (`shownTabs`). Settings › Plugins leaves out their tab keys.
+    static func hiddenFromTabBar(
+        hidden: Set<CommandPaletteTab>,
+        enabled: Set<Capability>,
+        compatibility: PluginCompatibility = .current
+    ) -> Set<CommandPaletteTab> {
+        hidden.subtracting(shownTabs(hidden: hidden, enabled: enabled, compatibility: compatibility))
+    }
+
     /// The tabs in the tab bar: the shown ones, and the tab on screen, which always stays, such as
     /// the hidden Hotkeys tab opened by Shortcut Coach's capability command. Command-numbers stay fixed.
     static func visibleTabs(
@@ -108,9 +118,9 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
 }
 
 extension AppPreferences {
-    /// The tabs in Quick Search's tab bar while no hidden tab is open (`CommandPaletteTab.shownTabs`).
-    var shownPaletteTabs: [CommandPaletteTab] {
-        CommandPaletteTab.shownTabs(hidden: hiddenTabs, enabled: enabledCapabilities, compatibility: compatibility)
+    /// The tabs their show switches keep out of the tab bar (`CommandPaletteTab.hiddenFromTabBar`).
+    var paletteTabsHiddenFromTabBar: Set<CommandPaletteTab> {
+        CommandPaletteTab.hiddenFromTabBar(hidden: hiddenTabs, enabled: enabledCapabilities, compatibility: compatibility)
     }
 
     /// The tabs in Quick Search's tab bar while it's on `selected` (`CommandPaletteTab.visibleTabs`).

@@ -12,7 +12,9 @@ enum PluginsTable {
     }
 
     /// A plugin's tab key, whether or not the plugin is on, except while its tab's show switch in
-    /// Settings › Quick Search hides it (#553), as the Hotkeys tab starts.
+    /// Settings › Quick Search keeps it out of the tab bar (#553), as the Hotkeys tab starts.
+    /// `hiddenTabs` is `CommandPaletteTab.hiddenFromTabBar`, so a tab shown anyway as the only one
+    /// left keeps its key.
     static func tabKey(for descriptor: CapabilityDescriptor, hiddenTabs: Set<CommandPaletteTab>) -> String {
         guard let tab = descriptor.paletteTab?.tab, !hiddenTabs.contains(tab) else { return "" }
         return tab.shortcutLabel
@@ -103,8 +105,7 @@ private struct PluginsListRow: View {
                                 .accessibilityLabel("Needs attention")
                         }
                         // A hidden tab that shows anyway, as the only one left, keeps its key.
-                        let hidden = model.preferences.hiddenTabs.subtracting(model.preferences.shownPaletteTabs)
-                        let tabKey = PluginsTable.tabKey(for: descriptor, hiddenTabs: hidden)
+                        let tabKey = PluginsTable.tabKey(for: descriptor, hiddenTabs: model.preferences.paletteTabsHiddenFromTabBar)
                         Text(tabKey)
                             .foregroundStyle(.secondary)
                             .frame(width: 36, alignment: .trailing)

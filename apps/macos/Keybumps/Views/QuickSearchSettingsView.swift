@@ -14,6 +14,10 @@ enum QuickSearchTabList {
         /// The plugin that's off, so the tab can't show: its own, or the one whose data it lists,
         /// such as Clipboard History for the ScreenGrabs tab on macOS 14. Nil while it can show.
         let pluginOff: Capability?
+        /// Why it can't show, under its name: "<Plugin> is turned off", or the plugin's
+        /// "Requires macOS 15" where this Mac's macOS can't run it (`PluginCompatibility`), as its
+        /// own page and Settings › Plugins say. Nil while it can show.
+        let note: String?
         /// Whether it has a show switch: one of `tabsWithShowSwitch` whose plugin is on.
         let hasShowSwitch: Bool
         /// Whether it's the only tab shown, so its switch can't turn off.
@@ -34,10 +38,12 @@ enum QuickSearchTabList {
         let shown = CommandPaletteTab.shownTabs(hidden: hidden, enabled: enabled, compatibility: compatibility)
         return CommandPaletteTab.allCases.map { tab in
             let canShow = available.contains(tab)
+            let pluginOff = canShow ? nil : enabled.contains(tab.owner) ? tab.dataSource : tab.owner
             return Row(
                 tab: tab,
                 isShown: shown.contains(tab),
-                pluginOff: canShow ? nil : enabled.contains(tab.owner) ? tab.dataSource : tab.owner,
+                pluginOff: pluginOff,
+                note: pluginOff.map { compatibility.requirement(for: $0) ?? "\($0.title) is turned off" },
                 hasShowSwitch: canShow && tabsWithShowSwitch.contains(tab),
                 isOnlyShownTab: shown == [tab]
             )
@@ -93,7 +99,7 @@ private struct QuickSearchTabRow: View {
             SettingsIconTile(systemImage: tab.systemImage, tint: tab.owner.descriptor.iconTint, size: 22)
                 .opacity(row.isShown ? 1 : 0.45)
                 .accessibilityHidden(true)
-            SettingsRowLabel(title: tab.title, subtitle: row.pluginOff.map { "\($0.title) is turned off" })
+            SettingsRowLabel(title: tab.title, subtitle: row.note)
                 .foregroundStyle(row.isShown ? .primary : .secondary)
             Spacer(minLength: 12)
             if row.hasShowSwitch {
