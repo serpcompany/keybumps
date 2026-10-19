@@ -4,12 +4,12 @@ import SwiftUI
 /// Colors and metrics copied from Raycast's Settings window (dark), with light equivalents.
 enum SettingsTheme {
     static let pageBackground = Color(light: gray(0.96), dark: gray(0.059))
+    /// The Command Palette's background. The Settings sidebar uses the system's own (#559).
     static let sidebarBackground = Color(light: gray(0.93), dark: gray(0.075))
     static let card = Color(light: .white, dark: gray(0.09))
     static let control = Color(light: gray(0.9), dark: gray(0.15))
     static let field = Color(light: gray(0.9), dark: gray(0.1))
     static let separator = Color.primary.opacity(0.07)
-    static let selection = Color.primary.opacity(0.08)
 
     static let rowMinHeight: CGFloat = 44
     static let rowInset: CGFloat = 11
@@ -17,7 +17,6 @@ enum SettingsTheme {
     static let controlRadius: CGFloat = 6
     static let titleSize: CGFloat = 13
     static let subtitleSize: CGFloat = 11
-    static let sidebarTextSize: CGFloat = 14
 
     private static func gray(_ value: CGFloat) -> NSColor {
         NSColor(srgbRed: value, green: value, blue: value, alpha: 1)
@@ -368,23 +367,6 @@ extension View {
     /// The small switch Raycast uses, for toggles laid out by hand (the toolbar, rows with buttons).
     func settingsCompactSwitch() -> some View {
         toggleStyle(.switch).controlSize(.small)
-    }
-}
-
-/// Sidebar row chrome: a rounded highlight on the selected row.
-struct SettingsSidebarButtonStyle: ButtonStyle {
-    let isSelected: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .padding(.horizontal, 7)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                isSelected ? SettingsTheme.selection : .clear,
-                in: RoundedRectangle(cornerRadius: 7, style: .continuous)
-            )
-            .contentShape(Rectangle())
-            .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

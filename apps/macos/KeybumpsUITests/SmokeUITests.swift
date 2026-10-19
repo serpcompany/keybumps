@@ -43,6 +43,28 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(element("settings.detail.timer").waitForExistence(timeout: 5), "A Plugins row opens its page")
     }
 
+    func testSettingsSidebarSearchFiltersAndEscapeClearsIt() {
+        launch(permissions: "granted", ["-KBOpenSettings", "general"])
+        XCTAssertTrue(element("settings.detail.general").waitForExistence(timeout: 20))
+        let window = app.windows.containing(.any, identifier: "settings.detail.general").firstMatch
+        XCTAssertEqual(window.title, "General", "The toolbar names the page, as System Settings does (#559)")
+
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5), "The sidebar has the stock search field")
+        search.click()
+        search.typeText("clip")
+        XCTAssertTrue(element("settings.sidebar.clipboard").waitForExistence(timeout: 5))
+        XCTAssertTrue(element("settings.sidebar.general").waitForNonExistence(timeout: 5), "Search filters the rows")
+
+        search.typeText("zzz")
+        let noResults = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "No Results")).firstMatch
+        XCTAssertTrue(noResults.waitForExistence(timeout: 5), "A search that finds nothing says so")
+
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        XCTAssertTrue(element("settings.sidebar.general").waitForExistence(timeout: 5), "Escape clears the search")
+        XCTAssertTrue(element("settings.detail.general").exists, "and leaves Settings open")
+    }
+
     func testReportAProblemOpensFromGeneralSettings() {
         launch(permissions: "granted", ["-KBOpenSettings", "general"])
         XCTAssertTrue(element("settings.detail.general").waitForExistence(timeout: 20))

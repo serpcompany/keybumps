@@ -1,4 +1,5 @@
 import Testing
+import SwiftUI
 @testable import Keybumps
 
 @Suite("Settings sidebar")
@@ -69,6 +70,15 @@ struct SettingsSidebarTests {
             .quickSearch, .clipboardHistory, .screenshotTools, .dictation, .windowManagement, .keyboardShortcutter, .snippets
         ])
         #expect(!CapabilityCatalog.defaultCapabilities.contains(.timer))
+    }
+
+    @Test("Icon tiles and the avatar grow with System Settings' sidebar icon size, as the list's own text does")
+    func rowSizes() {
+        #expect(SettingsSidebar.iconSize(for: .small) < SettingsSidebar.iconSize(for: .medium))
+        #expect(SettingsSidebar.iconSize(for: .medium) < SettingsSidebar.iconSize(for: .large))
+        #expect(SettingsSidebar.avatarSize(for: .small) < SettingsSidebar.avatarSize(for: .medium))
+        #expect(SettingsSidebar.avatarSize(for: .medium) < SettingsSidebar.avatarSize(for: .large))
+        #expect(SettingsSidebar.avatarSize(for: .medium) > SettingsSidebar.iconSize(for: .medium), "The account row stands out")
     }
 
     @Test("VoiceOver counts permissions on Permissions, and a plugin's row says it needs attention")
