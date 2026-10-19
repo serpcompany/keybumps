@@ -113,6 +113,34 @@ private var cleanChildEnvironment: [String: String] {
     }
 }
 
+/// A fake wrangler (for KEYBUMPS_WRANGLER) whose R2 bucket is the folder `bucket`: `put` uploads
+/// and logs each key to `log` (and its metadata to `log.meta`), and `get --pipe` reads an object
+/// back, failing when it is missing, as the release scripts read from R2. With FAKE_R2_READ_ERROR
+/// set, every read fails the way an authentication error does.
+private func writeFakeWrangler(to file: URL, bucket: URL, log: URL) throws {
+    try """
+    #!/bin/zsh
+    set -euo pipefail
+    if [[ "$1 $2 $3" == "r2 object get" ]]; then
+      [[ -z "${FAKE_R2_READ_ERROR:-}" ]] || { print -u2 "Authentication error [code: 10000]"; exit 1; }
+      object="\(bucket.path)/${4#keybumps-updates/}"
+      [[ -f "$object" ]] || { print -u2 "The specified key does not exist."; exit 1; }
+      cat "$object"
+      exit 0
+    fi
+    [[ "$1 $2 $3" == "r2 object put" ]] || exit 9
+    key=${4#keybumps-updates/}
+    shift 4
+    while (( $# )); do
+      case $1 in --file) file=$2; shift 2 ;; --content-type|--cache-control) print -r -- "$key $1=$2" >> "\(log.path).meta"; shift 2 ;; --remote) shift ;; *) exit 8 ;; esac
+    done
+    mkdir -p "\(bucket.path)/${key:h}"
+    cp "$file" "\(bucket.path)/$key"
+    print -r -- "$key" >> "\(log.path)"
+    """.write(to: file, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: file.path)
+}
+
 final class UpdateReleaseScriptTests: XCTestCase {
     private var appFolder: URL {
         URL(fileURLWithPath: #filePath)
@@ -338,78 +366,86 @@ final class UpdateReleaseScriptTests: XCTestCase {
         XCTAssertNotEqual(bad.status, 0)
     }
 
-    func testPublishReleaseUploadsAssetsBeforePointersAndNeverOverwrites() throws {
-        let publisher = appFolder.appendingPathComponent("scripts/publish-release.sh")
-        let work = FileManager.default.temporaryDirectory.appendingPathComponent("publish-\(UUID().uuidString)")
-        let output = work.appendingPathComponent("release")
-        let assets = output.appendingPathComponent("publication/assets")
-        let last = output.appendingPathComponent("publication/publish-last")
-        let bucketRoot = work.appendingPathComponent("r2")
-        for directory in [assets, last, bucketRoot] { try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true) }
-        defer { try? FileManager.default.removeItem(at: work) }
-
-        let version = "0.0.3-beta.4", build = 4008
-        for (name, body) in [("zip", "archive"), ("zip.sha256", "sum"), ("md", "# notes"), ("dmg", "disk image"), ("dmg.sha256", "sum")] {
-            try Data(body.utf8).write(to: assets.appendingPathComponent("Keybumps-\(version).\(name)"))
+    /// A release of 0.0.3-beta.4 (4008) prepared for publication in a temporary folder, as
+    /// build-update-release.sh leaves it, with a fake R2 bucket to publish it to.
+    private struct PreparedRelease {
+        static let version = "0.0.3-beta.4", build = 4008
+        let work: URL
+        var output: URL { work.appendingPathComponent("release") }
+        var assets: URL { output.appendingPathComponent("publication/assets") }
+        var last: URL { output.appendingPathComponent("publication/publish-last") }
+        var bucketRoot: URL { work.appendingPathComponent("r2") }
+        var log: URL { work.appendingPathComponent("uploads.log") }
+        var wrangler: URL { work.appendingPathComponent("fake-wrangler") }
+        var environment: [String: String] { ["KEYBUMPS_WRANGLER": wrangler.path] }
+        var uploads: [String] {
+            ((try? String(contentsOf: log, encoding: .utf8)) ?? "").split(separator: "\n").map(String.init)
         }
-        func writeAppcast(_ url: String) throws {
+
+        func writeAppcast(
+            _ url: String = "https://updates.keybumps.app/releases/\(build)/Keybumps-\(version).zip",
+            releaseDate: String? = "2026-09-29T04:20:34Z"
+        ) throws {
+            let date = releaseDate.map { "<keybumps:releaseDate>\($0)</keybumps:releaseDate>" } ?? ""
             try """
             <?xml version="1.0" encoding="utf-8"?>
-            <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel>
-            <item><sparkle:version>\(build)</sparkle:version><sparkle:shortVersionString>\(version)</sparkle:shortVersionString>
+            <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:keybumps="https://keybumps.app/xml-namespaces/appcast"><channel>
+            <item><sparkle:version>\(Self.build)</sparkle:version>\(date)<sparkle:shortVersionString>\(Self.version)</sparkle:shortVersionString>
             <enclosure url="\(url)" length="7" type="application/octet-stream" sparkle:edSignature="x"/></item>
             </channel></rss>
             """.write(to: last.appendingPathComponent("appcast.xml"), atomically: true, encoding: .utf8)
         }
-        try writeAppcast("https://updates.keybumps.app/releases/\(build)/Keybumps-\(version).zip")
+    }
+
+    private func makePreparedRelease() throws -> PreparedRelease {
+        let release = PreparedRelease(work: FileManager.default.temporaryDirectory.appendingPathComponent("publish-\(UUID().uuidString)"))
+        for directory in [release.assets, release.last, release.bucketRoot] {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
+        let version = PreparedRelease.version, build = PreparedRelease.build
+        for (name, body) in [("zip", "archive"), ("zip.sha256", "sum"), ("md", "# notes"), ("dmg", "disk image"), ("dmg.sha256", "sum")] {
+            try Data(body.utf8).write(to: release.assets.appendingPathComponent("Keybumps-\(version).\(name)"))
+        }
+        try release.writeAppcast()
         try """
         {"version": "\(version)", "build": \(build), "dmgURL": "https://updates.keybumps.app/releases/\(build)/Keybumps-\(version).dmg", "sha256": "\(String(repeating: "ab", count: 32))"}
-        """.write(to: last.appendingPathComponent("latest.json"), atomically: true, encoding: .utf8)
+        """.write(to: release.last.appendingPathComponent("latest.json"), atomically: true, encoding: .utf8)
+        try writeFakeWrangler(to: release.wrangler, bucket: release.bucketRoot, log: release.log)
+        return release
+    }
 
-        // A fake wrangler backed by a directory: `put` uploads and logs each key, and `get --pipe`
-        // reads an object back (failing when it is missing), as publish-release.sh verifies from R2.
-        let log = work.appendingPathComponent("uploads.log")
-        let fakeWrangler = work.appendingPathComponent("fake-wrangler")
-        try """
-        #!/bin/zsh
-        set -euo pipefail
-        if [[ "$1 $2 $3" == "r2 object get" ]]; then
-          [[ -z "${FAKE_R2_READ_ERROR:-}" ]] || { print -u2 "Authentication error [code: 10000]"; exit 1; }
-          object="\(bucketRoot.path)/${4#keybumps-updates/}"
-          [[ -f "$object" ]] || { print -u2 "The specified key does not exist."; exit 1; }
-          cat "$object"
-          exit 0
-        fi
-        [[ "$1 $2 $3" == "r2 object put" ]] || exit 9
-        key=${4#keybumps-updates/}
-        shift 4
-        while (( $# )); do
-          case $1 in --file) file=$2; shift 2 ;; --content-type|--cache-control) print -r -- "$key $1=$2" >> "\(log.path).meta"; shift 2 ;; --remote) shift ;; *) exit 8 ;; esac
-        done
-        mkdir -p "\(bucketRoot.path)/${key:h}"
-        cp "$file" "\(bucketRoot.path)/$key"
-        print -r -- "$key" >> "\(log.path)"
-        """.write(to: fakeWrangler, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeWrangler.path)
-
-        let environment = ["KEYBUMPS_WRANGLER": fakeWrangler.path]
+    func testPublishReleaseUploadsAssetsBeforePointersAndNeverOverwrites() throws {
+        let publisher = appFolder.appendingPathComponent("scripts/publish-release.sh")
+        let release = try makePreparedRelease()
+        defer { try? FileManager.default.removeItem(at: release.work) }
+        let version = PreparedRelease.version, build = PreparedRelease.build
+        let output = release.output, last = release.last, bucketRoot = release.bucketRoot, log = release.log
+        let environment = release.environment
 
         let dryRun = try run(publisher, [output.path, "production"], environment: environment)
         XCTAssertEqual(dryRun.status, 0, dryRun.output)
         XCTAssertTrue(dryRun.output.contains("Dry run only"))
         XCTAssertTrue(dryRun.output.contains("releases/4008/Keybumps-0.0.3-beta.4.dmg"))
+        XCTAssertTrue(dryRun.output.contains("releases.json adds 0.0.3-beta.4 (4008), released 2026-09-29T04:20:34Z"), dryRun.output)
         XCTAssertFalse(FileManager.default.fileExists(atPath: log.path), "a dry run uploads nothing")
 
         let published = try run(publisher, [output.path, "production", "--publish"], environment: environment)
         XCTAssertEqual(published.status, 0, published.output)
         let keys = try String(contentsOf: log, encoding: .utf8).split(separator: "\n").map(String.init)
-        XCTAssertEqual(Array(keys.suffix(2)), ["appcast.xml", "latest.json"], "pointers are published last")
-        XCTAssertEqual(Set(keys.dropLast(2)), Set(["zip", "zip.sha256", "md", "dmg", "dmg.sha256"].map { "releases/4008/Keybumps-0.0.3-beta.4.\($0)" }))
+        XCTAssertEqual(Array(keys.suffix(3)), ["appcast.xml", "latest.json", "releases.json"], "pointers are published last, then the release index")
+        XCTAssertEqual(Set(keys.dropLast(3)), Set(["zip", "zip.sha256", "md", "dmg", "dmg.sha256"].map { "releases/4008/Keybumps-0.0.3-beta.4.\($0)" }))
         let metadata = try String(contentsOf: URL(fileURLWithPath: log.path + ".meta"), encoding: .utf8)
         XCTAssertTrue(metadata.contains("releases/4008/Keybumps-0.0.3-beta.4.dmg --content-type=application/x-apple-diskimage"))
         XCTAssertTrue(metadata.contains("releases/4008/Keybumps-0.0.3-beta.4.zip --cache-control=public, max-age=31536000, immutable"))
         XCTAssertTrue(metadata.contains("appcast.xml --cache-control=public, max-age=60, must-revalidate"))
         XCTAssertTrue(metadata.contains("latest.json --content-type=application/json; charset=utf-8"))
+        XCTAssertTrue(metadata.contains("releases.json --cache-control=public, max-age=60, must-revalidate"))
+        let index = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: bucketRoot.appendingPathComponent("releases.json"))) as? [[String: Any]])
+        XCTAssertEqual(index.count, 1)
+        XCTAssertEqual(index.first?["version"] as? String, version)
+        XCTAssertEqual(index.first?["build"] as? Int, build)
+        XCTAssertEqual(index.first?["url"] as? String, "https://updates.keybumps.app/releases/4008/Keybumps-0.0.3-beta.4.dmg")
+        XCTAssertEqual(index.first?["releasedAt"] as? String, "2026-09-29T04:20:34Z", "the release date the appcast item carries")
 
         var failingReads = environment
         failingReads["FAKE_R2_READ_ERROR"] = "1"
@@ -422,6 +458,9 @@ final class UpdateReleaseScriptTests: XCTestCase {
         let rerun = try run(publisher, [output.path, "production", "--publish"], environment: environment)
         XCTAssertEqual(rerun.status, 0, rerun.output)
         XCTAssertTrue(rerun.output.contains("already published releases/4008/Keybumps-0.0.3-beta.4.zip"))
+        XCTAssertTrue(rerun.output.contains("already listed: 0.0.3-beta.4 (4008)"), rerun.output)
+        let indexAfterRerun = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: bucketRoot.appendingPathComponent("releases.json"))) as? [[String: Any]])
+        XCTAssertEqual(indexAfterRerun.count, 1, "a re-run lists the release once")
 
         try Data("different".utf8).write(to: bucketRoot.appendingPathComponent("releases/4008/Keybumps-0.0.3-beta.4.dmg"))
         let overwrite = try run(publisher, [output.path, "production", "--publish"], environment: environment)
@@ -431,16 +470,69 @@ final class UpdateReleaseScriptTests: XCTestCase {
         let staging = try run(publisher, [output.path, "staging"], environment: environment)
         XCTAssertTrue(staging.output.contains("staging/appcast.xml"), staging.output)
         XCTAssertFalse(staging.output.contains("latest.json"), "only production moves the latest-release pointer")
+        XCTAssertFalse(staging.output.contains("releases.json"), "only production adds to the release index")
 
         XCTAssertNotEqual(try run(publisher, [output.path, "beta"], environment: environment).status, 0)
-        try writeAppcast("https://updates.keybumps.app/Keybumps-\(version).zip")
+        try release.writeAppcast("https://updates.keybumps.app/Keybumps-\(version).zip")
         let wrongLayout = try run(publisher, [output.path, "production"], environment: environment)
         XCTAssertNotEqual(wrongLayout.status, 0)
         XCTAssertTrue(wrongLayout.output.contains("releases/4008"))
+        try release.writeAppcast(releaseDate: nil)
+        let undated = try run(publisher, [output.path, "production"], environment: environment)
+        XCTAssertNotEqual(undated.status, 0, "the release index needs the appcast item's release date")
+        XCTAssertTrue(undated.output.contains("no release date"), undated.output)
+        XCTAssertEqual(try run(publisher, [output.path, "staging"], environment: environment).status, 0, "staging has no release index")
         try FileManager.default.removeItem(at: last.appendingPathComponent("latest.json"))
-        try writeAppcast("https://updates.keybumps.app/releases/\(build)/Keybumps-\(version).zip")
+        try release.writeAppcast()
         XCTAssertNotEqual(try run(publisher, [output.path, "production"], environment: environment).status, 0, "production needs latest.json")
         XCTAssertEqual(try run(publisher, [output.path, "staging"], environment: environment).status, 0)
+    }
+
+    /// Phase 3, the release index, runs after the pointers: when it fails, the release is already
+    /// live and the index is left as it was. A production dry run with --check-index finds the same
+    /// problem before approval, uploading nothing.
+    func testReleaseIndexFailureLeavesTheReleaseLiveAndTheIndexUnchanged() throws {
+        let publisher = appFolder.appendingPathComponent("scripts/publish-release.sh")
+        let release = try makePreparedRelease()
+        defer { try? FileManager.default.removeItem(at: release.work) }
+        let liveIndex = release.bucketRoot.appendingPathComponent("releases.json")
+        let invalid = Data(#"[{"version": "#.utf8)
+        try invalid.write(to: liveIndex)
+
+        let check = try run(publisher, [release.output.path, "production", "--check-index"], environment: release.environment)
+        XCTAssertNotEqual(check.status, 0, "a live index the release can't merge into fails the check: \(check.output)")
+        XCTAssertTrue(check.output.contains("release index:"), check.output)
+        XCTAssertEqual(release.uploads, [], "a check uploads nothing")
+        XCTAssertNotEqual(try run(publisher, [release.output.path, "staging", "--check-index"], environment: release.environment).status, 0, "staging has no release index")
+
+        let published = try run(publisher, [release.output.path, "production", "--publish"], environment: release.environment)
+        XCTAssertNotEqual(published.status, 0, "phase 3 fails on a live index it can't merge into: \(published.output)")
+        XCTAssertTrue(published.output.contains("Publishing phase 3"), published.output)
+        XCTAssertEqual(Array(release.uploads.suffix(2)), ["appcast.xml", "latest.json"], "the pointers are published before phase 3")
+        XCTAssertFalse(release.uploads.contains("releases.json"))
+        for pointer in ["appcast.xml", "latest.json"] {
+            XCTAssertEqual(
+                try Data(contentsOf: release.bucketRoot.appendingPathComponent(pointer)),
+                try Data(contentsOf: release.last.appendingPathComponent(pointer)),
+                "\(pointer) is live"
+            )
+        }
+        XCTAssertEqual(try Data(contentsOf: liveIndex), invalid, "the live index is left as it was")
+
+        // Once the live index is fixed, the check passes and reads it, still uploading nothing.
+        try Data(#"[{"version": "0.0.3-beta.3", "build": 4007, "url": "https://updates.keybumps.app/releases/4007/Keybumps-0.0.3-beta.3.dmg", "releasedAt": "2026-09-19T10:00:00Z"}]"#.utf8).write(to: liveIndex)
+        let uploadsBeforeCheck = release.uploads
+        let fixed = try run(publisher, [release.output.path, "production", "--check-index"], environment: release.environment)
+        XCTAssertEqual(fixed.status, 0, fixed.output)
+        XCTAssertTrue(fixed.output.contains("added: 0.0.3-beta.4 (4008)"), fixed.output)
+        XCTAssertTrue(fixed.output.contains("2 releases in all, newest 0.0.3-beta.4 (4008)"), fixed.output)
+        XCTAssertEqual(release.uploads, uploadsBeforeCheck, "a check uploads nothing")
+
+        var failingReads = release.environment
+        failingReads["FAKE_R2_READ_ERROR"] = "1"
+        let unreadable = try run(publisher, [release.output.path, "production", "--check-index"], environment: failingReads)
+        XCTAssertNotEqual(unreadable.status, 0, "an unreadable live index fails the check")
+        XCTAssertTrue(unreadable.output.contains("could not read releases.json"), unreadable.output)
     }
 
     func testReleaseNotesComeFromTheChangelogWithoutLinks() throws {
@@ -661,5 +753,192 @@ struct ReleaseDateValidationTests {
         #expect(!result.output.contains("release date"), "\(result.output)")
         // The asset-prefix check after the date's takes only HTTPS feeds, so a loopback fixture stops there.
         #expect(result.output.contains("production URL must use HTTPS"), "Reached a later check: \(result.output)")
+    }
+}
+
+/// #565: releases.json, the release index on the production release origin, from which the website
+/// links each release's DMG. Entries are only added or replaced, never dropped, newest first, and
+/// nothing is uploaded when the live index can't be read or disagrees with what's being added.
+@Suite("Release index")
+struct ReleaseIndexTests {
+    private let scripts = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent("scripts")
+
+    private struct Entry: Codable, Equatable {
+        let version: String
+        let build: Int
+        let url: String
+        let releasedAt: String
+
+        init(_ version: String, _ build: Int, _ releasedAt: String = "2026-10-22T09:30:00Z") {
+            self.version = version
+            self.build = build
+            self.url = "https://updates.keybumps.app/releases/\(build)/Keybumps-\(version).dmg"
+            self.releasedAt = releasedAt
+        }
+    }
+
+    /// A temporary folder holding a fake R2 bucket, its wrangler, and its upload log.
+    private struct Bucket {
+        let work: URL
+        var root: URL { work.appendingPathComponent("r2") }
+        var log: URL { work.appendingPathComponent("uploads.log") }
+        var wrangler: URL { work.appendingPathComponent("fake-wrangler") }
+        var index: URL { root.appendingPathComponent("releases.json") }
+        var uploads: [String] {
+            ((try? String(contentsOf: log, encoding: .utf8)) ?? "").split(separator: "\n").map(String.init)
+        }
+    }
+
+    private func makeBucket(live: [Entry]? = nil) throws -> Bucket {
+        let bucket = Bucket(work: FileManager.default.temporaryDirectory.appendingPathComponent("release-index-\(UUID().uuidString)"))
+        try FileManager.default.createDirectory(at: bucket.root, withIntermediateDirectories: true)
+        try writeFakeWrangler(to: bucket.wrangler, bucket: bucket.root, log: bucket.log)
+        if let live { try write(live, to: bucket.index) }
+        return bucket
+    }
+
+    private func write(_ entries: [Entry], to file: URL) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
+        try encoder.encode(entries).write(to: file)
+    }
+
+    private func read(_ file: URL) throws -> [Entry] {
+        try JSONDecoder().decode([Entry].self, from: Data(contentsOf: file))
+    }
+
+    /// Runs publish-release-index.sh with `additions` against the fake bucket: `--publish`,
+    /// `--check-live`, or with no mode, a dry run.
+    private func publish(
+        _ additions: [Entry], to bucket: Bucket, mode: String? = "--publish", environment: [String: String] = [:]
+    ) throws -> (status: Int32, output: String) {
+        let file = bucket.work.appendingPathComponent("additions-\(UUID().uuidString).json")
+        try write(additions, to: file)
+        return try runProcess(
+            scripts.appendingPathComponent("publish-release-index.sh"), [file.path] + (mode.map { [$0] } ?? []),
+            from: bucket.work, environment: environment.merging(["KEYBUMPS_WRANGLER": bucket.wrangler.path]) { $1 }
+        )
+    }
+
+    @Test("The committed backfill lists beta.2 to beta.28 newest first, with beta.6's production build")
+    func backfill() throws {
+        let backfill = scripts.appendingPathComponent("release-index-backfill.json")
+        let check = try runProcess(URL(fileURLWithPath: "/usr/bin/python3"), [
+            scripts.appendingPathComponent("lib/release_index.py").path, "check", backfill.path
+        ], from: scripts)
+        #expect(check.status == 0, "\(check.output)")
+        let entries = try read(backfill)
+        #expect(entries.map(\.version) == (2...28).reversed().map { "0.0.3-beta.\($0)" }, "No DMG was ever published for beta.1")
+        #expect(entries.first?.build == 4033)
+        #expect(entries.last?.build == 4006)
+        #expect(entries.first(where: { $0.version == "0.0.3-beta.6" })?.build == 4011, "4011 replaced 4010 in production")
+        #expect(entries.allSatisfy { $0 == Entry($0.version, $0.build, $0.releasedAt) }, "Each URL is its release's DMG")
+    }
+
+    @Test("A dry run checks the additions and reads or uploads nothing")
+    func dryRun() throws {
+        let bucket = try makeBucket()
+        defer { try? FileManager.default.removeItem(at: bucket.work) }
+        let result = try publish([Entry("0.0.3-beta.29", 4034)], to: bucket, mode: nil, environment: ["FAKE_R2_READ_ERROR": "1"])
+        #expect(result.status == 0, "\(result.output)")
+        #expect(result.output.contains("added: 0.0.3-beta.29 (4034)"))
+        #expect(result.output.contains("Dry run only"))
+        #expect(bucket.uploads.isEmpty)
+    }
+
+    @Test("Without a live index, publishing starts a list; later releases join it newest first, once each")
+    func grows() throws {
+        let bucket = try makeBucket()
+        defer { try? FileManager.default.removeItem(at: bucket.work) }
+
+        let first = try publish([Entry("0.0.3-beta.28", 4033, "2026-10-19T15:21:01Z")], to: bucket)
+        #expect(first.status == 0, "\(first.output)")
+        #expect(first.output.contains("no live releases.json yet"))
+        let second = try publish([Entry("0.0.3-beta.29", 4034)], to: bucket)
+        #expect(second.status == 0, "\(second.output)")
+        let again = try publish([Entry("0.0.3-beta.29", 4034)], to: bucket)
+        #expect(again.status == 0, "\(again.output)")
+        #expect(again.output.contains("already listed: 0.0.3-beta.29 (4034)"))
+
+        #expect(try read(bucket.index) == [Entry("0.0.3-beta.29", 4034), Entry("0.0.3-beta.28", 4033, "2026-10-19T15:21:01Z")])
+        #expect(bucket.uploads == ["releases.json", "releases.json", "releases.json"])
+        let metadata = try String(contentsOf: URL(fileURLWithPath: bucket.log.path + ".meta"), encoding: .utf8)
+        #expect(metadata.contains("releases.json --content-type=application/json; charset=utf-8"))
+        #expect(metadata.contains("releases.json --cache-control=public, max-age=60, must-revalidate"))
+    }
+
+    @Test("A version published again under a higher build replaces its entry")
+    func republished() throws {
+        let bucket = try makeBucket(live: [Entry("0.0.3-beta.7", 4012), Entry("0.0.3-beta.6", 4010)])
+        defer { try? FileManager.default.removeItem(at: bucket.work) }
+        let result = try publish([Entry("0.0.3-beta.6", 4011)], to: bucket)
+        #expect(result.status == 0, "\(result.output)")
+        #expect(try read(bucket.index) == [Entry("0.0.3-beta.7", 4012), Entry("0.0.3-beta.6", 4011)])
+    }
+
+    @Test("A live index that can't be read or disagrees with the additions stops before any upload", arguments: [
+        "build listed under another version", "build listed with another date", "lower build for a listed version",
+        "read error", "live index not JSON", "live index out of order",
+    ])
+    func stops(problem: String) throws {
+        let live = [Entry("0.0.3-beta.28", 4033), Entry("0.0.3-beta.27", 4032)]
+        let bucket = try makeBucket(live: live)
+        defer { try? FileManager.default.removeItem(at: bucket.work) }
+        var additions = [Entry("0.0.3-beta.29", 4034)]
+        var environment: [String: String] = [:]
+        switch problem {
+        case "build listed under another version": additions = [Entry("0.0.3-beta.30", 4033)]
+        case "build listed with another date": additions = [Entry("0.0.3-beta.28", 4033, "2026-10-19T00:00:00Z")]
+        case "lower build for a listed version": additions = [Entry("0.0.3-beta.28", 4031)]
+        case "read error": environment["FAKE_R2_READ_ERROR"] = "1"
+        case "live index not JSON": try Data(#"[{"version": "#.utf8).write(to: bucket.index)
+        default: try write(live.reversed(), to: bucket.index)
+        }
+        let before = try Data(contentsOf: bucket.index)
+
+        let check = try publish(additions, to: bucket, mode: "--check-live", environment: environment)
+        #expect(check.status != 0, "The check finds it before a release is approved: \(check.output)")
+        let result = try publish(additions, to: bucket, environment: environment)
+        #expect(result.status != 0, "\(result.output)")
+        #expect(bucket.uploads.isEmpty, "\(result.output)")
+        #expect(try Data(contentsOf: bucket.index) == before)
+    }
+
+    @Test("Checking against the live index merges into it and uploads nothing")
+    func checkLive() throws {
+        let live = [Entry("0.0.3-beta.28", 4033)]
+        let bucket = try makeBucket(live: live)
+        defer { try? FileManager.default.removeItem(at: bucket.work) }
+        let result = try publish([Entry("0.0.3-beta.29", 4034)], to: bucket, mode: "--check-live")
+        #expect(result.status == 0, "\(result.output)")
+        #expect(result.output.contains("added: 0.0.3-beta.29 (4034)"))
+        #expect(result.output.contains("2 releases in all, newest 0.0.3-beta.29 (4034)"))
+        #expect(result.output.contains("Checked only"))
+        #expect(bucket.uploads.isEmpty)
+        #expect(try read(bucket.index) == live)
+    }
+
+    @Test("An entry that isn't a release's DMG with a UTC time fails even a dry run", arguments: [
+        #"[{"version": "0.0.3-beta.29", "build": 4034, "url": "https://example.com/Keybumps.dmg", "releasedAt": "2026-10-22T09:30:00Z"}]"#,
+        #"[{"version": "0.0.3-beta.29", "build": 4034, "url": "https://updates.keybumps.app/releases/4034/Keybumps-0.0.3-beta.29.dmg", "releasedAt": "2026-10-22"}]"#,
+        #"[{"version": "0.0.3-beta.29", "build": 4034, "url": "https://updates.keybumps.app/releases/4034/Keybumps-0.0.3-beta.29.dmg", "releasedAt": "2026-02-30T09:30:00Z"}]"#,
+        #"[{"version": "0.0.3-beta.29", "build": "4034", "url": "https://updates.keybumps.app/releases/4034/Keybumps-0.0.3-beta.29.dmg", "releasedAt": "2026-10-22T09:30:00Z"}]"#,
+        #"[{"version": "0.0.3-beta.29", "build": 4034, "url": "https://updates.keybumps.app/releases/4034/Keybumps-0.0.3-beta.29.dmg"}]"#,
+        #"{"version": "0.0.3-beta.29", "build": 4034, "url": "https://updates.keybumps.app/releases/4034/Keybumps-0.0.3-beta.29.dmg", "releasedAt": "2026-10-22T09:30:00Z"}"#,
+    ])
+    func rejectsBadEntries(additions: String) throws {
+        let bucket = try makeBucket()
+        defer { try? FileManager.default.removeItem(at: bucket.work) }
+        let file = bucket.work.appendingPathComponent("additions.json")
+        try Data(additions.utf8).write(to: file)
+        let result = try runProcess(
+            scripts.appendingPathComponent("publish-release-index.sh"), [file.path],
+            from: bucket.work, environment: ["KEYBUMPS_WRANGLER": bucket.wrangler.path]
+        )
+        #expect(result.status == 65, "\(result.output)")
+        #expect(result.output.contains("release index:"), "\(result.output)")
     }
 }
