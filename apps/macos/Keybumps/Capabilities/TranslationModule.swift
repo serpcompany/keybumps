@@ -15,7 +15,8 @@ extension CapabilityDescriptor {
             systemImage: "translate",
             prompt: "Type or paste text to translate",
             primaryActionTitle: "Copy",
-            secondaryActions: [.paste(), .delete()],
+            // Its saved translations paste from the detail pane: ⌘V is the search field's (#552).
+            secondaryActions: [.delete()],
             dataSource: nil
         ),
         settingsPage: CapabilitySettingsPage(

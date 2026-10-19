@@ -1375,13 +1375,16 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             searchItem: selectedSearchItem,
             content: tabContent?.footerActions(row: state.selection, query: state.historyQuery) ?? drawnTabFooterActions,
             playback: footerPlaybackTitle,
-            isRowHighlighted: !isGridTab || state.isBrowsingGrid
+            isRowHighlighted: !isGridTab || state.isBrowsingGrid,
+            // With text in the search field, ⌫ edits it, and with a filter chip it removes the chip.
+            deleteNeedsCommand: !activeQuery.isEmpty || state.filter != nil
         )
     }
 
     /// The footer's actions where a tab the palette draws names them by row: Remove ⌫ on a Recent
-    /// Item, which only takes it off the list, and Edit ⌘E on a Clipboard History image while
-    /// ScreenGrabs is on. Nil keeps Quick Search's result's, or the tab's registered ones.
+    /// Item, which only takes it off the list, Edit ⌘E on a Clipboard History image while
+    /// ScreenGrabs is on, and no Paste on a recording with no transcript, where ⌘V is the search
+    /// field's. Nil keeps Quick Search's result's, or the tab's registered ones.
     private var drawnTabFooterActions: PaletteFooterActions? {
         switch state.tab {
         case .search:
@@ -1393,6 +1396,10 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                   filteredClipboard.indices.contains(state.selection),
                   filteredClipboard[state.selection].kind == .image else { return nil }
             return PaletteFooterActions(primary: CommandPaletteTab.clipboard.primaryActionTitle, secondary: [.paste(), .edit, .delete()])
+        case .dictation:
+            guard filteredDictations.indices.contains(state.selection),
+                  filteredDictations[state.selection].text.isEmpty else { return nil }
+            return PaletteFooterActions(primary: CommandPaletteTab.dictation.primaryActionTitle, secondary: [.delete()])
         default:
             return nil
         }
@@ -2734,14 +2741,16 @@ extension PaletteFooterActions {
     /// What the footer names: a module tab's actions for its selected row (or a tab the palette draws,
     /// where they change by row), else Quick Search's highlighted row's (a snippet copies and pastes),
     /// else the tab's registered ones. Then Space's, such as Play, when the selected row has audio and
-    /// the search field is empty, before Delete's, which the footer lists last (#552). Until a grid's
-    /// tile is highlighted, keys that need one, such as Paste ⌘V, are left out.
+    /// the search field is empty, before Delete's, which the footer lists last (#552), on ⌘⌫ while
+    /// ⌫ edits the search text or removes a filter (`deleteNeedsCommand`). Until a grid's tile is
+    /// highlighted, keys that need one, such as Paste ⌘V, are left out.
     static func resolve(
         tab: CommandPaletteTab,
         searchItem: QuickSearchItem?,
         content: PaletteFooterActions?,
         playback: String? = nil,
-        isRowHighlighted: Bool = true
+        isRowHighlighted: Bool = true,
+        deleteNeedsCommand: Bool = false
     ) -> PaletteFooterActions {
         var actions = content ?? PaletteFooterActions(
             primary: searchItem?.primaryActionTitle ?? tab.primaryActionTitle,
@@ -2749,6 +2758,9 @@ extension PaletteFooterActions {
         )
         if let playback {
             actions.secondary.insert(.space(playback), at: actions.secondary.firstIndex(where: \.isDelete) ?? actions.secondary.endIndex)
+        }
+        if deleteNeedsCommand {
+            actions.secondary = actions.secondary.map { $0.isDelete && $0.keys.count == 1 ? $0.withCommand : $0 }
         }
         if !isRowHighlighted { actions.secondary.removeAll(where: \.needsHighlightedRow) }
         return actions

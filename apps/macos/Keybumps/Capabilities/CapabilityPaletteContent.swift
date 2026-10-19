@@ -163,8 +163,14 @@ struct PaletteKeyAction: Equatable, CustomStringConvertible {
     /// Whether it's ⌘V's Paste.
     var isPaste: Bool { keys == Self.paste().keys }
 
-    /// Whether it's Delete's, which the footer lists last.
-    var isDelete: Bool { keys == Self.remove.keys }
+    /// Whether it's Delete's, which the footer lists last, with or without Command.
+    var isDelete: Bool { keys.last == Self.remove.keys.last }
+
+    /// The same action on ⌘⌫, which the footer names while the search field has text or a filter,
+    /// where ⌫ alone edits them.
+    var withCommand: PaletteKeyAction {
+        PaletteKeyAction(title: title, keys: ["⌘"] + keys, needsHighlightedRow: needsHighlightedRow)
+    }
 
     /// "Paste ⌘V"
     var description: String { "\(title) \(keys.joined())" }

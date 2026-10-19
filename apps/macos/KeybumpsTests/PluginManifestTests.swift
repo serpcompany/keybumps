@@ -118,8 +118,10 @@ struct PluginManifestTests {
         let pasting = CapabilityCatalog.descriptors.filter { descriptor in
             descriptor.paletteTab?.secondaryActions.contains(where: \.isPaste) == true
         }
-        #expect(pasting.map(\.capability) == [.clipboardHistory, .screenshotTools, .dictation, .snippets, .emojiPicker, .translation])
-        for descriptor in pasting {
+        // Translation pastes a saved translation from its detail pane's button; its ⌘V is the search
+        // field's (#552). It declares Accessibility too, checked with the others below.
+        #expect(pasting.map(\.capability) == [.clipboardHistory, .screenshotTools, .dictation, .snippets, .emojiPicker])
+        for descriptor in pasting + [CapabilityDescriptor.translation] {
             let declared = descriptor.requiredPermissions.union(descriptor.optionalPermissions.map(\.permission))
             #expect(declared.contains(.accessibility), "\(descriptor.title)")
         }

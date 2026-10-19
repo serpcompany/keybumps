@@ -232,7 +232,7 @@ struct TranslateDetailTests {
         #expect(try await ax.texts(in: "palette.translate.detail.languages").contains("English → Japanese"))
     }
 
-    @Test("The detail's buttons do what the keys do: Copy (↵, ⌘C), Paste (⌘V), Read Aloud (Space), and Delete (⌫), which asks first")
+    @Test("The detail's buttons do what the keys do: Copy (↵, ⌘C), Paste (a button: ⌘V is the search field's here), Read Aloud (Space), and Delete (⌫), which asks first")
     func buttonsDoWhatTheKeysDo() async throws {
         let fixture = TranslatePaletteFixture()
         defer { fixture.tearDown() }
@@ -261,7 +261,7 @@ struct TranslateDetailTests {
         palette.rememberPasteTarget()
         let paste = try await ax.require("palette.translate.detail.paste")
         #expect(PaletteAccessibility.label(of: paste) == "Paste")
-        #expect(PaletteAccessibility.hint(of: paste) == "Command V")
+        #expect((PaletteAccessibility.hint(of: paste) ?? "").isEmpty, "⌘V is the search field's in this tab (#552)")
         PaletteAccessibility.press(paste)
         #expect(fixture.pasteboard.string(forType: .string) == "Merci")
         #expect(offered == [.translation])

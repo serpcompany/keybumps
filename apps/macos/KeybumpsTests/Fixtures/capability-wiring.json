@@ -65900,7 +65900,6 @@
       "primaryAction" : "Copy",
       "prompt" : "Type or paste text to translate",
       "secondaryActions" : [
-        "Paste ⌘V",
         "Delete ⌫"
       ],
       "systemImage" : "translate",

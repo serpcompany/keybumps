@@ -421,16 +421,21 @@ final class TranslatePaletteContent: CapabilityPaletteContent {
         )
     }
 
-    /// On a saved translation: Copy ↵, Paste ⌘V, then Read Aloud Space and Delete ⌫. On the
-    /// translation being typed: Save ↵ and Save and Paste ⌘↵.
+    /// On a saved translation: Copy ↵, then Read Aloud Space and Delete ⌫; its Paste is the detail
+    /// pane's button, since ⌘V is the search field's here. On the translation being typed: Save ↵
+    /// and Save and Paste ⌘↵.
     func footerActions(row: Int, query: String) -> PaletteFooterActions {
         if record(row: row, query: query) != nil {
-            return PaletteFooterActions(primary: "Copy", secondary: [.paste(), .delete()])
+            return PaletteFooterActions(primary: "Copy", secondary: [.delete()])
         }
         return currentTranslation(query: query) == nil
             ? PaletteFooterActions(primary: nil)
             : PaletteFooterActions(primary: "Save", secondary: [Self.saveAndPaste])
     }
+
+    /// ⌘V is always the search field's in this tab, where you paste text to translate (#552), even
+    /// with a saved translation highlighted while the field is empty.
+    func pastes(row: Int, query: String) -> Bool { false }
 
     /// ⌘Return on the translation being typed, which leaves ⌘V to the search field (#552).
     static let saveAndPaste = PaletteKeyAction(title: "Save and Paste", keys: ["⌘", "↵"])
@@ -727,7 +732,7 @@ private struct RecentTranslationDetail: View {
         HStack(spacing: 6) {
             PaletteActionButton(title: "Copy", systemImage: "doc.on.doc", shortcuts: [["↵"], ["⌘", "C"]], action: copy)
                 .accessibilityIdentifier("palette.translate.detail.copy")
-            PaletteActionButton(title: "Paste", systemImage: "doc.on.clipboard", shortcuts: [PaletteKeyAction.paste().keys], action: paste)
+            PaletteActionButton(title: "Paste", systemImage: "doc.on.clipboard", shortcuts: [], action: paste)
                 .accessibilityIdentifier("palette.translate.detail.paste")
             PaletteActionButton(
                 title: detail.readAloudTitle,

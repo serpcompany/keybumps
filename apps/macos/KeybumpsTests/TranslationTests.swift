@@ -262,7 +262,7 @@ struct TranslateTabTests {
         )
     }
 
-    @Test("Its manifest: Translation, the Translate tab on ⌘8 with Copy and Paste, Writing, off, macOS 15, an unassigned shortcut")
+    @Test("Its manifest: Translation, the Translate tab on ⌘8 with Copy and Delete, Writing, off, macOS 15, an unassigned shortcut")
     func manifest() {
         let descriptor = CapabilityDescriptor.translation
         #expect(descriptor.title == "Translation")
@@ -278,7 +278,7 @@ struct TranslateTabTests {
         #expect(CommandPaletteTab.translate.title == "Translate")
         #expect(CommandPaletteTab.translate.shortcutLabel == "⌘8")
         #expect(CommandPaletteTab.translate.primaryActionTitle == "Copy")
-        #expect(CommandPaletteTab.translate.secondaryActions == [.paste(), .delete()])
+        #expect(CommandPaletteTab.translate.secondaryActions == [.delete()], "⌘V is the search field's; a saved translation pastes from its button")
         #expect(CommandPaletteTab.keyboardShortcutter.shortcutLabel == "⌘9", "Hotkeys moved to stay last")
         #expect(descriptor.shortcuts == [.translation])
         #expect(CapabilityShortcut.translation.title == "Open Translate")
@@ -341,8 +341,8 @@ struct TranslateTabTests {
         #expect(record.sourceLanguage == "en" && record.targetLanguage == "ja")
         #expect(tab.rowCount(query: "") == 1, "With the field empty, the tab lists it")
         #expect(tab.record(row: 0, query: "") == record)
-        #expect(tab.footerActions(row: 0, query: "") == PaletteFooterActions(primary: "Copy", secondary: [.paste(), .delete()]))
-        #expect(tab.pastes(row: 0, query: ""), "⌘V pastes a saved translation")
+        #expect(tab.footerActions(row: 0, query: "") == PaletteFooterActions(primary: "Copy", secondary: [.delete()]))
+        #expect(!tab.pastes(row: 0, query: ""), "⌘V stays the search field's, to paste text to translate; its Paste button pastes it")
 
         // Typed on since: the translation is of older text, so Return waits for the new one.
         tab.activate(row: 0, query: Self.english + " Thanks", palette: actions.actions)
@@ -1028,7 +1028,7 @@ struct RecentTranslationTests {
         #expect(fixture.pasteboard.string(forType: .string) == nil, "Nothing copied")
     }
 
-    @Test("On a saved translation, Return and ⌘C copy it, kept out of Clipboard History, ⌘V pastes it, and ⌘Return only copies")
+    @Test("On a saved translation, Return and ⌘C copy it, kept out of Clipboard History, ⌘Return only copies, and ⌘V is the search field's (#552)")
     func rowsCopyAndPaste() {
         let fixture = TranslatePaletteFixture()
         defer { fixture.tearDown() }
@@ -1059,12 +1059,14 @@ struct RecentTranslationTests {
         #expect(fixture.pasteboard.string(forType: .string) == "おやすみ")
         #expect(offered.isEmpty, "⌘Return copied, as Return does; it doesn't paste")
 
+        // ⌘V on a saved translation with the field empty is the search field's, to paste text to
+        // translate (#552): nothing is pasted into the other app.
         palette.selectOnOpening(.translate)
         palette.rememberPasteTarget()
-        #expect(palette.handleKeyDown(fixture.commandKey(kVK_ANSI_V, "v")) == nil)
-        // Without Accessibility, the paste copies instead and offers setup.
-        #expect(fixture.pasteboard.string(forType: .string) == "Merci")
-        #expect(offered == [.translation])
+        fixture.pasteboard.clearContents()
+        #expect(palette.handleKeyDown(fixture.commandKey(kVK_ANSI_V, "v")) != nil)
+        #expect(fixture.pasteboard.string(forType: .string) == nil)
+        #expect(offered.isEmpty)
         #expect(fixture.recents.records.map(\.sourceText) == ["Thank you", "Good night"], "Nothing saved or moved")
     }
 

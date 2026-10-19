@@ -260,6 +260,7 @@ struct PaletteCopyPasteKeyTests {
         #expect(fixture.palette.handleKeyDown(Self.space) != nil, "Space goes to the input method")
         #expect(fixture.palette.handleKeyDown(Self.commandC) != nil)
         #expect(fixture.palette.handleKeyDown(Self.commandV) != nil, "⌘V too")
+        #expect(fixture.palette.handleKeyDown(Self.commandP) == nil, "⌘P is swallowed even then (#552)")
         try await Task.sleep(for: .milliseconds(20))
         #expect(fixture.paster.pasted.isEmpty, "Nothing was pasted")
         #expect(fixture.pasteboard.string(forType: .string) == nil)
@@ -392,7 +393,8 @@ struct PaletteCopyPasteKeyTests {
         #expect(footer(.snippets) == ["Copy ↵", "Paste ⌘V", "Edit ⌘E", "Delete ⌫"])
         #expect(footer(.timers) == ["Start ↵", "Delete ⌫"])
         #expect(footer(.emoji) == ["Copy ↵", "Paste ⌘V"])
-        #expect(footer(.translate) == ["Copy ↵", "Paste ⌘V", "Delete ⌫"])
+        // Translate's ⌘V is the search field's, to paste text to translate; a saved one's Paste is a button.
+        #expect(footer(.translate) == ["Copy ↵", "Delete ⌫"])
         #expect(footer(.keyboardShortcutter).isEmpty)
         // Nothing names ⌘P, or ⌘Return for Edit, any more.
         for tab in CommandPaletteTab.allCases {
@@ -407,7 +409,7 @@ struct PaletteCopyPasteKeyTests {
         #expect(DictationPaletteResults.playbackTitle(of: silent, player: fixture.palette.dictationPlayer) == nil, "No audio, no Space")
     }
 
-    @Test("The palette's footer, row by row: Clipboard's image rows add Edit ⌘E while ScreenGrabs is on; Dictation ends Play, then Delete")
+    @Test("The palette's footer, row by row: Clipboard's image rows add Edit ⌘E while ScreenGrabs is on; Dictation ends Play, then Delete, on ⌘⌫ while typing or filtered, and with no Paste on a recording with no transcript")
     func paletteFooterByRow() throws {
         let fixture = CopyPasteFixture()
         defer { fixture.tearDown() }
@@ -430,7 +432,18 @@ struct PaletteCopyPasteKeyTests {
         fixture.palette.state.select(.dictation)
         #expect(footer() == ["Copy ↵", "Paste ⌘V", "Play Space", "Delete ⌫"])
         fixture.palette.state.historyQuery = "made-up"
-        #expect(footer() == ["Copy ↵", "Paste ⌘V", "Delete ⌫"], "With text in the field, Space types")
+        #expect(footer() == ["Copy ↵", "Paste ⌘V", "Delete ⌘⌫"], "With text in the field, Space types and ⌫ edits it")
+        fixture.palette.state.historyQuery = ""
+        fixture.palette.state.filter = .today
+        #expect(footer() == ["Copy ↵", "Paste ⌘V", "Play Space", "Delete ⌘⌫"], "With a filter, ⌫ removes it first")
+        fixture.palette.state.filter = nil
+
+        try fixture.untranscribedRecording()
+        fixture.palette.state.select(.dictation)
+        #expect(fixture.palette.state.selection == 0)
+        #expect(!footer().contains("Paste ⌘V"), "A recording with no transcript has nothing to paste")
+        #expect(fixture.palette.handleKeyDown(Self.commandV) != nil, "so ⌘V is the search field's")
+        #expect(fixture.paster.pasted.isEmpty)
 
         fixture.palette.state.select(.clipboard)
         fixture.palette.state.historyQuery = "/"
@@ -576,6 +589,14 @@ private final class CopyPasteFixture {
         try (png + Data(name.utf8)).write(to: url)
         #expect(clipboard.ingestImageFile(at: url))
         return try #require(clipboard.entries.first)
+    }
+
+    /// A recording whose transcription failed: it has audio, and no transcript to paste.
+    @discardableResult
+    func untranscribedRecording() throws -> DictationHistoryEntry {
+        let pending = try dictationHistory.prepareRecording()
+        try Data("made-up audio".utf8).write(to: pending.audioURL)
+        return try dictationHistory.completeRecording(pending, text: "", language: "en-US", duration: 1, transcriptionError: "Made-up failure")
     }
 
     /// A finished recording with its (made-up) audio file.
