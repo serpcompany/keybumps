@@ -17,6 +17,8 @@ extension CapabilityDescriptor {
             prompt: "Search dictation history",
             primaryActionTitle: "Copy",
             secondaryActions: [.paste(), .delete()],
+            // The detail beside the list has the highlighted recording's actions.
+            clickAction: .selects,
             dataSource: nil
         ),
         settingsPage: CapabilitySettingsPage(

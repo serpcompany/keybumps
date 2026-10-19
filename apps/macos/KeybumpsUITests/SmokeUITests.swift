@@ -718,6 +718,26 @@ final class SmokeUITests: XCTestCase {
         XCTAssertEqual(files.map(\.lastPathComponent), ["video-1.mov"], "the recording's video, as a file")
     }
 
+    /// One click highlights a tile, leaving the palette open and copying nothing; a double-click
+    /// copies it, as Return does (#552).
+    func testScreengrabsTabClickHighlightsATileAndADoubleClickCopiesIt() {
+        launchScreengrabsTab()
+        let recording = element("palette.screengrabs.recording")
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("com.serp.keybumps.uitests.clipboard"))
+        let before = pasteboard.changeCount
+
+        recording.click()
+        XCTAssertTrue(paletteField("Search ScreenGrabs").exists, "One click leaves the palette open")
+        XCTAssertEqual(pasteboard.changeCount, before, "and copies nothing")
+
+        recording.doubleClick()
+        XCTAssertTrue(waitForNonExistence(of: recording), "A double-click copies, which closes the palette")
+        let copied = expectation(for: NSPredicate { _, _ in pasteboard.changeCount != before }, evaluatedWith: nil)
+        XCTAssertEqual(XCTWaiter().wait(for: [copied], timeout: 5), .completed, "something was copied")
+        let files = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        XCTAssertEqual(files.map(\.lastPathComponent), ["video-1.mov"], "the recording's video, as a file")
+    }
+
     /// ⌘Return opens the recording window on the saved recording, with Move to Trash and Done in
     /// Discard's and Save's places; Done only closes it.
     func testScreengrabsTabCommandReturnOpensTheRecordingWindow() {
@@ -774,6 +794,24 @@ final class SmokeUITests: XCTestCase {
 
         app.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
         XCTAssertTrue(waitForNonExistence(of: field), "Return starts it and closes the palette")
+    }
+
+    /// One click on an emoji copies it, as Return does, and closes the palette (#552). Emoji Picker
+    /// ships off, so the test turns it on.
+    func testEmojiTabClickCopiesAnEmoji() {
+        launch(permissions: "granted", ["-KBUITestEnableCapabilities", "emojiPicker", "-KBOpenPalette", "emoji", "-KBCloseSettings", "YES"])
+        let field = paletteField("Search emoji by name, keyword, or :shortcode:")
+        XCTAssertTrue(field.waitForExistence(timeout: 20))
+        let cell = element("palette.emoji.cell")
+        XCTAssertTrue(cell.waitForExistence(timeout: 10), "The grid loads")
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("com.serp.keybumps.uitests.clipboard"))
+        let before = pasteboard.changeCount
+
+        cell.click()
+        XCTAssertTrue(waitForNonExistence(of: field), "One click copies, which closes the palette")
+        let copied = expectation(for: NSPredicate { _, _ in pasteboard.changeCount != before }, evaluatedWith: nil)
+        XCTAssertEqual(XCTWaiter().wait(for: [copied], timeout: 5), .completed, "something was copied")
+        XCTAssertFalse((pasteboard.string(forType: .string) ?? "").isEmpty, "the emoji, as text")
     }
 
     func testSnippetsTabCreatesASnippetInSettings() {

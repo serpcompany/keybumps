@@ -60,6 +60,9 @@ struct CapabilityPaletteTab {
     /// The other keys the footer names after Return, with their keys, such as Paste ⌘V, ending with
     /// Delete ⌫ where Delete removes the row.
     let secondaryActions: [PaletteKeyAction]
+    /// What one click on a row or tile does (#552): what Return does, or, where the tab shows the
+    /// highlighted row's actions, highlight it, with a double-click for Return's.
+    let clickAction: PaletteClickAction
     let dataSource: Capability?
     /// Whether the tab also lists the module's own recordings, as the ScreenGrabs tab does (#494), so
     /// it shows without `dataSource` wherever the module records.

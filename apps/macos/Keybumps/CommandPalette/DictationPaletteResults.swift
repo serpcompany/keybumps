@@ -87,6 +87,7 @@ struct DictationPaletteResults: View {
             title: "Recent",
             items: entries,
             selection: selection,
+            clickAction: CommandPaletteTab.dictation.clickAction,
             select: select,
             choose: { entry in
                 if !entry.text.isEmpty { choose(entry.text) }

@@ -18,6 +18,7 @@ extension CapabilityDescriptor {
             prompt: "Search snippets",
             primaryActionTitle: "Copy",
             secondaryActions: [.paste(), .edit, .delete()],
+            clickAction: .acts,
             dataSource: nil
         ),
         settingsPage: CapabilitySettingsPage(

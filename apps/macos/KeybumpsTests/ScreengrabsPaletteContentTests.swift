@@ -96,17 +96,33 @@ struct ScreengrabsPaletteContentTests {
         #expect(!fixture.content.delete(row: 1, query: ""))
     }
 
-    @Test("A click copies, and a ⌘-click edits")
+    @Test("A click highlights a screenshot, a double-click copies it, as Return does, and a ⌘-click edits it, once (#552)")
     func click() throws {
         let fixture = ScreengrabsTabFixture()
         defer { fixture.tearDown() }
-        let ids = try fixture.addScreenshots(["First"])
-        let entry = try #require(fixture.clipboard.entries.first)
+        let ids = try fixture.addScreenshots(["First", "Second"])
         let log = fixture.log
+        let content: ScreengrabsPaletteContent = fixture.content
+        #expect(content.tab.clickAction == .selects)
+        #expect(content.commandClicks)
 
+        content.click(.click(), row: 1, query: "", palette: log.actions)
+        #expect(log.calls == [.select(1)], "One click only highlights it")
+        content.click(.click(count: 2), row: 1, query: "", palette: log.actions)
+        content.click(.doubleClick(), row: 1, query: "", palette: log.actions)
+        #expect(log.calls == [.select(1), .select(1), .copy(ids[1])], "The double-click copies it")
+
+        content.click(.click(withCommand: true), row: 0, query: "", palette: log.actions)
+        content.click(.click(count: 2, withCommand: true), row: 0, query: "", palette: log.actions)
+        content.click(.doubleClick(withCommand: true), row: 0, query: "", palette: log.actions)
+        #expect(log.calls.suffix(2) == [.select(0), .edit(ids[0])], "A ⌘-click edits, and a ⌘-double-click doesn't copy too")
+        #expect(log.calls.count == 5)
+
+        // Choosing it, as Return and ⌘Return do.
+        let entry = try #require(fixture.clipboard.entries.first { $0.id == ids[0] })
         ScreengrabsPaletteContent.choose(entry, withCommand: false, palette: log.actions)
         ScreengrabsPaletteContent.choose(entry, withCommand: true, palette: log.actions)
-        #expect(log.calls == [.copy(ids[0]), .edit(ids[0])])
+        #expect(log.calls.suffix(2) == [.copy(ids[0]), .edit(ids[0])])
     }
 
     @Test("Space opens Quick Look (#494), and the footer names Copy ↵, Paste ⌘V, Edit ⌘E, Quick Look, then Delete ⌫ (#552)")
@@ -153,6 +169,41 @@ struct ScreengrabsPaletteContentTests {
         fixture.palette.state.historyQuery = ""
         #expect(fixture.palette.handleKeyDown(Self.key(kVK_ANSI_E, "e", modifiers: .command)) == nil)
         #expect(edited == [ids[0]])
+    }
+
+    @Test("A click on a tile goes into the grid, as Down does: the footer names its actions, and the arrow keys move on from it, even after the pointer passed over it; a double-click copies it (#552)")
+    func clickThroughThePalette() throws {
+        let fixture = ScreengrabsTabFixture()
+        defer { fixture.tearDown() }
+        try fixture.addScreenshots(["First", "Second", "Third"])
+        let palette = fixture.palette
+        var pointer = NSPoint(x: -1000, y: -1000)
+        palette.state.mouseLocation = { pointer }
+        palette.selectOnOpening(.screenshots)
+        #expect(palette.footerActions.secondary.map(\.description) == ["Edit ⌘E"], "Nothing highlighted yet")
+
+        palette.clickContentRow(.click(), row: 1)
+        #expect(palette.state.isBrowsingGrid)
+        #expect(palette.state.selection == 1)
+        #expect(palette.footerActions.primary == "Copy")
+        #expect(palette.footerActions.secondary.map(\.description) == ["Paste ⌘V", "Edit ⌘E", "Quick Look Space", "Delete ⌫"])
+        #expect(palette.handleKeyDown(Self.key(kVK_RightArrow)) == nil)
+        #expect(palette.state.selection == 2)
+
+        // Again, with the pointer passing over the first tile on its way into the grid, then a click.
+        palette.selectOnOpening(.screenshots)
+        pointer = NSPoint(x: 10, y: 20)
+        palette.hover(row: 0)
+        #expect(palette.state.gridEnteredByPointer)
+        palette.clickContentRow(.click(), row: 0)
+        #expect(!palette.state.gridEnteredByPointer)
+        #expect(palette.handleKeyDown(Self.key(kVK_RightArrow)) == nil)
+        #expect(palette.state.tab == .screenshots, "Right moves on in the grid")
+        #expect(palette.state.selection == 1)
+
+        let before = fixture.pasteboard.changeCount
+        palette.clickContentRow(.doubleClick(), row: 1)
+        #expect(fixture.pasteboard.changeCount != before, "The double-click copies it")
     }
 
     @Test("With text in the search field, Left and Right move the caret, and Down still goes into the grid")
@@ -361,7 +412,7 @@ private final class ScreengrabsTabFixture {
 @MainActor
 private final class ContentActionLog {
     enum Call: Equatable {
-        case copy(UUID), paste(UUID), edit(UUID)
+        case select(Int), copy(UUID), paste(UUID), edit(UUID)
     }
 
     private(set) var calls: [Call] = []
@@ -369,7 +420,7 @@ private final class ContentActionLog {
     var actions: PaletteContentActions {
         PaletteContentActions(
             dismiss: {},
-            selectRow: { _ in },
+            selectRow: { [weak self] row in self?.calls.append(.select(row)) },
             clearQuery: {},
             copyClipboardEntry: { [weak self] entry in self?.calls.append(.copy(entry.id)) },
             pasteClipboardEntry: { [weak self] entry in self?.calls.append(.paste(entry.id)) },

@@ -612,6 +612,7 @@ private struct RecentTranslationsView: View {
                 title: "Recent Translations",
                 items: content.recents.records,
                 selection: selection,
+                clickAction: content.tab.clickAction,
                 select: actions.selectRow,
                 choose: { actions.copy($0.translatedText) }
             ) { record in

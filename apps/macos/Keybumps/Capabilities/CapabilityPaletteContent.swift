@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The rows of a Command Palette tab that a capability module supplies itself, so the palette needs
@@ -63,6 +64,9 @@ protocol CapabilityPaletteContent: AnyObject {
     /// selected screenshot. A held key's repeats don't come here, nor do keys pressed while `/`'s
     /// list of filters hides the rows.
     func handleCommandKey(_ characters: String, row: Int, query: String, palette: PaletteContentActions)
+    /// Whether a ⌘-click on a row does what ⌘Return does (`commandActivate`), as in the ScreenGrabs
+    /// tab, where both edit. Elsewhere ⌘ makes no difference to a click (`click(_:row:query:palette:)`).
+    var commandClicks: Bool { get }
     /// Runs each time the palette shows the tab: when it opens on it, or switches to it.
     func didShow(palette: PaletteContentActions)
     /// Runs when the palette stops showing the tab: it closes, or switches to another tab.
@@ -91,8 +95,119 @@ extension CapabilityPaletteContent {
     func footerActions(row: Int, query: String) -> PaletteFooterActions { PaletteFooterActions(tab: tab) }
     var commandKeys: Set<String> { [] }
     func handleCommandKey(_ characters: String, row: Int, query: String, palette: PaletteContentActions) {}
+    var commandClicks: Bool { false }
     func didShow(palette: PaletteContentActions) {}
     func didHide() {}
+
+    /// A click on a row or tile, as its `PaletteClickButton` reports it (#552): what the tab's
+    /// `clickAction` says, with `selectRow` for the highlight, `activate` for Return's action, and,
+    /// where `commandClicks`, `commandActivate` for a ⌘-click.
+    func click(_ click: PaletteClick, row: Int, query: String, palette: PaletteContentActions) {
+        tab.clickAction.perform(
+            click,
+            select: { palette.selectRow(row) },
+            activate: { activate(row: row, query: query, palette: palette) },
+            commandActivate: commandClicks ? { self.commandActivate(row: row, query: query, palette: palette) } : nil
+        )
+    }
+}
+
+/// What one click on a tab's row or tile does, which the tab's registration declares
+/// (`CapabilityPaletteTab.clickAction`, #552). A right-click's context menu, the pointer's highlight,
+/// and the keys are the same either way.
+enum PaletteClickAction: Equatable {
+    /// One click does what Return does, where a row has one obvious job and no detail pane: Search
+    /// opens or runs it, Clipboard, Snippets, and Emoji copy it, and Timers starts, pauses, resumes,
+    /// or restarts it. The second click of a double-click does nothing, so a double-click never does
+    /// it twice, as pausing a timer, then resuming it.
+    case acts
+    /// One click highlights the row, and a double-click does what Return does, where the tab shows
+    /// the highlighted row's actions: in the detail beside the list (Dictation, Translate) or in the
+    /// footer (ScreenGrabs). A click in a grid goes into it, as Down does. The Hotkeys tab's rows
+    /// have no action, so they only highlight.
+    case selects
+
+    /// Does what a click does here: `select` highlights the row, `activate` does what Return does,
+    /// and `commandActivate`, on a row with a ⌘-click, does what that does instead while ⌘ is held,
+    /// in either kind of tab, as a screengrab's edits.
+    func perform(_ click: PaletteClick, select: () -> Void, activate: () -> Void, commandActivate: (() -> Void)? = nil) {
+        switch click {
+        case .click(let count, let withCommand):
+            if withCommand, let commandActivate {
+                // Once, on a double-click's first click.
+                guard count == 1 else { return }
+                select()
+                commandActivate()
+            } else if self == .selects {
+                select()
+            } else if count == 1 {
+                select()
+                activate()
+            }
+        case .doubleClick(let withCommand):
+            guard self == .selects, !(withCommand && commandActivate != nil) else { return }
+            activate()
+        }
+    }
+}
+
+/// A click on a palette row or tile, as its `PaletteClickButton` reports it.
+enum PaletteClick: Equatable {
+    /// Each click: `count` is 1, or 2 for a double-click's second click (`NSEvent.clickCount`).
+    case click(count: Int = 1, withCommand: Bool = false)
+    /// A double-click, once its second click is done, after that click's own `click`. Only where a
+    /// click selects (`PaletteClickAction.selects`).
+    case doubleClick(withCommand: Bool = false)
+}
+
+/// A palette row's or tile's button, its label the `PaletteRow` or tile (#552). It reports each
+/// click to `click`, and, where a click selects, the double-click too, which then does what the
+/// tab's `clickAction` says (`CapabilityPaletteContent.click`, or `PaletteClickAction.perform`).
+struct PaletteClickButton<Label: View>: View {
+    let clickAction: PaletteClickAction
+    let click: (PaletteClick) -> Void
+    @ViewBuilder let label: Label
+
+    var body: some View {
+        let button = Button { click(.click(count: Self.clickCount, withCommand: Self.isCommandHeld)) } label: { label }
+            .buttonStyle(.plain)
+        switch clickAction {
+        case .acts:
+            button
+        case .selects:
+            button.simultaneousGesture(TapGesture(count: 2).onEnded { click(.doubleClick(withCommand: Self.isCommandHeld)) })
+        }
+    }
+
+    /// The click count of the mouse event the button is handling. Any other press, such as
+    /// VoiceOver's, is one click, even right after a double-click elsewhere: the last mouse event
+    /// counts only while it's recent, within the double-click interval or a second, whichever is
+    /// longer, so a busy main thread doesn't turn a double-click's second click into a first.
+    @MainActor private static var clickCount: Int {
+        guard let event = NSApp.currentEvent, event.type == .leftMouseUp || event.type == .leftMouseDown,
+              ProcessInfo.processInfo.systemUptime - event.timestamp <= max(NSEvent.doubleClickInterval, 1) else { return 1 }
+        return event.clickCount
+    }
+
+    @MainActor private static var isCommandHeld: Bool { NSEvent.modifierFlags.contains(.command) }
+}
+
+extension PaletteClickButton {
+    /// A row the palette draws itself, with closures of its own: `select` highlights it,
+    /// `activate` does what Return does, and `commandActivate`, if there's one, what a ⌘-click does.
+    init(
+        _ clickAction: PaletteClickAction,
+        select: @escaping () -> Void,
+        activate: @escaping () -> Void,
+        commandActivate: (() -> Void)? = nil,
+        @ViewBuilder label: () -> Label
+    ) {
+        self.init(
+            clickAction: clickAction,
+            click: { clickAction.perform($0, select: select, activate: activate, commandActivate: commandActivate) },
+            label: label
+        )
+    }
 }
 
 /// Delete's question for a row that asks first, such as "Delete this translation?", and what its
@@ -233,7 +348,8 @@ struct PalettePlayback {
 struct PaletteContentActions {
     /// Closes the palette.
     let dismiss: () -> Void
-    /// Moves the selection to a row, as a click on it does.
+    /// Moves the selection to a row, as a click on it does. In a grid, it goes into the grid's items,
+    /// as Down does, so the arrow keys move on from it and the footer names its actions.
     let selectRow: (Int) -> Void
     /// Empties the search field, as after a row has used what was typed. On a tab whose rows reset
     /// the selection while typing, it also moves the selection back to the first row, so select a
@@ -324,4 +440,7 @@ struct PaletteContentContext {
     let actions: PaletteContentActions
     /// Tells the palette while a confirmation shows, so a click on it doesn't close the palette.
     let confirmationPresentationChanged: (Bool) -> Void
+    /// A click on the row or tile at an index, as its `PaletteClickButton` reports it, which the
+    /// palette hands to the tab's rows (`CapabilityPaletteContent.click`) with the search as it is.
+    var click: (PaletteClick, Int) -> Void = { _, _ in }
 }

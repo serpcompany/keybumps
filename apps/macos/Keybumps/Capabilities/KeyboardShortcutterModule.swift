@@ -17,6 +17,8 @@ extension CapabilityDescriptor {
             prompt: "Search hotkeys",
             primaryActionTitle: nil,
             secondaryActions: [],
+            // Its rows are read-only: Return does nothing.
+            clickAction: .selects,
             dataSource: nil
         ),
         settingsPage: CapabilitySettingsPage(

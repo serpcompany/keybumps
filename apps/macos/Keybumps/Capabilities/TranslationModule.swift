@@ -17,6 +17,8 @@ extension CapabilityDescriptor {
             primaryActionTitle: "Copy",
             // Its saved translations paste from the detail pane: ⌘V is the search field's (#552).
             secondaryActions: [.delete()],
+            // The detail beside the list has the highlighted translation's actions.
+            clickAction: .selects,
             dataSource: nil
         ),
         settingsPage: CapabilitySettingsPage(

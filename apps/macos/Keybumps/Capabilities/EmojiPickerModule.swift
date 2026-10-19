@@ -16,6 +16,7 @@ extension CapabilityDescriptor {
             prompt: "Search emoji by name, keyword, or :shortcode:",
             primaryActionTitle: "Copy",
             secondaryActions: [.paste()],
+            clickAction: .acts,
             dataSource: nil
         ),
         settingsPage: CapabilitySettingsPage(

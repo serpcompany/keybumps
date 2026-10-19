@@ -76,6 +76,9 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
 
     /// Shown in the footer after the primary action, each with its key, such as Paste ⌘V.
     var secondaryActions: [PaletteKeyAction] { registration.secondaryActions }
+
+    /// What one click on a row or tile does (`PaletteClickAction`, #552).
+    var clickAction: PaletteClickAction { registration.clickAction }
 }
 
 struct CommandPaletteTabLabel: Equatable {
@@ -646,6 +649,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
                 snippets: snippets,
                 tabContents: tabContents,
                 contentActions: contentActions,
+                clickContentRow: { [weak self] click, row in self?.clickContentRow(click, row: row) },
                 selectTab: selectTab,
                 activateSearchResult: open,
                 revealSearchResult: reveal,
@@ -970,6 +974,13 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     /// The rows of the open tab, when its module supplies them.
     private var tabContent: (any CapabilityPaletteContent)? { tabContents[state.tab] }
 
+    /// A click on a module tab's row or tile, as its `PaletteClickButton` reports it: the tab's rows
+    /// answer it (`CapabilityPaletteContent.click`), with the search as it is. Internal so tests can
+    /// click with no window.
+    func clickContentRow(_ click: PaletteClick, row: Int) {
+        tabContent?.click(click, row: row, query: state.historyQuery, palette: contentActions)
+    }
+
     /// What a module tab's rows can ask of the palette.
     private var contentActions: PaletteContentActions {
         PaletteContentActions(
@@ -977,6 +988,9 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             selectRow: { [weak self] row in
                 self?.state.selection = row
                 self?.state.isBrowsingGrid = true
+                // A click on a tile is no pointer passing over it on its way (#347): the arrow keys
+                // move on from it, as after Down.
+                self?.state.gridEnteredByPointer = false
             },
             clearQuery: { [weak self] in self?.state.historyQuery = "" },
             copy: { [weak self] text in self?.copyText(text) },
@@ -1730,6 +1744,8 @@ private struct CommandPaletteView: View {
     @Bindable var snippets: SnippetStore
     let tabContents: [CommandPaletteTab: any CapabilityPaletteContent]
     let contentActions: PaletteContentActions
+    /// A click on a module tab's row or tile (`CommandPaletteController.clickContentRow`).
+    let clickContentRow: (PaletteClick, Int) -> Void
     let selectTab: (CommandPaletteTab) -> Void
     let activateSearchResult: (QuickSearchResult) -> Void
     let revealSearchResult: (QuickSearchResult) -> Void
@@ -1842,7 +1858,8 @@ private struct CommandPaletteView: View {
                 // A grid highlights nothing until Down goes into it.
                 selection: tabContent.isGrid(query: state.historyQuery) && !state.isBrowsingGrid ? -1 : state.selection,
                 actions: contentActions,
-                confirmationPresentationChanged: confirmationPresentationChanged
+                confirmationPresentationChanged: confirmationPresentationChanged,
+                click: clickContentRow
             ))
             .alert(
                 state.contentPendingDeletion?.title ?? "",
@@ -1877,6 +1894,7 @@ private struct CommandPaletteView: View {
                     compatibility: preferences.compatibility
                 ),
                 recentItems: recentSearchItems,
+                select: { state.selection = $0 },
                 open: activateSearchResult,
                 reveal: revealSearchResult,
                 run: chooseCommand,
@@ -1890,6 +1908,7 @@ private struct CommandPaletteView: View {
             ClipboardResultsView(
                 entries: filteredClipboard,
                 selection: state.selection,
+                select: { state.selection = $0 },
                 choose: chooseClipboardEntry,
                 copy: copyClipboardEntry,
                 paste: pasteClipboardEntry,
@@ -1925,6 +1944,7 @@ private struct CommandPaletteView: View {
                     libraryState: snippets.libraryState
                 ),
                 selection: state.selection,
+                select: { state.selection = $0 },
                 actions: snippetActions,
                 pendingDeletion: $state.snippetPendingDeletion,
                 confirmationPresentationChanged: confirmationPresentationChanged
@@ -2088,6 +2108,8 @@ private struct SearchResultsView: View {
     let enabledCapabilities: Set<Capability>
     let visibleTabs: [CommandPaletteTab]
     let recentItems: [RecentItem]
+    /// A click highlights the row, then opens or runs it (`PaletteClickAction.acts`).
+    let select: (Int) -> Void
     let open: (QuickSearchResult) -> Void
     let reveal: (QuickSearchResult) -> Void
     let run: (QuickSearchCommand) -> Void
@@ -2096,6 +2118,8 @@ private struct SearchResultsView: View {
     let deleteRecentItem: (RecentItem) -> Void
     let clearRecentItems: () -> Void
     let confirmationPresentationChanged: (Bool) -> Void
+
+    private var clickAction: PaletteClickAction { CommandPaletteTab.search.clickAction }
 
     var body: some View {
         PaletteResultsContainer {
@@ -2124,10 +2148,9 @@ private struct SearchResultsView: View {
                         // Remove, as the footer says: the app or file stays where it is.
                         ScrollViewReader { proxy in
                             List(Array(recentItems.enumerated()), id: \.element.id) { index, item in
-                                Button { open(item.result) } label: {
+                                PaletteClickButton(clickAction, select: { select(index) }, activate: { open(item.result) }) {
                                     SearchResultRow(result: item.result)
                                 }
-                                .buttonStyle(.plain)
                                 .contextMenu {
                                     Button("Open") { open(item.result) }
                                     Button("Reveal in Finder") { reveal(item.result) }
@@ -2160,9 +2183,7 @@ private struct SearchResultsView: View {
                             switch item {
                             case .command(let command):
                                 let hint = command.destination(enabledCapabilities: enabledCapabilities).hint
-                                Button {
-                                    run(command)
-                                } label: {
+                                PaletteClickButton(clickAction, select: { select(index) }, activate: { run(command) }) {
                                     QuickSearchCommandRow(
                                         command: command,
                                         shortcut: command.rowShortcut(
@@ -2172,17 +2193,13 @@ private struct SearchResultsView: View {
                                         isTurnedOff: command.isTurnedOff(enabledCapabilities: enabledCapabilities)
                                     )
                                 }
-                                .buttonStyle(.plain)
                                 .help(hint)
                                 .accessibilityHint(hint)
                                 .accessibilityIdentifier(command.accessibilityIdentifier)
                             case .snippet(let snippet):
-                                Button {
-                                    snippetActions.copy(snippet)
-                                } label: {
+                                PaletteClickButton(clickAction, select: { select(index) }, activate: { snippetActions.copy(snippet) }) {
                                     QuickSearchSnippetRow(snippet: snippet)
                                 }
-                                .buttonStyle(.plain)
                                 .contextMenu {
                                     Button("Copy") { snippetActions.copy(snippet) }
                                         .paletteMenuKeys(["⌘", "C"])
@@ -2193,12 +2210,9 @@ private struct SearchResultsView: View {
                                 .accessibilityHint("Copies the snippet")
                                 .accessibilityIdentifier("quickSearch.snippet")
                             case .emoji(let emoji):
-                                Button {
-                                    chooseEmoji(emoji, false)
-                                } label: {
+                                PaletteClickButton(clickAction, select: { select(index) }, activate: { chooseEmoji(emoji, false) }) {
                                     QuickSearchEmojiRow(emoji: emoji)
                                 }
-                                .buttonStyle(.plain)
                                 .contextMenu {
                                     Button("Copy") { chooseEmoji(emoji, false) }
                                         .paletteMenuKeys(["⌘", "C"])
@@ -2209,12 +2223,9 @@ private struct SearchResultsView: View {
                                 .accessibilityHint("Copies the emoji")
                                 .accessibilityIdentifier("quickSearch.emoji")
                             case .result(let result):
-                                Button {
-                                    open(result)
-                                } label: {
+                                PaletteClickButton(clickAction, select: { select(index) }, activate: { open(result) }) {
                                     SearchResultRow(result: result)
                                 }
-                                .buttonStyle(.plain)
                                 .contextMenu {
                                     Button("Reveal in Finder") { reveal(result) }
                                 }
@@ -2377,6 +2388,8 @@ private struct QuickSearchCommandRow: View {
 private struct ClipboardResultsView: View {
     let entries: [ClipboardEntry]
     let selection: Int
+    /// A click highlights the row, then does `choose` (`PaletteClickAction.acts`).
+    let select: (Int) -> Void
     let choose: (ClipboardEntry) -> Void
     let copy: (ClipboardEntry) -> Void
     let paste: (ClipboardEntry) -> Void
@@ -2410,10 +2423,9 @@ private struct ClipboardResultsView: View {
                     // and the context menu and VoiceOver's Delete action cover mouse and VoiceOver users.
                     ScrollViewReader { proxy in
                         List(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                            Button { choose(entry) } label: {
+                            PaletteClickButton(CommandPaletteTab.clipboard.clickAction, select: { select(index) }, activate: { choose(entry) }) {
                                 ClipboardRow(entry: entry)
                             }
-                            .buttonStyle(.plain)
                             // The footer's keys, in its order (#552).
                             .contextMenu {
                                 Button("Copy") { copy(entry) }

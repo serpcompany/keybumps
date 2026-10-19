@@ -28,15 +28,18 @@ struct PaletteListDetail<Item, ListView: View, Detail: View>: View {
 }
 
 /// The list half of `PaletteListDetail`: a section header, with an accessory such as Clear All,
-/// over rows, each a `PaletteRow` as in every other tab (#381). A click highlights a row and a
-/// double-click chooses it. The pointer highlights
-/// the row under it (#351), and the highlighted row stays on screen as the keys move it (#353).
+/// over rows, each a `PaletteRow` as in every other tab (#381). A click does what the tab's
+/// `clickAction` says: in the Dictation and Translate tabs it highlights a row, whose actions the
+/// detail shows, and a double-click chooses it (#552). The pointer highlights the row under it
+/// (#351), and the highlighted row stays on screen as the keys move it (#353).
 struct PaletteDetailList<Item: Identifiable, Accessory: View, Row: View>: View {
     let title: String
     let items: [Item]
     let selection: Int
+    /// The tab's `CapabilityPaletteTab.clickAction`.
+    let clickAction: PaletteClickAction
     let select: (Int) -> Void
-    /// A double-click on a row, such as Copy.
+    /// What Return does on a row, such as Copy, which a double-click does here.
     let choose: (Item) -> Void
     @ViewBuilder let accessory: Accessory
     @ViewBuilder let row: (Item) -> Row
@@ -47,11 +50,9 @@ struct PaletteDetailList<Item: Identifiable, Accessory: View, Row: View>: View {
 
             ScrollViewReader { proxy in
                 List(Array(items.enumerated()), id: \.element.id) { index, item in
-                    Button { select(index) } label: {
+                    PaletteClickButton(clickAction, select: { select(index) }, activate: { choose(item) }) {
                         row(item)
                     }
-                    .buttonStyle(.plain)
-                    .simultaneousGesture(TapGesture(count: 2).onEnded { choose(item) })
                     .listRowInsets(.init())
                     .listRowSeparator(.hidden)
                     .paletteHoverHighlights(row: index)
@@ -71,11 +72,15 @@ extension PaletteDetailList where Accessory == EmptyView {
         title: String,
         items: [Item],
         selection: Int,
+        clickAction: PaletteClickAction,
         select: @escaping (Int) -> Void,
         choose: @escaping (Item) -> Void,
         @ViewBuilder row: @escaping (Item) -> Row
     ) {
-        self.init(title: title, items: items, selection: selection, select: select, choose: choose, accessory: { EmptyView() }, row: row)
+        self.init(
+            title: title, items: items, selection: selection, clickAction: clickAction, select: select, choose: choose,
+            accessory: { EmptyView() }, row: row
+        )
     }
 }
 
