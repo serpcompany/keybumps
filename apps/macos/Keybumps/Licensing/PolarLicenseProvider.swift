@@ -5,7 +5,11 @@ import Foundation
 struct LicenseKeyDates: Equatable, Sendable {
     var expiresAt: Date?
     var purchasedAt: Date?
+    /// Nil when the customer has no renewal.
     var renewedThrough: Date?
+    /// Whether the answer carried readable customer metadata, so a nil `renewedThrough` means no
+    /// renewal (one refunded, say) rather than an answer Keybumps couldn't read.
+    var readRenewals = false
 }
 
 struct LicenseActivation: Equatable, Sendable {
@@ -140,7 +144,7 @@ struct PolarLicenseProvider: LicenseProviding {
     /// read counts as unknown rather than failing the check; validation needs `status`.
     private struct KeyBody: Decodable {
         let status: String?
-        let dates: LicenseKeyDates
+        var dates: LicenseKeyDates
 
         private enum CodingKeys: String, CodingKey { case status, expiresAt = "expires_at", createdAt = "created_at", customer }
         private enum CustomerKeys: String, CodingKey { case metadata }
@@ -149,13 +153,21 @@ struct PolarLicenseProvider: LicenseProviding {
         init(from decoder: any Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             status = try? container.decodeIfPresent(String.self, forKey: .status)
-            let metadata = try? container.nestedContainer(keyedBy: CustomerKeys.self, forKey: .customer)
-                .nestedContainer(keyedBy: MetadataKeys.self, forKey: .metadata)
             dates = LicenseKeyDates(
                 expiresAt: (try? container.decodeIfPresent(String.self, forKey: .expiresAt)).flatMap(PolarDates.parse),
-                purchasedAt: (try? container.decodeIfPresent(String.self, forKey: .createdAt)).flatMap(PolarDates.parse),
-                renewedThrough: (try? metadata?.decodeIfPresent(String.self, forKey: .updatesUntil)).flatMap(UpdateYear.day)
+                purchasedAt: (try? container.decodeIfPresent(String.self, forKey: .createdAt)).flatMap(PolarDates.parse)
             )
+            // No metadata, or a renewal date that isn't one, leaves the renewal unknown.
+            guard let metadata = try? container.nestedContainer(keyedBy: CustomerKeys.self, forKey: .customer)
+                .nestedContainer(keyedBy: MetadataKeys.self, forKey: .metadata) else { return }
+            guard metadata.contains(.updatesUntil) else {
+                dates.readRenewals = true
+                return
+            }
+            guard let value = try? metadata.decode(String.self, forKey: .updatesUntil),
+                  let day = UpdateYear.day(value) else { return }
+            dates.renewedThrough = day
+            dates.readRenewals = true
         }
     }
 }

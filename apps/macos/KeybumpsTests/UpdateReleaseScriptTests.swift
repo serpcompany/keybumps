@@ -580,3 +580,86 @@ struct AppcastReleaseDateTests {
         #expect(!FileManager.default.fileExists(atPath: tools.appendingPathComponent("calls").path))
     }
 }
+
+/// ADR 0011: validate-update-release.sh fails when the app's release date and its appcast item's
+/// differ. Fixture mode skips Apple's checks, so a fixture reaches the date check.
+@Suite("Release validation of the release date")
+struct ReleaseDateValidationTests {
+    private let validator = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent("scripts/validate-update-release.sh")
+    private let feed = "http://127.0.0.1:8765/appcast.xml"
+
+    private func validate(appDate: String?, appcastDate: String?) throws -> (status: Int32, output: String) {
+        let work = FileManager.default.temporaryDirectory.appendingPathComponent("release-date-validation-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: work) }
+        let tools = work.appendingPathComponent("tools")
+        let contents = work.appendingPathComponent("Keybumps.app/Contents")
+        for folder in [tools, contents.appendingPathComponent("Resources"), contents.appendingPathComponent("MacOS")] {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        }
+        let publicKey = String(repeating: "A", count: 43) + "="
+        for (name, script) in [("generate_keys", "print 'Public key: \(publicKey)'"), ("sign_update", "exit 0")] {
+            let tool = tools.appendingPathComponent(name)
+            try "#!/bin/zsh\n\(script)\n".write(to: tool, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tool.path)
+        }
+        var info: [String: Any] = [
+            "CFBundleIdentifier": "com.serp.keybumps", "CFBundleVersion": "4033", "CFBundleShortVersionString": "0.0.3-beta.28",
+            "SUFeedURL": feed, "SUPublicEDKey": publicKey, "SURequireSignedFeed": true, "SUVerifyUpdateBeforeExtraction": true,
+        ]
+        info["KBBuildReleaseDate"] = appDate
+        try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+            .write(to: contents.appendingPathComponent("Info.plist"))
+        try "# Notes\n".write(to: contents.appendingPathComponent("Resources/WhatsNew.md"), atomically: true, encoding: .utf8)
+        try FileManager.default.copyItem(atPath: "/usr/bin/true", toPath: contents.appendingPathComponent("MacOS/Keybumps").path)
+        let archive = work.appendingPathComponent("Keybumps-0.0.3-beta.28.zip")
+        try Data("archive".utf8).write(to: archive)
+        // SHA-256 of "archive".
+        try "0eb3e36bfb24dcd9bb1d1bece1531216b59539a8fde17ee80224af0653c92aa3  Keybumps-0.0.3-beta.28.zip\n".write(to: work.appendingPathComponent("Keybumps-0.0.3-beta.28.zip.sha256"), atomically: true, encoding: .utf8)
+        let notes = work.appendingPathComponent("Keybumps-0.0.3-beta.28.md")
+        try "# Notes\n".write(to: notes, atomically: true, encoding: .utf8)
+        let appcast = work.appendingPathComponent("appcast.xml")
+        try """
+        <?xml version="1.0" standalone="yes"?>
+        <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:keybumps="https://keybumps.app/xml-namespaces/appcast" version="2.0"><channel><item>
+        <sparkle:version>4033</sparkle:version>\(appcastDate.map { "<keybumps:releaseDate>\($0)</keybumps:releaseDate>" } ?? "")
+        <sparkle:shortVersionString>0.0.3-beta.28</sparkle:shortVersionString>
+        <sparkle:minimumSystemVersion>14.2</sparkle:minimumSystemVersion>
+        <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+        <sparkle:releaseNotesLink sparkle:edSignature="x" sparkle:length="8">http://127.0.0.1:8765/Keybumps-0.0.3-beta.28.md</sparkle:releaseNotesLink>
+        <enclosure url="http://127.0.0.1:8765/Keybumps-0.0.3-beta.28.zip" length="7" type="application/octet-stream" sparkle:edSignature="x"></enclosure>
+        </item></channel></rss><!-- sparkle-signatures:
+        edSignature: x
+        length: 1
+        -->
+        """.write(to: appcast, atomically: true, encoding: .utf8)
+        return try runProcess(validator, [
+            contents.deletingLastPathComponent().path, archive.path, appcast.path, notes.path, feed, feed,
+            "4032", "4033", "0.0.3-beta.28", tools.path, "fixture", "--skip-apple-trust-for-fixture",
+        ], from: work)
+    }
+
+    @Test("A release date the appcast doesn't match, or a missing one, fails validation", arguments: [
+        ("2026-10-19T12:00:00Z", "2026-10-19T12:00:01Z"),
+        ("2026-10-19T12:00:00Z", nil),
+        (nil, "2026-10-19T12:00:00Z"),
+        ("2026-10-19", "2026-10-19"),
+    ] as [(String?, String?)])
+    func mismatch(appDate: String?, appcastDate: String?) throws {
+        let result = try validate(appDate: appDate, appcastDate: appcastDate)
+        #expect(result.status == 70, "\(result.output)")
+        #expect(result.output.contains("release date"), "\(result.output)")
+    }
+
+    @Test("Matching dates, or none in a fixture, pass the date check", arguments: [
+        ("2026-10-19T12:00:00Z", "2026-10-19T12:00:00Z"), (nil, nil),
+    ] as [(String?, String?)])
+    func matching(appDate: String?, appcastDate: String?) throws {
+        let result = try validate(appDate: appDate, appcastDate: appcastDate)
+        #expect(!result.output.contains("release date"), "\(result.output)")
+        // The asset-prefix check after the date's takes only HTTPS feeds, so a loopback fixture stops there.
+        #expect(result.output.contains("production URL must use HTTPS"), "Reached a later check: \(result.output)")
+    }
+}

@@ -344,7 +344,8 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
         case .downloaded(let version): telemetry.record(.downloaded, version: version)
         case .readyToRestart(let version): telemetry.record(.ready, version: version)
         case .deferred(let version): telemetry.record(.deferred, version: version)
-        case .renewalRequired(let version): telemetry.record(.renewal, version: version)
+        // Whether a renewal is needed is licensing state, which is never logged (ADR 0002).
+        case .renewalRequired: break
         case .current: telemetry.record(.current)
         case .failed: telemetry.record(.failed, failureCategory: "status")
         case .checking: telemetry.record(.checking)

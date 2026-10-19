@@ -123,7 +123,8 @@ struct PolarLicenseProviderTests {
         let expected = LicenseKeyDates(
             expiresAt: nil,
             purchasedAt: PolarDates.parse("2026-11-05T10:00:00.123Z"),
-            renewedThrough: UpdateYear.day("2028-11-05")
+            renewedThrough: UpdateYear.day("2028-11-05"),
+            readRenewals: true
         )
         let polar = provider(http)
         #expect(try await polar.activate(key: "K", label: "L").dates == expected)
@@ -135,13 +136,23 @@ struct PolarLicenseProviderTests {
         let http = RecordingHTTPClient()
         http.responses = [
             (200, #"{"status":"granted","created_at":12,"customer":{"metadata":{"keybumps_updates_until":20281105}}}"#),
+            (200, #"{"status":"granted","customer":{"metadata":{"keybumps_updates_until":"soon"}}}"#),
             (200, #"{"status":"granted","customer":null}"#),
+            (200, #"{"status":"granted"}"#),
             (200, #"{"created_at":"2026-11-05T10:00:00Z"}"#),
         ]
         let polar = provider(http)
-        #expect(try await polar.validate(key: "K", activationID: "A") == .granted(LicenseKeyDates()))
-        #expect(try await polar.validate(key: "K", activationID: "A") == .granted(LicenseKeyDates()))
+        for _ in 1...4 {
+            #expect(try await polar.validate(key: "K", activationID: "A") == .granted(LicenseKeyDates()))
+        }
         await #expect(throws: LicenseActionError.unexpected) { try await polar.validate(key: "K", activationID: "A") }
+    }
+
+    @Test("Customer metadata without a renewal date means there's no renewal")
+    func noRenewal() async throws {
+        let http = RecordingHTTPClient()
+        http.responses = [(200, #"{"status":"granted","customer":{"metadata":{}}}"#)]
+        #expect(try await provider(http).validate(key: "K", activationID: "A") == .granted(LicenseKeyDates(readRenewals: true)))
     }
 
     @Test("Deactivation succeeds when removed or already gone")
@@ -336,7 +347,7 @@ struct LicenseControllerTests {
         let store = InMemoryLicenseStore(LicenseCheck(key: "K", activationID: "A", validatedAt: clock.now, expiresAt: nil))
         let provider = FakeProvider()
         let purchased = PolarDates.parse("2026-11-05T10:00:00Z")!
-        provider.validation = .success(.granted(LicenseKeyDates(purchasedAt: purchased, renewedThrough: UpdateYear.day("2028-11-05"))))
+        provider.validation = .success(.granted(LicenseKeyDates(purchasedAt: purchased, renewedThrough: UpdateYear.day("2028-11-05"), readRenewals: true)))
         let (controller, _, _, _) = make(store: store, provider: provider, clock: clock)
         #expect(controller.snapshot.updateYear == nil)
         #expect(LicensePolicy.needsUpdateYear(store.check), "Launch checks at once to learn it")
@@ -346,10 +357,15 @@ struct LicenseControllerTests {
         #expect(controller.snapshot.updateYear?.lastDay == UpdateYear.day("2028-11-05"))
         #expect(!LicensePolicy.needsUpdateYear(store.check))
 
-        // A refunded renewal takes its year back; an answer without the purchase date keeps the one known.
+        // An answer Keybumps couldn't read the purchase date or renewals from keeps both.
         provider.validation = .success(.granted(LicenseKeyDates()))
         await controller.refresh(force: true)
         #expect(store.check?.purchasedAt == purchased)
+        #expect(controller.snapshot.updateYear?.lastDay == UpdateYear.day("2028-11-05"))
+
+        // A refunded renewal takes its year back.
+        provider.validation = .success(.granted(LicenseKeyDates(readRenewals: true)))
+        await controller.refresh(force: true)
         #expect(controller.snapshot.updateYear?.lastDay == UpdateYear.day("2027-11-05"))
     }
 
@@ -369,7 +385,7 @@ struct LicenseControllerTests {
         #expect(controller.snapshot.updateYear?.lastDay == UpdateYear.day("2027-11-05"))
 
         // While Locked, every chance to check is taken, so a renewal unlocks without Check Again.
-        provider.validation = .success(.granted(LicenseKeyDates(purchasedAt: purchased, renewedThrough: UpdateYear.day("2028-12-01"))))
+        provider.validation = .success(.granted(LicenseKeyDates(purchasedAt: purchased, renewedThrough: UpdateYear.day("2028-12-01"), readRenewals: true)))
         await controller.refresh(force: false)
         #expect(controller.snapshot.isEntitled)
 

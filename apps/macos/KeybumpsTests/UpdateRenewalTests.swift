@@ -77,7 +77,7 @@ struct UpdateRenewalStateTests {
         #expect(snapshot.renewalVersion == "0.0.4")
         #expect(snapshot.newerVersion == nil, "Nothing to install")
         #expect(MenuBarAttention.updateIsWaiting(snapshot))
-        #expect(MenuBarAttention.updatePhrase(snapshot) == "update available")
+        #expect(MenuBarAttention.updatePhrase(snapshot) == "update available with a renewal")
 
         snapshot.setStatus(.checking)
         snapshot.setStatus(.failed("The update check failed. Try again."))
@@ -125,6 +125,33 @@ struct UpdateRenewalStateTests {
         let updater = controller(preview: "9.9.9 (preview)")
         updater.noUpdateFound(reasonCode: 1)
         #expect(updater.snapshot.renewalVersion == "9.9.9 (preview)")
+    }
+
+    @Test("While no license is active, the updater keeps filtering by the last update year this Mac learned")
+    func rememberedUpdateYear() async {
+        let defaults = InMemoryDefaults()
+        let year = UpdateYear(lastDay: UpdateYear.day("2027-11-05")!)
+        func makeModel(updater: FakeUpdateController, licensing: FixedLicenseController) -> AppModel {
+            AppModel(
+                preferences: AppPreferences(defaults: defaults),
+                inbox: InboxStore(persistence: UpdaterTestEventPersistence()),
+                presenceController: UpdaterTestPresenceController(),
+                detector: ManualActionDetector(monitor: UpdaterTestPointerMonitor(), permissions: UpdaterTestPermissions()),
+                updater: updater,
+                licensing: licensing
+            )
+        }
+        let updater = FakeUpdateController()
+        let model = makeModel(updater: updater, licensing: FixedLicenseController(updateYear: year))
+        #expect(updater.updateYears.last == year)
+
+        await model.deactivateLicense()
+        #expect(model.licenseSnapshot.updateYear == nil)
+        #expect(updater.updateYears.last == year, "Deactivating keeps the filter")
+
+        let relaunched = FakeUpdateController()
+        _ = makeModel(updater: relaunched, licensing: FixedLicenseController(state: .unlicensed))
+        #expect(relaunched.updateYears.last == year, "So does relaunching with no license")
     }
 
     @Test("Settings › Changelog says when the updates ended")

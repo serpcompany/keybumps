@@ -200,7 +200,7 @@ enum ScheduledUpdatePresentationPolicy {
 }
 
 enum UpdateTelemetryStage: String, Equatable {
-    case started, checking, available, downloading, downloaded, ready, deferred, renewal, current, failed
+    case started, checking, available, downloading, downloaded, ready, deferred, current, failed
 }
 
 struct UpdateTelemetryEvent: Equatable {

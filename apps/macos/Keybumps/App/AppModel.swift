@@ -425,9 +425,16 @@ final class AppModel {
         updater.onChange = { [weak self] snapshot in self?.updateSnapshot = snapshot }
         updater.onShowVersionHistory = { [weak self] in self?.openVersionHistory() }
         licensing.onChange = { [weak self] snapshot in self?.licenseDidChange(snapshot) }
-        updater.setUpdateYear(licenseSnapshot.updateYear)
+        applyUpdateYear(licenseSnapshot.updateYear)
         refreshDetectorState()
         refreshUpdateAttention()
+    }
+
+    /// The update year the updater filters by (ADR 0011): the license's, or, while no license has
+    /// one, the last one this Mac learned.
+    private func applyUpdateYear(_ year: UpdateYear?) {
+        if let year { preferences.lastUpdateYearDay = year.lastDay }
+        updater.setUpdateYear(year ?? preferences.lastUpdateYearDay.map(UpdateYear.init(lastDay:)))
     }
 
     private func refreshUpdateAttention() {
@@ -511,7 +518,7 @@ final class AppModel {
     private func licenseDidChange(_ snapshot: LicenseSnapshot) {
         let wasLicensed = isLicensed
         licenseSnapshot = snapshot
-        updater.setUpdateYear(snapshot.updateYear)
+        applyUpdateYear(snapshot.updateYear)
         // Locked runs no capability, so there's nothing to set up.
         if !snapshot.isEntitled { endPermissionWalkthrough(); dismissDictationSetupCards() }
         guard wasLicensed != snapshot.isEntitled, isStarted, preferences.didCompleteOnboarding else { return }

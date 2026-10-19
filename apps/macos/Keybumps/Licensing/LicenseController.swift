@@ -141,8 +141,9 @@ final class LicenseController: LicenseControlling {
             check.expiresAt = dates.expiresAt
             // The purchase date never changes, so an answer without it keeps the one known.
             check.purchasedAt = dates.purchasedAt ?? check.purchasedAt
-            // Renewals can go down, when one is refunded.
-            check.renewedThrough = dates.renewedThrough
+            // Renewals can go down, when one is refunded, but an answer Keybumps couldn't read
+            // them from keeps the date known.
+            if dates.readRenewals { check.renewedThrough = dates.renewedThrough }
             check.notAccepted = nil
         case .notAccepted:
             check.notAccepted = true
@@ -203,8 +204,8 @@ final class FixedLicenseController: LicenseControlling {
     private(set) var snapshot: LicenseSnapshot { didSet { onChange?(snapshot) } }
     var onChange: ((LicenseSnapshot) -> Void)?
 
-    init(state: LicenseState = .active(FixedLicenseController.sampleCheck)) {
-        snapshot = LicenseSnapshot(state: state)
+    init(state: LicenseState = .active(FixedLicenseController.sampleCheck), updateYear: UpdateYear? = nil) {
+        snapshot = LicenseSnapshot(state: state, updateYear: updateYear)
     }
 
     nonisolated static let sampleCheck = LicenseCheck(
@@ -216,7 +217,7 @@ final class FixedLicenseController: LicenseControlling {
 
     func start() {}
     func activate(key: String) async { snapshot.state = .active(Self.sampleCheck) }
-    func deactivate() async { snapshot.state = .unlicensed }
+    func deactivate() async { snapshot = LicenseSnapshot(state: .unlicensed) }
     func refresh(force: Bool) async {}
 }
 #endif

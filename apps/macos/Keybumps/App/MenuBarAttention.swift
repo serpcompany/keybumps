@@ -29,7 +29,9 @@ final class MenuBarAttention {
 
     /// What VoiceOver says for the update's dot.
     static func updatePhrase(_ snapshot: UpdateSnapshot) -> String {
-        snapshot.canRestart ? "update ready" : "update available"
+        if snapshot.canRestart { return "update ready" }
+        if snapshot.newerVersion == nil, snapshot.renewalVersion != nil { return "update available with a renewal" }
+        return "update available"
     }
 
     func show(_ reason: MenuBarAttentionReason, saying phrase: String) {
