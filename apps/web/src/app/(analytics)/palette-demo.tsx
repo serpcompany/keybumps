@@ -9,7 +9,9 @@ type Row = { icon: string; title: string; meta: string; footer?: Hint[] }
 type Tab = { key: string; label: string; query: string; rows: Row[]; footer: Hint[] }
 
 const COPY: Hint = { keys: '↵', title: 'Copy' }
-const PASTE: Hint = { keys: '⌘P', title: 'Paste' }
+const PASTE: Hint = { keys: '⌘V', title: 'Paste' }
+const EDIT: Hint = { keys: '⌘E', title: 'Edit' }
+const DELETE: Hint = { keys: '⌫', title: 'Delete' }
 
 const TABS: Tab[] = [
   {
@@ -34,23 +36,23 @@ const TABS: Tab[] = [
       { icon: '¶', title: 'billing@acme.co', meta: '1h ago' },
       { icon: '¶', title: 'Net 30, paid via ACH', meta: 'Yesterday' }
     ],
-    footer: [COPY, PASTE]
+    footer: [COPY, PASTE, DELETE]
   },
   {
     key: '⌘3',
     label: 'ScreenGrabs',
     query: '',
     rows: [
-      { icon: '▣', title: 'Screenshot 9:41:02', meta: 'Area · ⌘Return to edit' },
+      { icon: '▣', title: 'Screenshot 9:41:02', meta: 'Area · ⌘E to edit' },
       {
         icon: '▶',
         title: 'Screen Recording 9:38:47',
         meta: 'Recording · 0:42',
-        footer: [COPY, PASTE, { keys: '⌘↵', title: 'Open' }]
+        footer: [COPY, PASTE, EDIT, { keys: '⌫', title: 'Move to Trash' }]
       },
       { icon: '▣', title: 'Screenshot 9:12:10', meta: 'Edited · redacted' }
     ],
-    footer: [COPY, PASTE, { keys: '⌘↵', title: 'Edit' }]
+    footer: [COPY, PASTE, EDIT, DELETE]
   },
   {
     key: '⌘4',
@@ -69,7 +71,7 @@ const TABS: Tab[] = [
       },
       { icon: '◉', title: 'Standup follow-ups for Friday', meta: '1:05' }
     ],
-    footer: [COPY, PASTE]
+    footer: [COPY, PASTE, DELETE]
   }
 ]
 

@@ -366,7 +366,7 @@ describe('plugin page guides', () => {
     expect(text.filter(line => /whisper|apple speech|model/i.test(line))).toEqual([])
   })
 
-  it('pastes with ⌘P, never ⌘Return, which only edits in ScreenGrabs and reveals in Finder in Search (#370)', () => {
+  it('pastes with ⌘V, never ⌘Return, which edits in ScreenGrabs, reveals in Finder in Search, and saves and pastes in Translate (#370, #552)', () => {
     const pluginText = plugins.flatMap(plugin => [
       ...plugin.overview,
       ...plugin.features,
@@ -381,9 +381,12 @@ describe('plugin page guides', () => {
       .filter(file => file.endsWith('.tsx'))
       .map(file => readFileSync(join(appDir, file), 'utf8'))
     const commandReturn = /⌘(Return|↵|↩)[^;,.]*\b(past|cop|sav)\w*/gi
-    const claims = [...pluginText, ...pageText].flatMap(text => text.match(commandReturn) ?? [])
+    // Translate's ⌘Return saves and pastes, because ⌘V is its search field's.
+    const claims = [...pluginText, ...pageText]
+      .flatMap(text => text.match(commandReturn) ?? [])
+      .filter(claim => !/\bsav/i.test(claim))
     expect(claims).toEqual([])
-    // Each tab where ⌘P pastes lists Accessibility, which the paste uses.
+    // Each tab where ⌘V pastes lists Accessibility, which the paste uses.
     for (const slug of [
       'clipboard-history',
       'screengrabs',

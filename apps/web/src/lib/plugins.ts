@@ -199,7 +199,7 @@ export const plugins: readonly Plugin[] = [
       },
       {
         q: 'Can it find my snippets?',
-        a: 'Yes. It finds snippets by keyword, by name, and by a word in their text, and shows each one’s text under its name. A sensitive snippet’s text stays hidden and is never searched, but its keyword and name still find it. A keyword typed in full comes first. Return or ⌘C copies one, and ⌘P pastes it into the app you were using. With Emoji Picker on, it finds emoji too, which copy and paste the same way.'
+        a: 'Yes. It finds snippets by keyword, by name, and by a word in their text, and shows each one’s text under its name. A sensitive snippet’s text stays hidden and is never searched, but its keyword and name still find it. A keyword typed in full comes first. Return or ⌘C copies one, and ⌘V pastes it into the app you were using. With Emoji Picker on, it finds emoji too, which copy and paste the same way.'
       },
       {
         q: 'Does it learn what I open?',
@@ -226,27 +226,27 @@ export const plugins: readonly Plugin[] = [
       {
         permission: 'Accessibility',
         reason:
-          'Lets ⌘P paste a clipboard item into the app you were using. Without it, ⌘P copies the item instead.'
+          'Lets ⌘V paste a clipboard item into the app you were using. Without it, ⌘V copies the item instead.'
       }
     ],
     requires: [],
     isDefault: true,
     overview: [
-      'Clipboard History keeps the text and images you copy, so you can use them again. Press ⇧⌘ Space to open the Clipboard tab of the Command Palette, search for an item, and press Return to copy it or ⌘P to paste it into the app you were using.',
+      'Clipboard History keeps the text and images you copy, so you can use them again. Press ⇧⌘ Space to open the Clipboard tab of the Command Palette, search for an item, and press Return to copy it or ⌘V to paste it into the app you were using.',
       'Each item shows the app it was copied from, and for a web page the site’s domain, whenever macOS can tell. Screenshots you take with ScreenGrabs land here too, ready to paste.'
     ],
     features: [
       'Keeps your 50 most recent copied text and image items, plus your 50 most recent screenshots, so neither pushes the other out',
-      'Search everything you copied; Return or ⌘C copies an item again, and ⌘P pastes it into the app you were using',
+      'Search everything you copied; Return or ⌘C copies an item again, and ⌘V pastes it into the app you were using',
       'Shows the app each item came from, and the website’s domain when a browser says which page it was',
       'Copying an image file in Finder keeps the image, not its icon',
-      'Delete removes the highlighted item, and each copy confirms with a notice at the notch',
+      'Delete (⌫) removes the highlighted item, and each copy confirms with a notice at the notch',
       'Text that Dictation inserts stays out, so the history holds only what you copied'
     ],
     howTo: [
       { text: 'Copy text or an image the way you always do.', keys: '⌘C' },
       { text: 'Open the Clipboard tab from any app.', keys: '⇧⌘ Space' },
-      { text: 'Type to search, then press Return to copy it again, or ⌘P to paste it.', keys: '↩' }
+      { text: 'Type to search, then press Return to copy it again, or ⌘V to paste it.', keys: '↩' }
     ],
     faq: [
       {
@@ -263,7 +263,7 @@ export const plugins: readonly Plugin[] = [
       },
       {
         q: 'Can I remove an item?',
-        a: 'Yes. Highlight it and press Delete, or ⌘Delete while you’re searching.'
+        a: 'Yes. Highlight it and press Delete (⌫), or ⌘Delete while you’re searching.'
       }
     ],
     keeps: [
@@ -323,7 +323,7 @@ export const plugins: readonly Plugin[] = [
       {
         permission: 'Accessibility',
         reason:
-          'Lets ⌘P paste a screenshot into the app you were using. Without it, ⌘P copies the screenshot instead.'
+          'Lets ⌘V paste a screenshot into the app you were using. Without it, ⌘V copies the screenshot instead.'
       },
       {
         permission: 'Microphone',
@@ -349,7 +349,7 @@ export const plugins: readonly Plugin[] = [
       'New screenshots also go on the clipboard, unless you turn that off or copied something since',
       'An editor with arrow, text, draw, blur, and redact; Save (Return) copies the result and saves “<name> (edited).png” beside the original',
       'Screenshot Screen and Edit and Screenshot Area and Edit copy only when you Save, so an unredacted shot never lands on the clipboard',
-      'In the ScreenGrabs tab, Return or ⌘C copies a screenshot or a recording, ⌘P pastes it into the app you were using, and ⌘Return opens a screenshot in the editor or a recording in its window; ⌘E edits any image in Clipboard History',
+      'In the ScreenGrabs tab, Return or ⌘C copies a screenshot or a recording, ⌘V pastes it into the app you were using, and ⌘E (or ⌘Return) opens a screenshot in the editor or a recording in its window. One click selects a tile, a double-click copies it, and ⌘E also edits an image in Clipboard History while ScreenGrabs is on',
       'On macOS 15 or later, Record Screen (⇧⌘5, or “record” in Quick Search) records an area, a window, a screen, or all your screens',
       'Records your voice and the Mac’s sound, each with its own switch, after a countdown you can change',
       'A small bar, never in the video, shows the time and lets you pause, draw, mute, restart, discard, or stop',
@@ -465,7 +465,7 @@ export const plugins: readonly Plugin[] = [
       'Records up to five minutes by default; choose 10, 15, 30, or 60 minutes, or no limit',
       'Transcribes the whole recording after you stop, so a pause never cuts it short',
       'Dictation History: search, play back, reveal in Finder, and delete recordings',
-      'In Dictation History, Return or ⌘C copies a transcript, ⌘P pastes it into the app you were using, and Space plays or pauses the recording while the search field is empty',
+      'In Dictation History, Return or ⌘C copies a transcript, ⌘V pastes it into the app you were using, and Space plays or pauses the recording while the search field is empty. A click selects a recording, a double-click chooses it, and Delete (⌫) removes it',
       'On macOS 15 or later, translate a transcript on this Mac and hear it in an installed macOS voice'
     ],
     howTo: [
@@ -655,7 +655,7 @@ export const plugins: readonly Plugin[] = [
       {
         permission: 'Accessibility',
         reason:
-          'Lets ⌘P paste a snippet into the app you’re using; without it, ⌘P copies. Expanding keywords needs it too.'
+          'Lets ⌘V paste a snippet into the app you’re using; without it, ⌘V copies. Expanding keywords needs it too.'
       },
       {
         permission: 'Input Monitoring',
@@ -666,12 +666,12 @@ export const plugins: readonly Plugin[] = [
     requires: [],
     isDefault: true,
     overview: [
-      'Snippets keeps text you reuse, each with a name and an optional keyword such as ;ship. Open the Snippets tab of the Command Palette, then press Return to copy a snippet or ⌘P to paste it into the app you’re using.',
+      'Snippets keeps text you reuse, each with a name and an optional keyword such as ;ship. Open the Snippets tab of the Command Palette, then press Return to copy a snippet or ⌘V to paste it into the app you’re using.',
       'Turn on keyword expansion, and typing a keyword in any app replaces it with its snippet. Mark a snippet sensitive to keep its text in your Mac’s Keychain and out of sight.'
     ],
     features: [
       'Save text with a name and an optional keyword, such as ;ship',
-      'Return or ⌘C copies a snippet, and ⌘P pastes it into the app you’re using',
+      'Return or ⌘C copies a snippet, ⌘V pastes it into the app you’re using, ⌘E edits it, and Delete (⌫) removes it',
       'Expand keywords as you type in any app, then get your clipboard back; never in password fields or in Keybumps itself',
       'Sensitive snippets keep their text hidden in the Command Palette and Settings, out of search, and in the Keychain; their keyword and name still find them',
       'Quick Search finds snippets by keyword, name, or a word in their text',
@@ -682,7 +682,7 @@ export const plugins: readonly Plugin[] = [
       { text: 'Save text you reuse with a name and, if you like, a keyword such as ;ship.' },
       { text: 'Open the Command Palette and press ⌘5 for the Snippets tab.', keys: '⌘5' },
       {
-        text: 'Press Return to copy a snippet, or ⌘P to paste it into the app you’re using.',
+        text: 'Press Return to copy a snippet, or ⌘V to paste it into the app you’re using.',
         keys: '↩'
       }
     ],
@@ -724,7 +724,7 @@ export const plugins: readonly Plugin[] = [
     ],
     features: [
       'Start a timer by typing a duration, with an optional name: 5m, 1h30m, or tea 25',
-      'Pause, restart, or delete timers in the Timers tab',
+      'Pause, restart, or delete timers in the Timers tab; one click starts, pauses, resumes, or restarts one',
       'The soonest timer counts down in the menu bar, with a count of any others',
       'The Keybumps menu lists your timers; click one to pause or resume it',
       'An alarm that stays on screen until you click Stop or Repeat, or open the Timers tab; turn ringing off for a silent one',
@@ -769,20 +769,20 @@ export const plugins: readonly Plugin[] = [
       {
         permission: 'Accessibility',
         reason:
-          'Lets ⌘P paste the emoji into the app you’re using. Without it, ⌘P copies the emoji instead.'
+          'Lets ⌘V paste the emoji into the app you’re using. Without it, ⌘V copies the emoji instead.'
       }
     ],
     requires: [],
     isDefault: false,
     overview: [
       'Emoji Picker finds any emoji by name and puts it where you’re typing. Open the Emoji tab of the Command Palette with ⌘7 and browse, or type a name, a keyword, or a :shortcode: such as thumbs, +1, or :joy:.',
-      'Return copies the emoji, and ⌘P pastes it into the app you were using, then puts your clipboard back. It ships turned off: turn it on in Settings › Plugins.'
+      'Return copies the emoji, and ⌘V pastes it into the app you were using, then puts your clipboard back. It ships turned off: turn it on in Settings › Plugins.'
     ],
     features: [
       'Every emoji up to Emoji 17.0 that your Mac can draw, in Unicode’s groups, with CLDR names and keywords and :shortcodes:',
       'Search by name, keyword, or :shortcode:, with exact matches first',
       'Browse a grid of your recent emoji, then every group, while the search is empty',
-      'Return, ⌘C, or a double-click copies the emoji; ⌘P pastes it and puts your clipboard back',
+      'Return, ⌘C, or one click copies the emoji; ⌘V pastes it and puts your clipboard back',
       'A skin tone setting that applies to every emoji that has one, including two-person emoji',
       'Optional Open Emoji Picker shortcut, unassigned until you set one'
     ],
@@ -790,7 +790,7 @@ export const plugins: readonly Plugin[] = [
       { text: 'Turn it on in Settings › Plugins.' },
       { text: 'Open the Command Palette and press ⌘7 for the Emoji tab.', keys: '⌘7' },
       {
-        text: 'Type a name, a keyword, or a :shortcode:, then press Return to copy it or ⌘P to paste it.',
+        text: 'Type a name, a keyword, or a :shortcode:, then press Return to copy it or ⌘V to paste it.',
         keys: '↩'
       }
     ],
@@ -825,7 +825,7 @@ export const plugins: readonly Plugin[] = [
       {
         permission: 'Accessibility',
         reason:
-          'Lets ⌘P paste the translation into the app you’re using. Without it, ⌘P copies the translation instead.'
+          'Lets ⌘V paste the translation into the app you’re using. Without it, ⌘V copies the translation instead.'
       }
     ],
     requires: [],
@@ -833,15 +833,15 @@ export const plugins: readonly Plugin[] = [
     minimumMacOS: '15',
     overview: [
       'Understand text in another language and answer in it, without switching apps. Open the Translate tab of the Command Palette with ⌘8, then type or paste: it translates as you type. Text in your language goes to your other language, and anything else comes back to yours.',
-      'Press Return to save the translation, or ⌘P to save it and paste it into the app you were using. With the field empty, the tab lists your last 50 saved translations to copy, paste, or hear read aloud. Translation needs macOS 15 or later and ships turned off: turn it on in Settings › Plugins.'
+      'Press Return to save the translation, or ⌘Return to save it and paste it into the app you were using. With the field empty, the tab lists your last 50 saved translations to copy, paste, or hear read aloud. Translation needs macOS 15 or later and ships turned off: turn it on in Settings › Plugins.'
     ],
     features: [
       'Translates what you type or paste a moment after you stop typing',
       'Text in your language goes to your other language, and anything else comes back to yours',
       'Choose My language and Other language from 20 languages in Settings › Translation',
       '⌘T swaps the two languages for the text in the field, and clicking the target language picks another',
-      'Return saves the translation and clears the field; ⌘P saves it, pastes it into the app you were using, and puts your clipboard back',
-      'Your last 50 saved translations, listed while the field is empty: Return or ⌘C copies one without adding it to Clipboard History, ⌘P pastes it, and Delete removes it after asking',
+      'Return saves the translation and clears the field; ⌘Return saves it, pastes it into the app you were using, and puts your clipboard back',
+      'Your last 50 saved translations, listed while the field is empty: Return or ⌘C copies one without adding it to Clipboard History, its Paste button pastes it, and Delete (⌫) removes it after asking',
       'A speaker button, or Space, reads a saved translation aloud in a voice for its language',
       'If a language isn’t downloaded yet, a button opens Language & Region in System Settings to download it',
       'While it’s on, Dictation’s Translate goes between the same two languages',
@@ -854,7 +854,7 @@ export const plugins: readonly Plugin[] = [
         keys: '⌘8'
       },
       {
-        text: 'Press Return to save the translation, or ⌘P to save it and paste it where you were typing.',
+        text: 'Press Return to save the translation, or ⌘Return to save it and paste it where you were typing.',
         keys: '↩'
       }
     ],
@@ -873,7 +873,7 @@ export const plugins: readonly Plugin[] = [
       },
       {
         q: 'Can I find a translation again later?',
-        a: 'Yes, if you saved it with Return or ⌘P. With the field empty, the Translate tab lists your last 50 saved translations to copy, paste, or hear read aloud.'
+        a: 'Yes, if you saved it with Return or ⌘Return. With the field empty, the Translate tab lists your last 50 saved translations to copy, paste, or hear read aloud.'
       },
       {
         q: 'Does Dictation use the same languages?',
@@ -881,7 +881,7 @@ export const plugins: readonly Plugin[] = [
       }
     ],
     keeps: [
-      'For the last 50 translations you save with Return or ⌘P, the text you translated and its translation are kept on this Mac. Clear Recent Translations in Settings › Translation removes them; turning Translation off keeps them.',
+      'For the last 50 translations you save with Return or ⌘Return, the text you translated and its translation are kept on this Mac. Clear Recent Translations in Settings › Translation removes them; turning Translation off keeps them.',
       'Text is translated on this Mac, with the languages you download in System Settings.'
     ]
   },
