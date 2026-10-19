@@ -57,8 +57,7 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(element("settings.sidebar.general").waitForNonExistence(timeout: 5), "Search filters the rows")
 
         search.typeText("zzz")
-        let noResults = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "No Results")).firstMatch
-        XCTAssertTrue(noResults.waitForExistence(timeout: 5), "A search that finds nothing says so")
+        XCTAssertTrue(element("settings.sidebar.noResults").waitForExistence(timeout: 5), "A search that finds nothing says so")
 
         app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
         XCTAssertTrue(element("settings.sidebar.general").waitForExistence(timeout: 5), "Escape clears the search")

@@ -71,8 +71,8 @@ struct SettingsNavigationHistory: Equatable {
 /// Plugins, and Changelog; then a row per plugin, the default ones (Quick Search first, then by name) and the added
 /// ones in their own group below; filtered by search, which finds a page by its title and a plugin's
 /// page also by its search keywords, as Settings › Plugins and Quick Search do. It's a stock sidebar
-/// list (#559), so its text, row height, and selection follow System Settings › Appearance › Sidebar
-/// icon size, as System Settings' own sidebar does.
+/// list (#559), so its text and row height follow System Settings › Appearance › Sidebar icon size,
+/// as System Settings' own sidebar does.
 enum SettingsSidebar {
     static func isSearching(_ query: String) -> Bool {
         !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -163,6 +163,8 @@ struct SettingsRootView: View {
             .overlay {
                 if SettingsSidebar.isSearching(query), groups.isEmpty {
                     ContentUnavailableView.search(text: query.trimmingCharacters(in: .whitespacesAndNewlines))
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("settings.sidebar.noResults")
                 }
             }
             .toolbar(removing: .sidebarToggle)

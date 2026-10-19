@@ -4,8 +4,6 @@ import SwiftUI
 /// Colors and metrics copied from Raycast's Settings window (dark), with light equivalents.
 enum SettingsTheme {
     static let pageBackground = Color(light: gray(0.96), dark: gray(0.059))
-    /// The Command Palette's background. The Settings sidebar uses the system's own (#559).
-    static let sidebarBackground = Color(light: gray(0.93), dark: gray(0.075))
     static let card = Color(light: .white, dark: gray(0.09))
     static let control = Color(light: gray(0.9), dark: gray(0.15))
     static let field = Color(light: gray(0.9), dark: gray(0.1))
