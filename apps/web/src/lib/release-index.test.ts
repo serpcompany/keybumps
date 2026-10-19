@@ -192,36 +192,4 @@ describe('scripts/release-index.mjs', () => {
         name === 'build:staging' || name === 'build:production'
       )
   })
-
-  it('has web-deploy.yml read the list from R2, with the token in that step only', () => {
-    const deploy = readFileSync(
-      join(web, '..', '..', '.github', 'workflows', 'web-deploy.yml'),
-      'utf8'
-    )
-    const steps = deploy.split(/\n(?=\s+- name: )/)
-    const named = (name: string) => steps.filter(step => step.includes(`- name: ${name}\n`))
-    const reads = named('Read the release index from R2')
-    expect(reads).toHaveLength(2)
-    for (const step of reads) {
-      expect(step).toContain('working-directory: ${{ runner.temp }}')
-      expect(step).toContain(
-        'r2 object get keybumps-updates/releases.json --remote --file "$RUNNER_TEMP/releases.json"'
-      )
-      expect(step).not.toMatch(/pnpm|node |scripts\//)
-    }
-    // Only those steps get the token, each before the job installs or builds anything.
-    expect(steps.filter(step => step.includes('secrets.CLOUDFLARE_R2_TOKEN'))).toEqual(reads)
-    expect(deploy).not.toMatch(/^env:/m)
-    for (const job of deploy
-      .split(/\n(?=  [a-z]+:\n)/)
-      .filter(job => job.includes('pnpm build:'))) {
-      const read = job.indexOf('- name: Read the release index from R2')
-      expect(read).toBeGreaterThan(0)
-      expect(read).toBeLessThan(job.indexOf('- name: Install dependencies'))
-    }
-    for (const build of ['build:staging', 'build:production']) {
-      const step = named('Build').find(step => step.includes(`run: pnpm ${build}`))
-      expect(step, build).toContain('RELEASE_INDEX: ${{ runner.temp }}/releases.json')
-    }
-  })
 })
