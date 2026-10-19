@@ -17,6 +17,14 @@ name: Web deploy
 # CLOUDFLARE_API_TOKEN is account-wide (Cloudflare can't scope it to one Worker), so only the two
 # Deploy steps get it. Use it only for keybumps-web-staging and keybumps-web-production. If a
 # deploy fails with an authorization error, ask the owner; don't widen the token.
+#
+# Each deploy job also reads the release index, releases.json, from R2 for /changelog/'s download
+# links (#565), because the zone's bot protection gives runners HTTP 403 on updates.keybumps.app.
+# The read uses CLOUDFLARE_R2_TOKEN, the Release Keybumps workflow's token for the keybumps-updates
+# bucket, in a step of its own before pnpm install; only that step gets it. The Build step passes
+# the file as RELEASE_INDEX, which the site build reads (apps/web/scripts/release-index.mjs). If the
+# read fails, the job stops before deploying. If it fails with an authorization error, ask the
+# owner; don't widen the token.
 on:
   push:
     branches: [main]
@@ -101,14 +109,42 @@ jobs:
           cache: pnpm
           cache-dependency-path: apps/web/pnpm-lock.yaml
 
+      # Before pnpm install, so no repository code runs while the token is set, and with one curl
+      # rather than wrangler, so no npm package does either: it's the endpoint `wrangler r2 object
+      # get` calls. printf is a shell builtin and curl reads the header from stdin, so the token is
+      # in no process's command line. Fails on any answer but 2xx, and never prints the body. The
+      # account ID is release.yml's, the account the token is proven with.
+      - name: Read the release index from R2
+        working-directory: ${{ runner.temp }}
+        env:
+          CLOUDFLARE_ACCOUNT_ID: cec5f04e1d18bcc65f2be0aefb04f059
+          CLOUDFLARE_R2_TOKEN: ${{ secrets.CLOUDFLARE_R2_TOKEN }}
+        run: |
+          if ! status=$(printf 'Authorization: Bearer %s\n' "$CLOUDFLARE_R2_TOKEN" |
+            curl --disable --fail --silent --show-error --retry 3 --retry-connrefused \
+              --connect-timeout 10 --max-time 30 --header @- --write-out '%{http_code}' \
+              --output "$RUNNER_TEMP/releases.json" \
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets/keybumps-updates/objects/releases.json") ||
+            [[ $status != 2?? ]]; then
+            echo "::error::Couldn't read releases.json from R2 (HTTP ${status:-none})"
+            exit 1
+          fi
+          if ! count=$(jq -e 'if type == "array" and length > 0 then length else error end' "$RUNNER_TEMP/releases.json" 2>/dev/null); then
+            echo "::error::releases.json from R2 isn't a JSON list of releases"
+            exit 1
+          fi
+          echo "release-index: read $count releases from R2 (keybumps-updates/releases.json)"
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       # Builds with SITE_ENV=staging; --env staging's vars set it at runtime. The placeholder GTM ID
-      # makes the smoke test's "no GTM on /" check the SITE_ENV gate itself.
+      # makes the smoke test's "no GTM on /" check the SITE_ENV gate itself. RELEASE_INDEX is the
+      # list read from R2 above.
       - name: Build
         env:
           NEXT_PUBLIC_GTM_ID: GTM-STAGING0
+          RELEASE_INDEX: ${{ runner.temp }}/releases.json
         run: pnpm build:staging
 
       # Deploy only the newest website: skip when main has newer website changes, whose own run
@@ -163,6 +199,32 @@ jobs:
           cache: pnpm
           cache-dependency-path: apps/web/pnpm-lock.yaml
 
+      # Before pnpm install, so no repository code runs while the token is set, and with one curl
+      # rather than wrangler, so no npm package does either: it's the endpoint `wrangler r2 object
+      # get` calls. printf is a shell builtin and curl reads the header from stdin, so the token is
+      # in no process's command line. Fails on any answer but 2xx, and never prints the body. The
+      # account ID is release.yml's, the account the token is proven with.
+      - name: Read the release index from R2
+        working-directory: ${{ runner.temp }}
+        env:
+          CLOUDFLARE_ACCOUNT_ID: cec5f04e1d18bcc65f2be0aefb04f059
+          CLOUDFLARE_R2_TOKEN: ${{ secrets.CLOUDFLARE_R2_TOKEN }}
+        run: |
+          if ! status=$(printf 'Authorization: Bearer %s\n' "$CLOUDFLARE_R2_TOKEN" |
+            curl --disable --fail --silent --show-error --retry 3 --retry-connrefused \
+              --connect-timeout 10 --max-time 30 --header @- --write-out '%{http_code}' \
+              --output "$RUNNER_TEMP/releases.json" \
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets/keybumps-updates/objects/releases.json") ||
+            [[ $status != 2?? ]]; then
+            echo "::error::Couldn't read releases.json from R2 (HTTP ${status:-none})"
+            exit 1
+          fi
+          if ! count=$(jq -e 'if type == "array" and length > 0 then length else error end' "$RUNNER_TEMP/releases.json" 2>/dev/null); then
+            echo "::error::releases.json from R2 isn't a JSON list of releases"
+            exit 1
+          fi
+          echo "release-index: read $count releases from R2 (keybumps-updates/releases.json)"
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -178,10 +240,11 @@ jobs:
 
       # Builds with SITE_ENV=production; --env production's vars set it at runtime. Only the public
       # GTM ID is passed: NEXT_PUBLIC_CF_BEACON_TOKEN stays unset until the privacy policy covers
-      # Cloudflare Web Analytics.
+      # Cloudflare Web Analytics. RELEASE_INDEX is the list read from R2 above.
       - name: Build
         env:
           NEXT_PUBLIC_GTM_ID: ${{ vars.NEXT_PUBLIC_GTM_ID }}
+          RELEASE_INDEX: ${{ runner.temp }}/releases.json
         run: pnpm build:production
 
       - name: Check main's tip

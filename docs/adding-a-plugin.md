@@ -61,7 +61,7 @@ Add the plugin's own tests in Swift Testing (`docs/testing.md`).
 
 The website lists every plugin on `/plugins/`, gives each its own page, and builds the home page grid from the same list. Website PRs change only `apps/web/**` (`apps/web/AGENTS.md`).
 
-- **Before the release** that ships the plugin: add it to the privacy page (`src/app/(analytics)/legal/privacy/page.tsx`), which names every plugin. Say what it keeps on the Mac and anything it sends off it (ADR 0007).
+- **Before the release** that ships the plugin: the privacy page names no plugins (#583), so it needs a change only if the plugin goes online for a new reason or sends anything off the Mac. Then say it by category, not by feature (ADR 0007).
 - **After the release:**
   - an entry in `src/lib/plugins.ts`, copied from the Swift. Move `isNew` to it. A new SF Symbol also goes in the `PluginSystemImage` type;
   - its route folder `src/app/(analytics)/plugins/<slug>/page.tsx`, which `plugins.test.ts` requires. The slug is the plugin's name in lowercase, with hyphens for spaces: the app's Open on keybumps.app (`PluginLinks.page(for:)`) builds the address that way;

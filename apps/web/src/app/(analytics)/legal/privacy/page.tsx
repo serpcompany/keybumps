@@ -4,6 +4,8 @@ import { PRIVACY_UPDATED, SUPPORT_EMAIL } from '@/lib/site'
 
 export const metadata = pageMetadata('/legal/privacy/')
 
+// What the app and the site collect or send, by category. Keep feature details (plugins, keys,
+// setting names) out: they change with releases, and this page doesn't need them (#583).
 export default function PrivacyPage() {
   const email = <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
   return (
@@ -13,67 +15,24 @@ export default function PrivacyPage() {
         keybumps.app.
       </p>
 
-      <h2>The short version</h2>
+      <h2>Information on your Mac</h2>
       <p>
-        What you do in Keybumps stays on your Mac. The app has no advertising, no analytics, no
-        account, and no cloud sync. We never receive your searches, clipboard contents, screenshots,
-        recordings, or transcripts. If Keybumps crashes or freezes, it sends us a crash report
-        without any of those, and you can turn crash reports off. If you report a problem, it sends
-        what you write.
-      </p>
-
-      <h2>Information stored on your Mac</h2>
-      <ul>
-        <li>
-          <strong>Clipboard History</strong> keeps your most recent copied text and images locally.
-          You can delete items at any time.
-        </li>
-        <li>
-          <strong>ScreenGrabs</strong> saves screenshots and screen recordings where macOS or
-          Keybumps saves them, and edited copies of screenshots beside the original. A recording can
-          include sound from your microphone and your Mac.
-        </li>
-        <li>
-          <strong>Dictation</strong> records audio and transcribes it on your Mac. Recordings and
-          transcripts are stored in ~/Documents/Keybumps/recordings, where you can open or delete
-          them.
-        </li>
-        <li>
-          <strong>Snippets</strong> are stored on your Mac; the text of a snippet you mark sensitive
-          is kept in your Mac’s Keychain.
-        </li>
-        <li>
-          <strong>Timers</strong>, with any names you give them, are stored on your Mac until you
-          delete them.
-        </li>
-        <li>
-          <strong>Emoji Picker</strong> keeps your recently used emoji on your Mac. Turning off
-          Remember recently used emoji in its settings clears them.
-        </li>
-        <li>
-          <strong>Translation</strong> keeps the text you translate and its translation on your Mac,
-          for the last 50 you save with Return or ⌘P. Clear Recent Translations in its settings
-          removes them.
-        </li>
-        <li>
-          <strong>Quick Search, Window Manager, and Shortcut Coach</strong> work from information
-          already on your Mac and keep their settings and history locally.
-        </li>
-      </ul>
-      <p>
-        Translation uses Apple’s on-device Translation framework, and spoken playback uses macOS
-        voices. Apple handles that data under its own privacy practices.
+        Content you create or keep in Keybumps, such as copied items, screenshots, recordings,
+        transcripts, and translations, is stored and processed on your Mac, along with your settings
+        and history. We don’t receive it, and the app doesn’t send it anywhere. Some features use
+        services built into macOS, which Apple provides under its own privacy policy.
       </p>
 
       <h2>When the app goes online</h2>
+      <p>The app has no advertising or usage analytics. It goes online for these reasons:</p>
       <ul>
         <li>
           <strong>Updates.</strong> Keybumps checks updates.keybumps.app for new versions. That
           request includes your IP address and app version, as any web request does.
         </li>
         <li>
-          <strong>Speech model download.</strong> The first time you use Dictation, the app
-          downloads the Whisper speech model from Hugging Face, which receives a standard web
+          <strong>Downloads.</strong> Some features download files they need the first time you use
+          them, such as a speech recognition model from Hugging Face, which receives a standard web
           request.
         </li>
         <li>
@@ -90,15 +49,13 @@ export default function PrivacyPage() {
       <h2>Crash and problem reports</h2>
       <p>
         When Keybumps crashes or freezes, it sends a crash report to Sentry, a service that collects
-        crash reports for us, so we can find and fix the cause. Crash reports are on by default. To
-        stop sending them, turn off <strong>Send crash reports</strong> in Keybumps Settings ›
-        General.
+        crash reports for us, so we can find and fix the cause. Crash reports are on by default, and
+        you can turn them off in Keybumps’ settings.
       </p>
       <p>
-        <strong>Report a Problem…</strong>, in the Help menu, the menu bar menu, and Settings ›
-        General, sends what you write to Sentry, with your email address if you add one for a reply.
-        Before you send, it shows you the main details it adds. It sends a problem report even when
-        crash reports are off, because you chose to send it.
+        When you report a problem from the app, it sends what you write to Sentry, with your email
+        address if you add one for a reply. It sends a problem report even when crash reports are
+        off, because you chose to send it.
       </p>
       <p>A report includes:</p>
       <ul>
@@ -106,30 +63,26 @@ export default function PrivacyPage() {
         <li>the Keybumps and macOS versions, and which Keybumps plugins are on;</li>
         <li>
           technical details about your Mac and its state at the time, such as its model, processor
-          type, memory in use, whether Low Power Mode is on, and when Keybumps was opened;
+          type, and memory in use;
         </li>
         <li>
           a random identifier Keybumps creates for itself on your Mac, so we can tell how many Macs
           a problem affects;
         </li>
-        <li>
-          for a problem report, what you write, and which permissions Keybumps has, such as
-          Accessibility.
-        </li>
+        <li>for a problem report, what you write, and which macOS permissions Keybumps has.</li>
       </ul>
       <p>
-        Keybumps never adds your clipboard contents, snippets, transcripts, recordings, screenshots,
-        searches, or window or document titles to a report. It removes file paths, file names,
-        links, and email addresses from error messages before a report leaves your Mac. In a problem
-        report, it removes file paths, links, and email addresses from what you write and otherwise
-        sends it, so leave out anything you’d rather not share.
+        Keybumps never adds the content you keep in it, your searches, or window or document titles
+        to a report. Before a report leaves your Mac, it removes the file paths, file names, links,
+        and email addresses it finds in error messages. In a problem report, it removes file paths,
+        links, and email addresses from what you write and otherwise sends it, so leave out anything
+        you’d rather not share.
       </p>
       <p>
         If you add your email to a problem report, we can see it alongside other reports from the
-        same copy of Keybumps. Nothing is sent when nothing goes wrong: there’s no report when you
-        open Keybumps, and none about how long you use it. Sentry receives your IP address with each
-        report, as with any web request, but we’ve set it not to store the address or the location
-        it suggests. Sentry stores reports in the United States and handles them on our behalf.
+        same copy of Keybumps. Sentry receives your IP address with each report, as with any web
+        request, but we’ve set it not to store the address or the location it suggests. Sentry
+        stores reports in the United States and handles them on our behalf.
       </p>
 
       <h2>Purchases</h2>
@@ -140,12 +93,13 @@ export default function PrivacyPage() {
         country in Polar to provide support and handle refunds. We never see your full card number.
       </p>
       <p>
-        When you buy, our website tells Google Analytics about the purchase, so we can see which
-        pages lead to purchases: the order number, product, amount, tax, currency, and any discount
-        code. It also adds the anonymous IDs Google Analytics gave your browser, which travel to
-        Polar with your checkout to make the link. If you declined analytics, or you’re in the EU,
-        the EEA, the UK, or Switzerland and didn’t allow them, it sends nothing about your purchase.
-        It never sends your name, email, address, or payment details.
+        When you buy, our website tells Google Analytics about the purchase, any renewal of it, and
+        a full refund of it, so we can see which pages lead to purchases: the order number, product,
+        amount, tax, currency, and any discount code. It also adds the anonymous IDs Google
+        Analytics gave your browser, which travel to Polar with your checkout to make the link. If
+        you declined analytics, or you’re in the EU, the EEA, the UK, or Switzerland and didn’t
+        allow them, it sends nothing about your purchase. It never sends your name, email, address,
+        or payment details.
       </p>
       <p>
         If a partner’s or another tracked link brought you to our website, it also tells Dub, which
@@ -162,12 +116,20 @@ export default function PrivacyPage() {
         address and browser) to deliver and protect the site.
       </p>
       <p>
-        To understand how many people visit and which pages they use, the live keybumps.app site
-        loads analytics tools through Google Tag Manager, such as Google Analytics. These tools
-        receive standard request details, such as your IP address, browser, the page you visit, and
-        the page that linked you there, and they may set cookies. Each handles that data under its
-        own privacy policy. Analytics run only on the live website: never in the Keybumps app, and
-        never on test or staging versions of the site.
+        To understand how many people visit, which pages they use, and which ads bring them here,
+        the live keybumps.app site loads analytics and advertising tools through Google Tag Manager,
+        such as Google Analytics and Meta’s pixel. These tools receive standard request details,
+        such as your IP address, browser, the page you visit, and the page that linked you there,
+        and they may set cookies. Each handles that data under its own privacy policy. These tools
+        run only on the live website: never in the Keybumps app, and never on test or staging
+        versions of the site.
+      </p>
+      <p>
+        If you’re in the EU, the EEA, the UK, or Switzerland, the site asks before these tools set
+        cookies, and you can accept or decline. The site remembers your choice in a cookie of its
+        own for a year. To change your choice, clear keybumps.app’s site data in your browser, and
+        the site asks again. Elsewhere, they run by default, and you can block or delete their
+        cookies in your browser.
       </p>
       <p>
         If you arrive through a partner’s or another tracked link, Dub’s script, also loaded through
