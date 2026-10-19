@@ -1174,7 +1174,7 @@ struct SnippetQuickSearchTests {
         #expect(fixture.search.items.contains(.snippet(snippet)))
     }
 
-    @Test("Quick Search finds a snippet by part of a word in its text, listed last (#555)")
+    @Test("Quick Search finds a snippet by part of a word in its text, after name matches (#555)")
     func findsByText() throws {
         let fixture = PaletteFixture()
         defer { fixture.tearDown() }

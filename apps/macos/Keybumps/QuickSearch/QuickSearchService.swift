@@ -118,7 +118,7 @@ final class QuickSearchModel {
         )
         items = QuickSearchRanking.items(
             matching: term, applications: Array(appMatches.prefix(12)), files: [], actions: actions(),
-            snippets: snippets(), emoji: emoji(term), usage: applicationUsage, filesPending: searchesFiles
+            snippets: snippets(), emoji: emoji(term), usage: applicationUsage
         )
         guard searchesFiles else { return }
 

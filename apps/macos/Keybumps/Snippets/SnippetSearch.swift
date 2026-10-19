@@ -30,13 +30,12 @@ enum SnippetSearch {
     /// How many snippets Quick Search lists at most, so they never bury apps and files.
     static let quickSearchLimit = 8
 
-    /// Quick Search's snippets for a query and how each matched, ranked as in the Snippets tab and
-    /// cut to `quickSearchLimit`, so text matches only fill room keyword and name matches leave.
-    /// `QuickSearchRanking.items` lists text matches last of all, so they never bury other results.
-    static func quickSearchMatches(_ snippets: [Snippet], query: String) -> [(snippet: Snippet, match: Match)] {
+    /// Quick Search's snippets for a query, ranked as in the Snippets tab and cut to
+    /// `quickSearchLimit`, so text matches only fill room keyword and name matches leave.
+    static func quickSearchMatches(_ snippets: [Snippet], query: String) -> [Snippet] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
-        return Array(ranked(snippets, query: trimmed).prefix(quickSearchLimit))
+        return Array(ranked(snippets, query: trimmed).prefix(quickSearchLimit).map(\.snippet))
     }
 
     /// Whether `query` is the snippet's whole keyword, punctuation included (`;ship`, not `ship`),

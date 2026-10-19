@@ -2203,8 +2203,9 @@ private struct QuickSearchEmojiRow: View {
     }
 }
 
-/// A snippet in Quick Search's row layout: the snippet icon, its name (with a lock when it's
-/// sensitive), and its keyword chip and kind on the right. Its text never shows here.
+/// A snippet in Quick Search's row layout: the snippet icon, its name with its text on one gray line
+/// under it as the Snippets tab shows it (masked, with a lock, when it's sensitive), and its keyword
+/// chip and kind on the right. The text shows which snippet a search matched by its text (#555).
 private struct QuickSearchSnippetRow: View {
     let snippet: Snippet
 
@@ -2214,18 +2215,16 @@ private struct QuickSearchSnippetRow: View {
                 .accessibilityHidden(true)
         } content: {
             HStack(spacing: 12) {
-                Text(snippet.name)
-                    .font(.system(size: 15, weight: .medium))
-                    .lineLimit(1)
-                    .layoutPriority(1)
-                if snippet.isSensitive {
-                    Image(systemName: "lock.fill")
-                        .imageScale(.small)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(snippet.name)
+                        .font(.system(size: 15, weight: .medium))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    SnippetPreviewText(snippet: snippet)
+                        .font(.system(size: 13))
                         .foregroundStyle(.secondary)
-                        .help("Sensitive: the text is kept in the Keychain")
-                        .accessibilityLabel("Sensitive")
                 }
-                Spacer(minLength: 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 if let keyword = snippet.keyword {
                     SnippetKeywordChip(keyword: keyword)
                 }
@@ -2234,7 +2233,8 @@ private struct QuickSearchSnippetRow: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(SnippetPresentation.accessibilityLabel(for: snippet) + ", snippet")
     }
 }
 

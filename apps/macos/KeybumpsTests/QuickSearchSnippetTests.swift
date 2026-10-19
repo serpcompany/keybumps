@@ -22,7 +22,7 @@ struct QuickSearchSnippetTests {
     }
 
     static func names(_ snippets: [Snippet], _ query: String) -> [String] {
-        SnippetSearch.quickSearchMatches(snippets, query: query).map(\.snippet.name)
+        SnippetSearch.quickSearchMatches(snippets, query: query).map(\.name)
     }
 
     @Test("Snippets match by keyword, with or without its punctuation, then by name, then by text")
@@ -56,13 +56,10 @@ struct QuickSearchSnippetTests {
     func textFillsLeftoverRoom() {
         let named = (1...6).map { Self.snippet("Housekeeping \($0)") }
         let texts = (1...6).map { Self.snippet("Made-up \($0)", text: "made-up housekeeping notes") }
-        let matches = SnippetSearch.quickSearchMatches(texts + named, query: "house")
-        #expect(matches.count == SnippetSearch.quickSearchLimit)
-        #expect(matches.prefix(6).allSatisfy { $0.match == .nameWords })
-        #expect(matches.suffix(2).allSatisfy { $0.match == .text })
+        #expect(Self.names(texts + named, "house") == named.map(\.name) + ["Made-up 1", "Made-up 2"])
     }
 
-    @Test("A keyword typed in full comes first; other keyword and name matches come after apps and commands, before files; text matches come last")
+    @Test("A keyword typed in full comes first; other snippets, text matches last, come after apps and commands, and before files")
     func ranking() {
         let typed = Self.snippet("Template", keyword: "clip")
         let bare = Self.snippet("Signature", keyword: ";clip")
@@ -77,11 +74,8 @@ struct QuickSearchSnippetTests {
         )
         // `;clip` without its punctuation is still a keyword match, but it doesn't jump above the
         // apps: typing "mail" should still put Mail first.
-        #expect(rows == [.snippet(typed), .result(app), .command(clipboard), .snippet(bare), .snippet(named), .result(file), .snippet(text)])
-        // Until Spotlight answers, the text match waits, so files never push a highlighted row down.
-        #expect(QuickSearchRanking.items(
-            matching: "clip", applications: [app], files: [], commands: [clipboard], snippets: [text, named, bare, typed], filesPending: true
-        ) == [.snippet(typed), .result(app), .command(clipboard), .snippet(bare), .snippet(named)])
+        // A text match is still Keybumps's own result, so it comes before Spotlight's files (#555).
+        #expect(rows == [.snippet(typed), .result(app), .command(clipboard), .snippet(bare), .snippet(named), .snippet(text), .result(file)])
         #expect(QuickSearchRanking.items(matching: ";clip", applications: [], files: [], commands: [], snippets: [named, bare]).first
             == .snippet(bare), "…and comes first when typed with it")
         #expect(QuickSearchRanking.items(matching: "clip", applications: [app], files: [file], commands: [clipboard])
