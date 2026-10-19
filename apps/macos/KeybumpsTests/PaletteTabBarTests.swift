@@ -36,7 +36,7 @@ struct PaletteTabBarTests {
     @Test("With the plugins that start on, the open tab shows its name, with or without ⌘ held")
     func defaultTabsShowTheOpenName() {
         let preferences = AppPreferences(defaults: InMemoryDefaults())
-        let tabs = CommandPaletteTab.visibleTabs(showsHotkeys: preferences.showsHotkeysTab, selected: .search, enabled: preferences.enabledCapabilities)
+        let tabs = CommandPaletteTab.visibleTabs(hidden: preferences.hiddenTabs, selected: .search, enabled: preferences.enabledCapabilities)
         for tab in tabs {
             for showsShortcuts in [false, true] {
                 // `ViewThatFits` keeps the named row when its full width fits.

@@ -22,17 +22,20 @@ extension CapabilityDescriptor {
         settingsPage: CapabilitySettingsPage(
             section: .search,
             summary: "Open apps, files, and folders from the keyboard.",
-            disableExplanation: "Turning this off closes the Search tab and releases its global shortcut.",
+            // No switch, so no tooltip for one: Quick Search is always on (#553).
+            disableExplanation: nil,
             content: { AnyView(QuickSearchSettingsView()) }
         ),
         criticalOperations: [],
         // No capability command: Quick Search's own tab is where commands are listed.
         searchKeywords: nil,
-        category: .productivity
+        category: .productivity,
+        isAlwaysOn: true
     )
 }
 
-/// Owns the Quick Search shortcut and the Search tab.
+/// Owns the Quick Search shortcut and the Search tab. It's always on (#553), so its module is
+/// deactivated only while Keybumps is Locked.
 @MainActor
 final class QuickSearchModule: CapabilityModule {
     let descriptor = CapabilityDescriptor.quickSearch
@@ -48,7 +51,9 @@ final class QuickSearchModule: CapabilityModule {
             for: capability,
             binding: context.preferences.capabilityShortcut(for: .quickSearch)
         ) { [weak palette] in
-            palette?.toggle(.search)
+            // On the first shown tab, the Search tab unless Settings › Quick Search hides it (#553).
+            guard let palette else { return }
+            palette.toggle(palette.openingTab)
         }
     }
 

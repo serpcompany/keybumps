@@ -464,6 +464,10 @@ final class AppModel {
         presenceController.apply(showInDockAndSwitcher: true)
         launchAtLogin.refresh()
         licensing.start()
+        // After first-time setup there's no Spotlight conflict to show, unless the step below finds one.
+        if preferences.didCompleteOnboarding { quickSearchShortcutConflictStatus = .noConflict }
+        // Before the shortcuts register, so ⌘Space is free when Quick Search asks for it.
+        takeCommandSpaceFromSpotlightIfPending()
         if preferences.didCompleteOnboarding && isLicensed { applyCapabilities() }
         refreshPermissions(); conflicts.refresh()
         CrashReporter.recordPlugins(preferences.enabledCapabilities)
@@ -539,6 +543,7 @@ final class AppModel {
             }
             commandPalette.dismiss()
         }
+        if snapshot.isEntitled { takeCommandSpaceFromSpotlightIfPending() }
         applyCapabilities()
     }
 
@@ -549,7 +554,6 @@ final class AppModel {
 
     func refreshQuickSearchShortcutConflict() {
         guard !preferences.didCompleteOnboarding,
-              preferences.enabledCapabilities.contains(.quickSearch),
               let binding = preferences.capabilityShortcut(for: .quickSearch) else {
             quickSearchShortcutConflictStatus = .noConflict
             return
@@ -576,7 +580,7 @@ final class AppModel {
             guard let self else { return }
             // Onboarding registers this before activation; it opens Quick Search only once licensed.
             guard self.isLicensed else { self.openLicenseSettings(); return }
-            self.commandPalette.toggle(.search)
+            self.commandPalette.toggle(self.commandPalette.openingTab)
         }
         quickSearchShortcutConflictStatus = registered
             ? .noConflict
@@ -585,11 +589,59 @@ final class AppModel {
             )
     }
 
+    /// Turns Spotlight's ⌘Space off once, with first-time setup's step, for an install that had
+    /// Quick Search off before #553 and so never went through setup with it on (owner's decision
+    /// on #553). The flag is cleared first, so it never runs again, even if the person turns
+    /// Spotlight's shortcut back on. Setup does it instead where it hasn't finished; while Locked,
+    /// when ⌘Space would open nothing, it waits for a license.
+    func takeCommandSpaceFromSpotlightIfPending() {
+        guard preferences.takesCommandSpaceFromSpotlightOnLaunch else { return }
+        guard preferences.didCompleteOnboarding else {
+            preferences.takesCommandSpaceFromSpotlightOnLaunch = false
+            return
+        }
+        guard isLicensed else { return }
+        preferences.takesCommandSpaceFromSpotlightOnLaunch = false
+        takeCommandSpaceFromSpotlight()
+    }
+
+    /// Turns Spotlight's shortcut off where it uses Quick Search's keys, leaving everything as it is
+    /// otherwise. If it can't, Settings › Quick Search shows first-time setup's manual-recovery
+    /// note, whose Check Again runs this again.
+    func takeCommandSpaceFromSpotlight() {
+        guard let binding = preferences.capabilityShortcut(for: .quickSearch),
+              spotlightShortcutResolver.status(for: binding) == .conflict else {
+            quickSearchShortcutConflictStatus = .noConflict
+            return
+        }
+        switch spotlightShortcutResolver.disableIfConflicting(binding) {
+        case .resolved, .noLongerConflicting:
+            quickSearchShortcutConflictStatus = .noConflict
+        case .failed(let manualRecovery):
+            quickSearchShortcutConflictStatus = .unavailable(manualRecovery: manualRecovery)
+        }
+    }
+
+    /// The note's Check Again: tries again, then registers Quick Search's shortcut if it's free now.
+    func checkQuickSearchSpotlightAgain() {
+        takeCommandSpaceFromSpotlight()
+        if isLicensed { applyCapabilities() }
+    }
+
+    /// Settings › Quick Search's note when Keybumps couldn't take ⌘Space from Spotlight after the
+    /// update; first-time setup shows its own.
+    var quickSearchSpotlightRecovery: String? {
+        guard preferences.didCompleteOnboarding else { return nil }
+        return quickSearchShortcutOnboardingPresentation.manualRecovery
+    }
+
     func openKeyboardShortcutSettings() {
         permissions.openSystemSettings(.keyboardShortcuts)
     }
 
     func setCapability(_ capability: Capability, enabled: Bool) {
+        // Quick Search has no switch to turn it off (#553).
+        if !enabled, capability.descriptor.isAlwaysOn { return }
         if !enabled {
             capabilities.deactivate(capability, context: capabilityContext)
             // Nothing is left to open that would clear a turned-off capability's dot.
@@ -1021,17 +1073,18 @@ final class AppModel {
         applyCapabilities()
         return moved
     }
+    /// Opens Quick Search on its first shown tab, the Search tab unless Settings › Quick Search
+    /// hides it (#553), as ⌘Space does: from the Dock, the menu bar, and Settings › Quick Search.
     func showQuickSearch() {
         guard isLicensed else { openLicenseSettings(); return }
-        guard preferences.enabledCapabilities.contains(.quickSearch) else { return }
-        commandPalette.show(.search)
+        commandPalette.show(commandPalette.openingTab)
     }
-    var isQuickSearchVisible: Bool { commandPalette.isDisplaying(.search) }
+    var isQuickSearchVisible: Bool { commandPalette.isDisplaying(commandPalette.openingTab) }
     func setQuickSearchVisible(_ isVisible: Bool) {
         if isVisible {
             showQuickSearch()
         } else {
-            commandPalette.dismiss(ifDisplaying: .search)
+            commandPalette.dismiss(ifDisplaying: commandPalette.openingTab)
         }
     }
     func showClipboardHistory() {

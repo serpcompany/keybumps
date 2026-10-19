@@ -125,7 +125,7 @@ struct ScreengrabsRecordingsTabTests {
         let noClipboard = everything.subtracting([.clipboardHistory])
         let noScreengrabs = everything.subtracting([.screenshotTools])
         func shows(_ enabled: Set<Capability>, _ compatibility: PluginCompatibility) -> Bool {
-            CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .search, enabled: enabled, compatibility: compatibility).contains(.screenshots)
+            CommandPaletteTab.visibleTabs(hidden: [.keyboardShortcutter], selected: .search, enabled: enabled, compatibility: compatibility).contains(.screenshots)
         }
         #expect(shows(everything, Self.macOS15))
         #expect(shows(noClipboard, Self.macOS15), "Recordings need no Clipboard History")

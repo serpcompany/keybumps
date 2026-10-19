@@ -31,25 +31,61 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
     static let drawnByPalette: Set<CommandPaletteTab> = [.search, .clipboard, .dictation, .snippets]
     var prompt: String { registration.prompt }
 
-    /// The tabs in the tab bar: those of plugins that are on, and whose data source is on too (the
-    /// ScreenGrabs tab's screenshots are Clipboard History's), as Raycast leaves out turned-off
-    /// extensions. A tab that also lists its plugin's recordings (`listsRecordings`, #494) shows
-    /// without its data source wherever its plugin records (`PluginCompatibility.supportsRecording`),
-    /// so on macOS 14 the ScreenGrabs tab still needs Clipboard History. Command-numbers stay fixed.
-    /// The Hotkeys tab shows only when its Settings page says so, and the tab on screen always stays.
+    /// The tabs whose plugins let them be in the tab bar: those of plugins that are on, and whose
+    /// data source is on too (the ScreenGrabs tab's screenshots are Clipboard History's), as Raycast
+    /// leaves out turned-off extensions. A tab that also lists its plugin's recordings
+    /// (`listsRecordings`, #494) shows without its data source wherever its plugin records
+    /// (`PluginCompatibility.supportsRecording`), so on macOS 14 the ScreenGrabs tab still needs
+    /// Clipboard History. The Search tab is always among them: Quick Search is always on (#553).
+    static func availableTabs(enabled: Set<Capability>, compatibility: PluginCompatibility = .current) -> [CommandPaletteTab] {
+        allCases.filter { tab in
+            enabled.contains(tab.owner)
+                && ((tab.dataSource.map(enabled.contains) ?? true) || (tab.listsRecordings && compatibility.supportsRecording))
+        }
+    }
+
+    /// The tabs in the tab bar while no hidden tab is open: the available ones whose show switches in
+    /// Settings › Quick Search are on (#553). One always stays: where every available tab is hidden,
+    /// such as the Search tab hidden and every other tab's plugin off, the Search tab shows.
+    static func shownTabs(
+        hidden: Set<CommandPaletteTab>,
+        enabled: Set<Capability>,
+        compatibility: PluginCompatibility = .current
+    ) -> [CommandPaletteTab] {
+        let shown = availableTabs(enabled: enabled, compatibility: compatibility).filter { !hidden.contains($0) }
+        return shown.isEmpty ? [.search] : shown
+    }
+
+    /// The tabs their show switches keep out of the tab bar: those saved hidden, less one that
+    /// shows anyway as the only tab left (`shownTabs`). Settings › Plugins leaves out their tab keys.
+    static func hiddenFromTabBar(
+        hidden: Set<CommandPaletteTab>,
+        enabled: Set<Capability>,
+        compatibility: PluginCompatibility = .current
+    ) -> Set<CommandPaletteTab> {
+        hidden.subtracting(shownTabs(hidden: hidden, enabled: enabled, compatibility: compatibility))
+    }
+
+    /// The tabs in the tab bar: the shown ones, and the tab on screen, which always stays, such as
+    /// the hidden Hotkeys tab opened by Shortcut Coach's capability command. Command-numbers stay fixed.
     static func visibleTabs(
-        showsHotkeys: Bool,
+        hidden: Set<CommandPaletteTab>,
         selected: CommandPaletteTab,
         enabled: Set<Capability>,
         compatibility: PluginCompatibility = .current
     ) -> [CommandPaletteTab] {
-        allCases.filter { tab in
-            tab == selected || (
-                enabled.contains(tab.owner)
-                    && ((tab.dataSource.map(enabled.contains) ?? true) || (tab.listsRecordings && compatibility.supportsRecording))
-                    && (tab != .keyboardShortcutter || showsHotkeys)
-            )
-        }
+        let shown = shownTabs(hidden: hidden, enabled: enabled, compatibility: compatibility)
+        return allCases.filter { $0 == selected || shown.contains($0) }
+    }
+
+    /// The tab ⌘Space opens Quick Search on: the first shown tab, so the Search tab unless Settings ›
+    /// Quick Search hides it (#553).
+    static func openingTab(
+        hidden: Set<CommandPaletteTab>,
+        enabled: Set<Capability>,
+        compatibility: PluginCompatibility = .current
+    ) -> CommandPaletteTab {
+        shownTabs(hidden: hidden, enabled: enabled, compatibility: compatibility).first ?? .search
     }
 
     /// Another plugin whose data the tab lists, such as Clipboard History for ScreenGrabs' screenshots.
@@ -79,6 +115,23 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
 
     /// What one click on a row or tile does (`PaletteClickAction`, #552).
     var clickAction: PaletteClickAction { registration.clickAction }
+}
+
+extension AppPreferences {
+    /// The tabs their show switches keep out of the tab bar (`CommandPaletteTab.hiddenFromTabBar`).
+    var paletteTabsHiddenFromTabBar: Set<CommandPaletteTab> {
+        CommandPaletteTab.hiddenFromTabBar(hidden: hiddenTabs, enabled: enabledCapabilities, compatibility: compatibility)
+    }
+
+    /// The tabs in Quick Search's tab bar while it's on `selected` (`CommandPaletteTab.visibleTabs`).
+    func visiblePaletteTabs(selected: CommandPaletteTab) -> [CommandPaletteTab] {
+        CommandPaletteTab.visibleTabs(hidden: hiddenTabs, selected: selected, enabled: enabledCapabilities, compatibility: compatibility)
+    }
+
+    /// The tab ⌘Space opens Quick Search on (`CommandPaletteTab.openingTab`).
+    var paletteOpeningTab: CommandPaletteTab {
+        CommandPaletteTab.openingTab(hidden: hiddenTabs, enabled: enabledCapabilities, compatibility: compatibility)
+    }
 }
 
 struct CommandPaletteTabLabel: Equatable {
@@ -578,6 +631,9 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     /// The tab the palette is on, or was last on.
     var selectedTab: CommandPaletteTab { state.tab }
 
+    /// The tab ⌘Space opens the palette on: the first shown tab (#553).
+    var openingTab: CommandPaletteTab { preferences.paletteOpeningTab }
+
     /// Runs a command the user picked from Quick Search's results (a click, or Return on its row):
     /// learns it for ranking, as opening an app does, then runs it. It never becomes a Recent Item.
     func choose(_ command: QuickSearchCommand) {
@@ -1063,10 +1119,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
 
     /// The tabs in the tab bar, which Command-number and Left and Right switch between.
     private var visibleTabs: [CommandPaletteTab] {
-        CommandPaletteTab.visibleTabs(
-            showsHotkeys: preferences.showsHotkeysTab, selected: state.tab, enabled: preferences.enabledCapabilities,
-            compatibility: preferences.compatibility
-        )
+        preferences.visiblePaletteTabs(selected: state.tab)
     }
 
     /// Whether the open tab lays its items out in a grid. `/`'s list of filters is always a list.
@@ -1812,10 +1865,7 @@ private struct CommandPaletteView: View {
                 focused: $inputFocused
             )
             PaletteTabBar(
-                tabs: CommandPaletteTab.visibleTabs(
-                    showsHotkeys: preferences.showsHotkeysTab, selected: state.tab, enabled: preferences.enabledCapabilities,
-                    compatibility: preferences.compatibility
-                ),
+                tabs: preferences.visiblePaletteTabs(selected: state.tab),
                 selected: state.tab,
                 showsShortcuts: state.isCommandHeld,
                 select: selectTab
@@ -1911,10 +1961,7 @@ private struct CommandPaletteView: View {
                 selection: state.selection,
                 query: search.query,
                 enabledCapabilities: preferences.enabledCapabilities,
-                visibleTabs: CommandPaletteTab.visibleTabs(
-                    showsHotkeys: preferences.showsHotkeysTab, selected: state.tab, enabled: preferences.enabledCapabilities,
-                    compatibility: preferences.compatibility
-                ),
+                visibleTabs: preferences.visiblePaletteTabs(selected: state.tab),
                 recentItems: recentSearchItems,
                 select: { state.selection = $0 },
                 open: activateSearchResult,

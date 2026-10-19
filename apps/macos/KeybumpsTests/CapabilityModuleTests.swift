@@ -139,14 +139,14 @@ struct CapabilityModuleTests {
         let enabled = Set(Capability.allCases).subtracting([.emojiPicker, .clipboardHistory])
         // On macOS 14, where ScreenGrabs can't record, its tab lists only Clipboard History's screenshots.
         let macOS14 = PluginCompatibility(macOSMajorVersion: 14)
-        let tabs = CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .search, enabled: enabled, compatibility: macOS14)
+        let tabs = CommandPaletteTab.visibleTabs(hidden: [.keyboardShortcutter], selected: .search, enabled: enabled, compatibility: macOS14)
         #expect(tabs == [.search, .dictation, .snippets, .timers, .translate], "ScreenGrabs lists Clipboard History, so it goes too")
         #expect(CommandPaletteTab.matchingCommandKey("7", in: tabs) == nil)
         #expect(CommandPaletteTab.matchingCommandKey("6", in: tabs) == .timers, "Numbers stay fixed")
-        #expect(CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .emoji, enabled: enabled).contains(.emoji))
+        #expect(CommandPaletteTab.visibleTabs(hidden: [.keyboardShortcutter], selected: .emoji, enabled: enabled).contains(.emoji))
         // Where it records, its recordings keep it in the bar (#494).
         let recording = CommandPaletteTab.visibleTabs(
-            showsHotkeys: false, selected: .search, enabled: enabled, compatibility: PluginCompatibility(macOSMajorVersion: 15)
+            hidden: [.keyboardShortcutter], selected: .search, enabled: enabled, compatibility: PluginCompatibility(macOSMajorVersion: 15)
         )
         #expect(recording == [.search, .screenshots, .dictation, .snippets, .timers, .translate])
     }
@@ -155,7 +155,7 @@ struct CapabilityModuleTests {
     func adjacentTabsSkipOffPlugins() {
         let enabled = Set(Capability.allCases).subtracting([.emojiPicker, .clipboardHistory])
         let tabs = CommandPaletteTab.visibleTabs(
-            showsHotkeys: false, selected: .search, enabled: enabled, compatibility: PluginCompatibility(macOSMajorVersion: 14)
+            hidden: [.keyboardShortcutter], selected: .search, enabled: enabled, compatibility: PluginCompatibility(macOSMajorVersion: 14)
         )
         #expect(CommandPaletteTab.adjacent(to: .search, offset: 1, in: tabs) == .dictation)
         #expect(CommandPaletteTab.adjacent(to: .dictation, offset: -1, in: tabs) == .search)
@@ -227,7 +227,7 @@ struct CapabilityModuleTests {
 
     // MARK: Lifecycle
 
-    @Test("Turning a module off stops its resources and releases its shortcuts; turning it on restores them once", arguments: Capability.allCases)
+    @Test("Turning a module off stops its resources and releases its shortcuts; turning it on restores them once", arguments: Capability.allCases.filter { !$0.descriptor.isAlwaysOn })
     func togglingStartsAndStopsOwnedResources(_ capability: Capability) {
         let harness = ModuleHarness()
         defer { harness.tearDown() }
@@ -247,6 +247,20 @@ struct CapabilityModuleTests {
             #expect(harness.model.shortcuts.desiredOwners == allOwners)
             #expect(harness.backend.registered.count == harness.model.shortcuts.activeOwners.count)
         }
+    }
+
+    @Test("Turning Quick Search off does nothing: it's always on, so its resources and ⌘Space stay (#553)")
+    func alwaysOnModuleStaysOn() {
+        let harness = ModuleHarness()
+        defer { harness.tearDown() }
+        harness.model.start()
+        let allOwners = harness.model.shortcuts.desiredOwners
+        #expect(allOwners.isSuperset(of: ModuleHarness.ownedShortcuts(for: .quickSearch)))
+
+        harness.model.setCapability(.quickSearch, enabled: false)
+        #expect(harness.model.preferences.enabledCapabilities.contains(.quickSearch))
+        #expect(harness.resourcesRunning(for: .quickSearch))
+        #expect(harness.model.shortcuts.desiredOwners == allOwners)
     }
 
     @Test("ScreenGrabs stops and reports Requires Clipboard History while Clipboard History is off")

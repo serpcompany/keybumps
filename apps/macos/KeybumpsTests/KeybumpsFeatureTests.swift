@@ -2313,13 +2313,13 @@ final class KeybumpsFeatureTests: XCTestCase {
         XCTAssertEqual(CommandPaletteTab.matchingCommandKey("9"), .keyboardShortcutter)
 
         // The Hotkeys tab is hidden by default, except while it is open, so the visible tabs stay ⌘1–⌘8.
-        XCTAssertFalse(AppPreferences(defaults: InMemoryDefaults()).showsHotkeysTab)
-        let hidden = CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .search, enabled: Set(Capability.allCases))
+        XCTAssertFalse(AppPreferences(defaults: InMemoryDefaults()).showsTab(.keyboardShortcutter))
+        let hidden = CommandPaletteTab.visibleTabs(hidden: [.keyboardShortcutter], selected: .search, enabled: Set(Capability.allCases))
         XCTAssertEqual(hidden, [.search, .clipboard, .screenshots, .dictation, .snippets, .timers, .emoji, .translate])
         XCTAssertEqual(CommandPaletteTab.matchingCommandKey("8", in: hidden), .translate)
         XCTAssertNil(CommandPaletteTab.matchingCommandKey("9", in: hidden))
-        XCTAssertEqual(CommandPaletteTab.visibleTabs(showsHotkeys: false, selected: .keyboardShortcutter, enabled: Set(Capability.allCases)).last, .keyboardShortcutter)
-        XCTAssertEqual(CommandPaletteTab.visibleTabs(showsHotkeys: true, selected: .search, enabled: Set(Capability.allCases)), CommandPaletteTab.allCases)
+        XCTAssertEqual(CommandPaletteTab.visibleTabs(hidden: [.keyboardShortcutter], selected: .keyboardShortcutter, enabled: Set(Capability.allCases)).last, .keyboardShortcutter)
+        XCTAssertEqual(CommandPaletteTab.visibleTabs(hidden: [], selected: .search, enabled: Set(Capability.allCases)), CommandPaletteTab.allCases)
         // ⌘9 is the last number the palette matches; none is left for another tab.
         XCTAssertNil(CommandPaletteTab.matchingCommandKey("0"))
         XCTAssertEqual(CommandPaletteTab.snippets.primaryActionTitle, "Copy")

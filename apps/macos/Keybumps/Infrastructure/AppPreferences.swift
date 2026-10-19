@@ -21,7 +21,17 @@ final class AppPreferences {
         static let knownCapabilityShortcuts = "knownCapabilityShortcuts"
         static let takenOverSystemShortcuts = "takenOverSystemShortcuts"
         static let windowShortcuts = "windowShortcuts"
+        /// Whether Quick Search shows the Hotkeys tab, which is hidden unless this is true. It
+        /// keeps the key it had before #553 put every tab's show switch on Settings › Quick Search.
         static let showsHotkeysTab = "showsHotkeysTab"
+        /// The other tabs hidden in Settings › Quick Search, by `CommandPaletteTab` raw value (#553).
+        static let quickSearchHiddenTabs = "quickSearchHiddenTabs"
+        /// Whether the one-time step that hides the Search tab where Quick Search was off has run
+        /// (#553): Quick Search can't be turned off any more, and hiding its tab replaced that.
+        static let didMoveQuickSearchSwitchToSearchTab = "didMoveQuickSearchSwitchToSearchTab"
+        /// Whether the next launch turns Spotlight's ⌘Space off, once, for an install that had
+        /// Quick Search off before #553 (owner's decision on #553).
+        static let takesCommandSpaceFromSpotlightOnLaunch = "takesCommandSpaceFromSpotlightOnLaunch"
         static let foldsSettingsSidebarPlugins = "foldsSettingsSidebarPlugins"
         static let didRequestScreenRecording = "didRequestScreenRecording"
         static let copiesScreenshotsToClipboard = "copiesScreenshotsToClipboard"
@@ -57,9 +67,11 @@ final class AppPreferences {
 
     /// The plugins that are on. A plugin this Mac's macOS can't run is never among them, even when
     /// saved on or set here (`PluginCompatibility`), so its module, tab, and shortcuts never run.
+    /// One that's always on, Quick Search (`CapabilityDescriptor.isAlwaysOn`, #553), is always among
+    /// them, even when saved off or left out here.
     var enabledCapabilities: Set<Capability> {
         get { storedEnabledCapabilities }
-        set { storedEnabledCapabilities = newValue.filter(compatibility.supports) }
+        set { storedEnabledCapabilities = newValue.union(CapabilityCatalog.alwaysOnCapabilities).filter(compatibility.supports) }
     }
 
     private var storedEnabledCapabilities: Set<Capability> {
@@ -106,9 +118,57 @@ final class AppPreferences {
         didSet { defaults.set(takenOverSystemShortcuts.sorted(), forKey: Key.takenOverSystemShortcuts) }
     }
 
-    /// Whether the Command Palette shows Shortcut Coach's Hotkeys tab. Off by default.
-    var showsHotkeysTab: Bool {
-        didSet { defaults.set(showsHotkeysTab, forKey: Key.showsHotkeysTab) }
+    /// The Quick Search tabs hidden by their show switches in Settings › Quick Search (#553). The
+    /// Hotkeys tab starts hidden, and the Search tab starts shown, except where Quick Search was
+    /// off before it could no longer be turned off. `CommandPaletteTab.shownTabs` always keeps one
+    /// tab shown, whatever is hidden here.
+    private(set) var hiddenTabs: Set<CommandPaletteTab> {
+        didSet { persistHiddenTabs() }
+    }
+
+    /// Whether `tab`'s show switch in Settings › Quick Search is on.
+    func showsTab(_ tab: CommandPaletteTab) -> Bool {
+        !hiddenTabs.contains(tab)
+    }
+
+    /// Turns `tab`'s show switch in Settings › Quick Search on or off.
+    func setShowsTab(_ tab: CommandPaletteTab, _ shows: Bool) {
+        if shows { hiddenTabs.remove(tab) } else { hiddenTabs.insert(tab) }
+    }
+
+    private func persistHiddenTabs() {
+        defaults.set(!hiddenTabs.contains(.keyboardShortcutter), forKey: Key.showsHotkeysTab)
+        defaults.set(hiddenTabs.subtracting([.keyboardShortcutter]).map(\.rawValue).sorted(), forKey: Key.quickSearchHiddenTabs)
+    }
+
+    /// Whether the next launch turns Spotlight's ⌘Space off, once, as first-time setup does: set by
+    /// the step below for an install that had Quick Search off, which never went through setup
+    /// with it on, and cleared by `AppModel` when it runs (owner's decision on #553).
+    var takesCommandSpaceFromSpotlightOnLaunch: Bool {
+        didSet { defaults.set(takesCommandSpaceFromSpotlightOnLaunch, forKey: Key.takesCommandSpaceFromSpotlightOnLaunch) }
+    }
+
+    /// The tabs saved hidden, with the Search tab hidden once where Quick Search was saved off
+    /// (#553). Quick Search could be turned off until it became the window's page, which can't
+    /// be; hiding the Search tab took the switch's place, so an install that had it off starts
+    /// with the tab hidden instead. Open Quick Search's shortcut stays as it was, ⌘Space or the key
+    /// saved, and the next launch takes ⌘Space from Spotlight once (owner's decisions on #553). A
+    /// new install, which saved no plugins, and one with Quick Search on show the tab. It runs
+    /// once, whatever it found, so a Search tab shown after it stays shown, and `init` runs it
+    /// before it saves Quick Search on.
+    private static func loadHiddenTabs(in defaults: UserDefaults, storedCapabilities: [String]?) -> Set<CommandPaletteTab> {
+        var hidden = Set((defaults.stringArray(forKey: Key.quickSearchHiddenTabs) ?? []).compactMap(CommandPaletteTab.init(rawValue:)))
+            .subtracting([.keyboardShortcutter])
+        if !defaults.bool(forKey: Key.showsHotkeysTab) { hidden.insert(.keyboardShortcutter) }
+        guard !defaults.bool(forKey: Key.didMoveQuickSearchSwitchToSearchTab) else { return hidden }
+        if let storedCapabilities, !storedCapabilities.contains(Capability.quickSearch.rawValue) {
+            hidden.insert(.search)
+            defaults.set(hidden.subtracting([.keyboardShortcutter]).map(\.rawValue).sorted(), forKey: Key.quickSearchHiddenTabs)
+            defaults.set(true, forKey: Key.takesCommandSpaceFromSpotlightOnLaunch)
+        }
+        // Written last, so a launch cut short before the tab is saved hidden does it again.
+        defaults.set(true, forKey: Key.didMoveQuickSearchSwitchToSearchTab)
+        return hidden
     }
 
     /// Whether the Settings sidebar's Plugins section is folded (#559). Unfolded by default.
@@ -324,11 +384,14 @@ final class AppPreferences {
         // Before anything is read: it rewrites what Screencast saved, whose ID `Capability` no longer has.
         Self.foldScreencastIntoScreengrabs(in: defaults)
         let stored = defaults.array(forKey: Key.enabledCapabilities) as? [String]
+        // Before Quick Search is saved on below: where it was off, the Search tab starts hidden.
+        hiddenTabs = Self.loadHiddenTabs(in: defaults, storedCapabilities: stored)
+        takesCommandSpaceFromSpotlightOnLaunch = defaults.bool(forKey: Key.takesCommandSpaceFromSpotlightOnLaunch)
         let initial = Self.initialCapabilities(
             stored: stored,
             known: defaults.array(forKey: Key.knownCapabilities) as? [String],
             shippingOff: Set(CapabilityCatalog.descriptors.filter { !$0.isOnByDefault }.map(\.capability))
-        ).filter(compatibility.supports)
+        ).union(CapabilityCatalog.alwaysOnCapabilities).filter(compatibility.supports)
         storedEnabledCapabilities = initial
         if stored != nil {
             defaults.set(initial.map(\.rawValue).sorted(), forKey: Key.enabledCapabilities)
@@ -348,7 +411,6 @@ final class AppPreferences {
         didCompleteOnboarding = defaults.bool(forKey: Key.didCompleteOnboarding)
         didFillSettingsWindow = defaults.bool(forKey: Key.didFillSettingsWindow)
         takenOverSystemShortcuts = Set(defaults.stringArray(forKey: Key.takenOverSystemShortcuts) ?? [])
-        showsHotkeysTab = defaults.bool(forKey: Key.showsHotkeysTab)
         foldsSettingsSidebarPlugins = defaults.bool(forKey: Key.foldsSettingsSidebarPlugins)
         didRequestScreenRecording = defaults.bool(forKey: Key.didRequestScreenRecording)
         copiesScreenshotsToClipboard = defaults.object(forKey: Key.copiesScreenshotsToClipboard) == nil
@@ -435,7 +497,8 @@ final class AppPreferences {
     /// recordings index reads again when it rebuilds.
     var recordingFolderMemory: RecordingFolderMemory { RecordingFolderMemory(defaults: defaults) }
 
-    /// Turns a plugin on or off. One this Mac's macOS can't run stays off.
+    /// Turns a plugin on or off. One this Mac's macOS can't run stays off, and one that's always on
+    /// stays on.
     func setCapability(_ capability: Capability, enabled: Bool) {
         if enabled { enabledCapabilities.insert(capability) }
         else { enabledCapabilities.remove(capability) }
