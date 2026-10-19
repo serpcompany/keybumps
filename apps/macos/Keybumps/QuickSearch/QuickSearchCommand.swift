@@ -305,12 +305,13 @@ extension QuickSearchRanking {
     /// query only starts, come after the applications, so an app named by the query (Shortcuts for
     /// "shortcuts") stays first and a few letters still find apps first. Equal scores keep that
     /// order, and equally good commands keep `QuickSearchCommand.allCases` order, then `actions`
-    /// order: action commands rank exactly as commands do. Files and folders always come last.
+    /// order: action commands rank exactly as commands do. Files and folders come after all of them.
     ///
-    /// Snippets (`SnippetSearch.quickSearchMatches`) match only by keyword and name. One whose whole
+    /// Snippets (`SnippetSearch.quickSearchMatches`) match by keyword, name, and text. One whose whole
     /// keyword, punctuation included, is the query comes first of all, since a keyword is typed to
-    /// find exactly it; the rest follow the apps and commands, before files. So `mail` keeps Mail
-    /// first even with a `;mail` snippet.
+    /// find exactly it; other keyword and name matches follow the apps and commands, before files.
+    /// So `mail` keeps Mail first even with a `;mail` snippet. Snippets that match only by their text
+    /// (#555) come last of all, after files, so a word in a snippet never buries what it names.
     @MainActor
     static func items(
         matching term: String,
@@ -341,9 +342,11 @@ extension QuickSearchRanking {
             }
             .map(\.element.item)
         let snippetMatches = SnippetSearch.quickSearchMatches(snippets, query: term)
-        let typedKeywords = snippetMatches.filter { SnippetSearch.isWholeKeyword($0, query: term) }
-        let otherSnippets = snippetMatches.filter { !SnippetSearch.isWholeKeyword($0, query: term) }
+        let byText = snippetMatches.filter { $0.match == .text }.map(\.snippet)
+        let byKeywordOrName = snippetMatches.filter { $0.match != .text }.map(\.snippet)
+        let typedKeywords = byKeywordOrName.filter { SnippetSearch.isWholeKeyword($0, query: term) }
+        let otherSnippets = byKeywordOrName.filter { !SnippetSearch.isWholeKeyword($0, query: term) }
         return typedKeywords.map(QuickSearchItem.snippet) + ranked + otherSnippets.map(QuickSearchItem.snippet)
-            + emoji.map(QuickSearchItem.emoji) + files.map(QuickSearchItem.result)
+            + emoji.map(QuickSearchItem.emoji) + files.map(QuickSearchItem.result) + byText.map(QuickSearchItem.snippet)
     }
 }
