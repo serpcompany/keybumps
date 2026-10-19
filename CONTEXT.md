@@ -19,7 +19,7 @@ What a capability declares about itself, so the shell draws its Settings page, i
 _Avoid_: Plist, config, schema
 
 **Plugins page**:
-Two places with one name. In the app, Settings › Plugins lists every plugin with its switch; Quick Search's Plugins command opens it. A turned-off plugin's own page says so at the top, with a Turn On button. On the website, keybumps.app/plugins lists every plugin with a page for each, and Settings › Plugins links to it ("Browse on keybumps.app"). For now every plugin is official, built by Keybumps, and ships in the app.
+Two places with one name. In the app, Settings › Plugins lists every plugin with its switch; Quick Search's Plugins command opens it, and so does its sidebar row, All Plugins, first under the Plugins header. A turned-off plugin's own page says so at the top, with a Turn On button. On the website, keybumps.app/plugins lists every plugin with a page for each, and Settings › Plugins links to it ("Browse on keybumps.app"). For now every plugin is official, built by Keybumps, and ships in the app.
 _Avoid_: Store, marketplace, gallery
 
 **Capability Module**:
@@ -39,7 +39,7 @@ One of the seven capabilities Keybumps's feature set was locked at: Quick Search
 _Avoid_: Core plugin, built-in plugin
 
 **Added capability**:
-A capability added after the default set, starting with Timer. Settings lists added capabilities in their own group below the default ones.
+A capability added after the default set, starting with Timer. Since #559, Settings lists every plugin together, under one Plugins header.
 _Avoid_: Plugin, extension, add-on
 
 **Settings**:

@@ -1,6 +1,6 @@
 # 0006: Capabilities are Keybumps's plugins: a default set, added ones, and an official-only plugin list
 
-Status: Accepted (2026-10-06). Tracked by #205, #233, #235, and #239. The third-party extensions non-goal in `AGENTS.md` stands. Partly superseded by [0010](0010-screengrabs-one-plugin.md) (2026-10-17): decision 2's Screenshot Tools is now ScreenGrabs, with the same ID (`screenshotTools`).
+Status: Accepted (2026-10-06). Tracked by #205, #233, #235, and #239. The third-party extensions non-goal in `AGENTS.md` stands. Partly superseded by [0010](0010-screengrabs-one-plugin.md) (2026-10-17): decision 2's Screenshot Tools is now ScreenGrabs, with the same ID (`screenshotTools`). Amended 2026-10-19 (#559): decision 3's separate Settings group for added capabilities is gone; every plugin is listed together, under one Plugins header in the sidebar and in one list on the Plugins page, Quick Search first, then by name.
 
 ## Context
 
@@ -19,7 +19,7 @@ That model needs a runtime for outside code, an isolation and permission model, 
 2. **The default capabilities** are the seven the feature set was locked at: Quick Search, Clipboard History, Screenshot Tools, Dictation, Window Manager, Shortcut Coach, and Snippets (`CapabilityCatalog.defaultCapabilities`).
 3. **Added capabilities ship inside the app, first-party.** Each is built with the recipe in `docs/architecture.md` and reaches people in a normal release, through Sparkle. A new one:
    - is turned on once for existing installs (known capabilities), unless its manifest says it ships off (`isOnByDefault`), and can be turned on or off in Settings;
-   - is listed in its own Settings group, below the default ones.
+   - is listed in its own Settings group, below the default ones (until #559; see Status).
 
    Timer is the first.
 4. **An official-only plugin list, modeled on Raycast's Store (#239).** The owner's call: build the Raycast shape now, listing only official plugins built by Keybumps.

@@ -14,6 +14,13 @@ enum PluginCategory: String, CaseIterable, Identifiable {
 /// now (ADR 0006), so the page only shows them; Settings › Plugins turns them on and off.
 enum PluginLinks {
     static let website = URL(string: "https://keybumps.app/plugins")!
+
+    /// A plugin's own page on keybumps.app, `/plugins/<slug>/`, whose slug is its name in lowercase
+    /// with hyphens for spaces, as `apps/web/src/lib/plugins.ts` names them.
+    static func page(for capability: Capability) -> URL {
+        let slug = capability.title.lowercased().replacingOccurrences(of: " ", with: "-")
+        return URL(string: "https://keybumps.app/plugins/\(slug)/")!
+    }
 }
 
 /// Something a plugin does that Quick Search offers, with the kind Action, while the plugin is on
