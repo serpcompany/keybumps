@@ -39,6 +39,16 @@ struct SettingsSidebarTests {
         #expect(SettingsSidebar.groups(matching: "countdown").map(\.sections) == [[.timer]])
     }
 
+    @Test("The Plugins section starts unfolded, and its fold is kept with the other preferences")
+    @MainActor
+    func pluginsFold() {
+        let defaults = InMemoryDefaults()
+        let preferences = AppPreferences(defaults: defaults)
+        #expect(!preferences.foldsSettingsSidebarPlugins)
+        preferences.foldsSettingsSidebarPlugins = true
+        #expect(AppPreferences(defaults: defaults).foldsSettingsSidebarPlugins)
+    }
+
     @Test("The Plugins page lists every plugin in one list, Quick Search first, then by name, and filters by name or keyword (#559)")
     func pluginsTable() {
         #expect(PluginsTable.plugins == Self.allPlugins)

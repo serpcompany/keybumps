@@ -63,7 +63,7 @@ The website lists every plugin on `/plugins/`, gives each its own page, and buil
 - **Before the release** that ships the plugin: add it to the privacy page (`src/app/(analytics)/legal/privacy/page.tsx`), which names every plugin. Say what it keeps on the Mac and anything it sends off it (ADR 0007).
 - **After the release:**
   - an entry in `src/lib/plugins.ts`, copied from the Swift. Move `isNew` to it. A new SF Symbol also goes in the `PluginSystemImage` type;
-  - its route folder `src/app/(analytics)/plugins/<slug>/page.tsx`, which `plugins.test.ts` requires;
+  - its route folder `src/app/(analytics)/plugins/<slug>/page.tsx`, which `plugins.test.ts` requires. The slug is the plugin's name in lowercase, with hyphens for spaces: the app's Open on keybumps.app (`PluginLinks.page(for:)`) builds the address that way;
   - a tile in the hero list in `src/app/(analytics)/plugins/page.tsx`;
   - the new symbol mapped in `src/components/plugin-icon.tsx`, and a new tint in `iconTints`;
   - the plugin-count floor in `scripts/smoke.sh`;

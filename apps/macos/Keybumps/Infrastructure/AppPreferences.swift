@@ -22,6 +22,7 @@ final class AppPreferences {
         static let takenOverSystemShortcuts = "takenOverSystemShortcuts"
         static let windowShortcuts = "windowShortcuts"
         static let showsHotkeysTab = "showsHotkeysTab"
+        static let foldsSettingsSidebarPlugins = "foldsSettingsSidebarPlugins"
         static let didRequestScreenRecording = "didRequestScreenRecording"
         static let copiesScreenshotsToClipboard = "copiesScreenshotsToClipboard"
         static let expandsSnippetKeywords = "expandsSnippetKeywords"
@@ -108,6 +109,11 @@ final class AppPreferences {
     /// Whether the Command Palette shows Shortcut Coach's Hotkeys tab. Off by default.
     var showsHotkeysTab: Bool {
         didSet { defaults.set(showsHotkeysTab, forKey: Key.showsHotkeysTab) }
+    }
+
+    /// Whether the Settings sidebar's Plugins section is folded (#559). Unfolded by default.
+    var foldsSettingsSidebarPlugins: Bool {
+        didSet { defaults.set(foldsSettingsSidebarPlugins, forKey: Key.foldsSettingsSidebarPlugins) }
     }
 
     /// Whether a screenshot hotkey has already shown macOS's Screen Recording request, which
@@ -343,6 +349,7 @@ final class AppPreferences {
         didFillSettingsWindow = defaults.bool(forKey: Key.didFillSettingsWindow)
         takenOverSystemShortcuts = Set(defaults.stringArray(forKey: Key.takenOverSystemShortcuts) ?? [])
         showsHotkeysTab = defaults.bool(forKey: Key.showsHotkeysTab)
+        foldsSettingsSidebarPlugins = defaults.bool(forKey: Key.foldsSettingsSidebarPlugins)
         didRequestScreenRecording = defaults.bool(forKey: Key.didRequestScreenRecording)
         copiesScreenshotsToClipboard = defaults.object(forKey: Key.copiesScreenshotsToClipboard) == nil
             || defaults.bool(forKey: Key.copiesScreenshotsToClipboard)

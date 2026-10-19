@@ -131,7 +131,6 @@ struct SettingsRootView: View {
         selection: UITestLaunchConfiguration.current.openSettings ?? .permissions
     )
     @State private var query = ""
-    @SceneStorage("settings.sidebar.showsPlugins") private var showsPlugins = true
     @Environment(\.openURL) private var openURL
 
     /// Locked (no entitled license after onboarding): only the Account page, with the License group, is available.
@@ -162,10 +161,11 @@ struct SettingsRootView: View {
                 }
                 ForEach(groups, id: \.self) { group in
                     if let title = group.title {
-                        // Folds like a Finder sidebar section; a search always shows what it finds.
+                        // Folds like a Finder sidebar section, and stays folded across launches; a search
+                        // always shows what it finds, and leaves the fold as it was.
                         Section(isExpanded: Binding(
-                            get: { showsPlugins || SettingsSidebar.isSearching(query) },
-                            set: { showsPlugins = $0 }
+                            get: { !model.preferences.foldsSettingsSidebarPlugins || SettingsSidebar.isSearching(query) },
+                            set: { if !SettingsSidebar.isSearching(query) { model.preferences.foldsSettingsSidebarPlugins = !$0 } }
                         )) {
                             ForEach(group.sections, content: row)
                         } header: {
