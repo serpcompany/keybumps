@@ -738,6 +738,33 @@ final class SmokeUITests: XCTestCase {
         XCTAssertEqual(files.map(\.lastPathComponent), ["video-1.mov"], "the recording's video, as a file")
     }
 
+    /// Until a tile is highlighted, the detail beside the grid says how to show one; a click on the
+    /// recording shows it there, with its buttons, and the detail's Copy copies it as Return does
+    /// (#552).
+    func testScreengrabsTabClickShowsATileInTheDetailBesideTheGrid() {
+        launchScreengrabsTab()
+        let recording = element("palette.screengrabs.recording")
+        let copy = element("palette.screengrabs.detail.copy")
+        XCTAssertTrue(element("palette.screengrabs.detail.empty").waitForExistence(timeout: 5), "the hint, before a tile is highlighted")
+        XCTAssertFalse(copy.exists)
+
+        recording.click()
+        XCTAssertTrue(copy.waitForExistence(timeout: 5), "the detail's Copy")
+        XCTAssertGreaterThan(copy.frame.minX, recording.frame.maxX, "beside the grid")
+        XCTAssertTrue(element("palette.screengrabs.detail.edit").exists)
+        XCTAssertTrue(element("palette.screengrabs.detail.delete").exists, "Move to Trash")
+        XCTAssertFalse(element("palette.screengrabs.detail.empty").exists)
+
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("com.serp.keybumps.uitests.clipboard"))
+        let before = pasteboard.changeCount
+        copy.click()
+        XCTAssertTrue(waitForNonExistence(of: recording), "Copy copies, which closes the palette")
+        let copied = expectation(for: NSPredicate { _, _ in pasteboard.changeCount != before }, evaluatedWith: nil)
+        XCTAssertEqual(XCTWaiter().wait(for: [copied], timeout: 5), .completed, "something was copied")
+        let files = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        XCTAssertEqual(files.map(\.lastPathComponent), ["video-1.mov"], "the recording's video, as a file")
+    }
+
     /// ⌘Return opens the recording window on the saved recording, with Move to Trash and Done in
     /// Discard's and Save's places; Done only closes it.
     func testScreengrabsTabCommandReturnOpensTheRecordingWindow() {

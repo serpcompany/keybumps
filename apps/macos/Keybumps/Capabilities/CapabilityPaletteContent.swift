@@ -113,18 +113,22 @@ extension CapabilityPaletteContent {
 }
 
 /// What one click on a tab's row or tile does, which the tab's registration declares
-/// (`CapabilityPaletteTab.clickAction`, #552). A right-click's context menu, the pointer's highlight,
-/// and the keys are the same either way.
+/// (`CapabilityPaletteTab.clickAction`, #552), and so whether the pointer moving over a row
+/// highlights it (`CommandPaletteController.hoverHighlights`). A right-click's context menu and the
+/// keys are the same either way.
 enum PaletteClickAction: Equatable {
     /// One click does what Return does, where a row has one obvious job and no detail pane: Search
     /// opens or runs it, Clipboard, Snippets, and Emoji copy it, and Timers starts, pauses, resumes,
     /// or restarts it. The second click of a double-click does nothing, so a double-click never does
-    /// it twice, as pausing a timer, then resuming it.
+    /// it twice, as pausing a timer, then resuming it. The pointer moving over a row highlights it,
+    /// as in Raycast (#347).
     case acts
     /// One click highlights the row, and a double-click does what Return does, where the tab shows
-    /// the highlighted row's actions: in the detail beside the list (Dictation, Translate) or in the
-    /// footer (ScreenGrabs). A click in a grid goes into it, as Down does. The Hotkeys tab's rows
-    /// have no action, so they only highlight.
+    /// the highlighted row's actions in the detail beside the list or grid (Dictation, Translate,
+    /// ScreenGrabs). A click in a grid goes into it, as Down does. The Hotkeys tab's rows have no
+    /// action, so they only highlight. The highlight follows only clicks and keys: the pointer
+    /// moving over a row only marks it, so on its way to the detail's buttons it never changes
+    /// which row they act on.
     case selects
 
     /// Does what a click does here: `select` highlights the row, `activate` does what Return does,
@@ -349,7 +353,7 @@ struct PaletteContentActions {
     /// Closes the palette.
     let dismiss: () -> Void
     /// Moves the selection to a row, as a click on it does. In a grid, it goes into the grid's items,
-    /// as Down does, so the arrow keys move on from it and the footer names its actions.
+    /// as Down does, so the arrow keys move on from it and the footer and the detail name its actions.
     let selectRow: (Int) -> Void
     /// Empties the search field, as after a row has used what was typed. On a tab whose rows reset
     /// the selection while typing, it also moves the selection back to the first row, so select a

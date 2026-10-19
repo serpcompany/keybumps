@@ -767,20 +767,23 @@ struct ScreengrabsRecordingsTabTests {
 
 /// Made-up recordings and screenshots for the tab, indexed and kept in `RecordingLibraryFixture`'s
 /// temporary folder, with the Trash, Quick Look, Finder, and opening the window recorded, and a
-/// palette that shows the rows on the fixture's named pasteboard.
+/// palette that shows the rows on the fixture's named pasteboard. `ScreengrabDetailTests` uses it
+/// too.
 @MainActor
-private final class RecordingsTabFixture {
+final class RecordingsTabFixture {
     let library = RecordingLibraryFixture()
     let preferences: AppPreferences
     let log = RecordingsTabLog()
     let quickLook = FakeQuickLook()
-    let notices = RecordingNotices()
+    let notices = RecordingsTabNotices()
     let snippets = TemporaryFolder()
     private(set) var trashed: [URL] = []
     var trashFails = false
     private(set) var opened: [UUID] = []
     var openSucceeds = true
     private(set) var revealed: [[URL]] = []
+    /// The palette's filter, which the test sets.
+    var filter: PaletteFilter?
     lazy var recordings = library.library()
     lazy var content: ScreengrabsPaletteContent = ScreengrabsPaletteContent(
         clipboard: library.clipboard,
@@ -796,7 +799,7 @@ private final class RecordingsTabFixture {
         },
         quickLook: quickLook,
         showInFinder: { [weak self] files in self?.revealed.append(files) }
-    ) { nil }
+    ) { [weak self] in self?.filter }
     lazy var palette: CommandPaletteController = {
         let dictationHistory = DictationHistoryService(
             recordingsDirectoryURL: library.root.url.appendingPathComponent("dictation", isDirectory: true)
@@ -856,19 +859,22 @@ private final class RecordingsTabFixture {
 
 /// What the rows ask of the palette.
 @MainActor
-private final class RecordingsTabLog {
+final class RecordingsTabLog {
     enum Call: Equatable {
-        case copyFiles([URL]), pasteFiles([URL]), copyEntry(UUID), pasteEntry(UUID), edit(UUID), dismiss, warn
+        case copyFiles([URL]), pasteFiles([URL]), copyEntry(UUID), pasteEntry(UUID), edit(UUID), dismiss, warn, deleteRow(Int)
     }
 
     private(set) var calls: [Call] = []
     private(set) var warnings: [String] = []
+    /// Each row a tile highlighted (`selectRow`).
+    private(set) var selections: [Int] = []
 
     var actions: PaletteContentActions {
         PaletteContentActions(
             dismiss: { [weak self] in self?.calls.append(.dismiss) },
-            selectRow: { _ in },
+            selectRow: { [weak self] in self?.selections.append($0) },
             clearQuery: {},
+            deleteRow: { [weak self] in self?.calls.append(.deleteRow($0)) },
             copyClipboardEntry: { [weak self] in self?.calls.append(.copyEntry($0.id)) },
             pasteClipboardEntry: { [weak self] in self?.calls.append(.pasteEntry($0.id)) },
             editClipboardImage: { [weak self] in self?.calls.append(.edit($0.id)) },
@@ -883,12 +889,12 @@ private final class RecordingsTabLog {
 }
 
 @MainActor
-private final class FakeQuickLook: ScreengrabsQuickLooking {
+final class FakeQuickLook: ScreengrabsQuickLooking {
     private(set) var previews: [[URL]] = []
     func preview(_ files: [URL]) { previews.append(files) }
 }
 
-private final class RecordingNotices: PaletteNoticePresenting {
+final class RecordingsTabNotices: PaletteNoticePresenting {
     private(set) var messages: [String] = []
     func showNotice(_ message: String, isWarning: Bool) { messages.append(message) }
 }

@@ -172,7 +172,9 @@ final class CommandPaletteState {
         didSet { if !isBrowsingGrid { gridEnteredByPointer = false } }
     }
     /// Whether the pointer, not a key, brought the highlight into the grid. Until a key moves
-    /// within it, Left and Right still switch tabs (#347).
+    /// within it, Left and Right still switch tabs (#347). Only where the pointer highlights a tile
+    /// (`CommandPaletteController.hoverHighlights`), as in the Emoji tab; in the ScreenGrabs tab a
+    /// click or Down goes into the grid, never a hover (#552).
     var gridEnteredByPointer = false
     /// The filter chosen from `/`'s list, shown as a chip in the search field. Choosing or removing
     /// one starts again at the first row.
@@ -284,9 +286,10 @@ struct CommandPaletteHold: Equatable {
     static func == (lhs: Self, rhs: Self) -> Bool { lhs.palette === rhs.palette }
 }
 
-/// Moving the pointer over a palette row or tile highlights it, as in Raycast (#347). Outside the
-/// palette it does nothing. Equal for the same palette, so the environment value doesn't redraw
-/// its readers.
+/// Moving the pointer over a palette row or tile highlights it, as in Raycast (#347), in the tabs
+/// where one click does what Return does; where one click selects, it only marks the row or tile
+/// under the pointer (`CommandPaletteController.hoverHighlights`, #552). Outside the palette it does
+/// nothing. Equal for the same palette, so the environment value doesn't redraw its readers.
 struct CommandPaletteHover: Equatable {
     private weak var palette: CommandPaletteController?
 
@@ -299,6 +302,12 @@ struct CommandPaletteHover: Equatable {
         palette?.hover(row: row)
     }
 
+    /// Whether the pointer over a row highlights it (`CommandPaletteController.hoverHighlights`).
+    /// Where it doesn't, the row or tile under the pointer draws its own hover look
+    /// (`paletteRowBackground(isSelected:)`). True outside the palette, where nothing marks a hover.
+    @MainActor
+    var highlights: Bool { palette?.hoverHighlights ?? true }
+
     static func == (lhs: Self, rhs: Self) -> Bool { lhs.palette === rhs.palette }
 }
 
@@ -310,8 +319,9 @@ extension EnvironmentValues {
 }
 
 extension View {
-    /// A row or tile that takes the highlight when the pointer moves over it (#347). Put it on the
-    /// whole row, padding included.
+    /// A row or tile that takes the highlight when the pointer moves over it (#347), where the
+    /// pointer highlights rows (`CommandPaletteController.hoverHighlights`); elsewhere it changes
+    /// nothing. Put it on the whole row, padding included.
     func paletteHoverHighlights(row: Int) -> some View {
         modifier(PaletteHoverRow(row: row))
     }
@@ -833,7 +843,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         if isGridTab, let tabContent, let move = PaletteMove(keyCode: event.keyCode),
            gridTakes(move, modifiers: event.modifierFlags, ownsUpAndDown: tabContent.gridOwnsUpAndDown) {
             // Until an arrow key moves within the grid, Left and Right switch tabs, even after the
-            // pointer highlighted a tile on its way across.
+            // pointer highlighted a tile on its way across, where it highlights one (`hoverHighlights`).
             guard state.isBrowsingGrid, !(state.gridEnteredByPointer && (move == .left || move == .right)) else {
                 enterGrid(or: move)
                 return nil
@@ -950,15 +960,27 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         }
     }
 
-    /// The pointer moved over a row or tile: it takes the highlight (`selectFromPointer`), and in a
-    /// grid that brings the arrow keys into it too.
+    /// The pointer moved over a row or tile: where the pointer highlights rows (`hoverHighlights`),
+    /// it takes the highlight (`selectFromPointer`), and in a grid that brings the arrow keys into
+    /// it too. Elsewhere it changes nothing: not the highlight, the detail, the footer, or the keys.
     func hover(row: Int) {
         // Not behind a Delete alert. A row view on its way out, after a Delete or while a list
         // re-filters, can still report.
-        guard !isPresentingConfirmation, (0..<itemCount).contains(row), state.selectFromPointer(row),
+        guard hoverHighlights, !isPresentingConfirmation, (0..<itemCount).contains(row), state.selectFromPointer(row),
               isGridTab, !state.isBrowsingGrid else { return }
         state.isBrowsingGrid = true
         state.gridEnteredByPointer = true
+    }
+
+    /// Whether the pointer moving over a row or tile highlights it, as in Raycast (#347): in the
+    /// tabs where one click does what Return does, and in `/`'s list of filters, where a click
+    /// chooses one. Where one click selects (`PaletteClickAction.selects`, #552: Dictation,
+    /// Translate, ScreenGrabs, and Hotkeys), the highlight, and with it the detail beside the list,
+    /// the footer, and every key, follows only clicks and keys. The row or tile under the pointer
+    /// shows a hover look of its own (`paletteRowBackground(isSelected:)`), so the pointer crossing
+    /// a row on its way to the detail's Delete never changes what it deletes.
+    var hoverHighlights: Bool {
+        filterMenu != nil || state.tab.clickAction == .acts
     }
 
     private func moveSelection(_ delta: Int) {
@@ -981,8 +1003,9 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         tabContent?.click(click, row: row, query: state.historyQuery, palette: contentActions)
     }
 
-    /// What a module tab's rows can ask of the palette.
-    private var contentActions: PaletteContentActions {
+    /// What a module tab's rows can ask of the palette. Internal so tests can act as a tab's rows
+    /// do, such as a tile's context menu.
+    var contentActions: PaletteContentActions {
         PaletteContentActions(
             dismiss: { [weak self] in self?.dismiss() },
             selectRow: { [weak self] row in
@@ -1169,8 +1192,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
             guard filteredClipboard.indices.contains(index) else { return false }
             clipboard.removeFromClipboardTab(filteredClipboard[index])
         case .dictation:
-            // A recording can't be made again, and a hover on the way to Delete can change which
-            // one is highlighted, so Delete asks first.
+            // A recording can't be made again, so Delete asks first.
             guard filteredDictations.indices.contains(index) else { return false }
             requestDictationDeletion(filteredDictations[index])
             return true
