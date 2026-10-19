@@ -556,7 +556,7 @@ final class ScreengrabsPaletteContent: CapabilityPaletteContent {
             query: query,
             listsScreenshots: listsScreenshots,
             listsRecordings: preferences.compatibility.supportsRecording,
-            screenshotKeys: preferences.capabilityShortcut(for: .screenshotArea)?.displayName,
+            screenshotKeys: preferences.capabilityShortcut(for: .screenshotAreaAndEdit)?.displayName,
             recordingKeys: preferences.capabilityShortcut(for: .screencast)?.displayName
         )
     }

@@ -42,7 +42,7 @@ final class ScreenshotEditorTests: XCTestCase {
     }
 
     func testToolShortcutsAndColorUse() {
-        XCTAssertEqual(ScreenshotEditorTool.allCases, [.pixelate, .redact, .arrow, .draw, .text])
+        XCTAssertEqual(ScreenshotEditorTool.allCases, [.arrow, .text, .draw, .pixelate, .redact], "the owner's order (#544)")
         XCTAssertEqual(ScreenshotEditorTool.pixelate.title, "Blur")
         XCTAssertEqual(ScreenshotEditorTool.matching(key: "B"), .pixelate)
         XCTAssertNil(ScreenshotEditorTool.matching(key: "p"), "the letter follows the Blur label")
@@ -52,8 +52,9 @@ final class ScreenshotEditorTests: XCTestCase {
         XCTAssertEqual(["1", "2", "3", "4", "5"].compactMap(ScreenshotEditorTool.matching(key:)), ScreenshotEditorTool.allCases)
         XCTAssertNil(ScreenshotEditorTool.matching(key: "6"))
         XCTAssertNil(ScreenshotEditorTool.matching(key: "0"))
-        XCTAssertEqual(ScreenshotEditorWindowController.tool(forKey: "3", modifiers: []), .arrow)
-        XCTAssertEqual(ScreenshotEditorWindowController.tool(forKey: "2", modifiers: [.numericPad]), .redact, "keypad digits work")
+        XCTAssertEqual(ScreenshotEditorWindowController.tool(forKey: "1", modifiers: []), .arrow)
+        XCTAssertEqual(ScreenshotEditorWindowController.tool(forKey: "4", modifiers: []), .pixelate)
+        XCTAssertEqual(ScreenshotEditorWindowController.tool(forKey: "2", modifiers: [.numericPad]), .text, "keypad digits work")
         XCTAssertNil(ScreenshotEditorWindowController.tool(forKey: "1", modifiers: [.command]), "⌘1 is not a tool shortcut")
         XCTAssertNil(ScreenshotEditorWindowController.tool(forKey: "4", modifiers: [.option]))
         XCTAssertTrue(ScreenshotEditorWindowController.isSaveKey("\r", modifiers: []))

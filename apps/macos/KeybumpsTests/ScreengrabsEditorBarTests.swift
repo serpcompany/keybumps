@@ -66,19 +66,20 @@ struct ScreengrabsEditorBarTests {
 
     // MARK: What moved into the bar
 
-    @Test("The Screenshot Editor's bar picks its tools and colors, and dims the colors for a tool drawn in none")
+    @Test("The Screenshot Editor's bar picks its tools, Arrow first and picked when it opens (#544), and colors, and dims the colors for a tool drawn in none")
     func screenshotEditorToolsAndColors() throws {
         let model = ScreenshotEditorModel()
         let bar = ScreenshotEditorBar(model: model, cancel: {}, save: {})
         let titles = bar.tools.map(\.title)
-        #expect(titles == ["Blur", "Redact", "Arrow", "Draw", "Text"])
-        #expect(bar.tools.filter(\.isSelected).map(\.title) == ["Blur"])
-        #expect(!bar.swatchesAreEnabled, "Blur has no color")
+        #expect(titles == ["Arrow", "Text", "Draw", "Blur", "Redact"])
+        #expect(bar.tools.map(\.number) == ["1", "2", "3", "4", "5"])
+        #expect(bar.tools.filter(\.isSelected).map(\.title) == ["Arrow"])
+        #expect(bar.swatchesAreEnabled)
 
         try #require(bar.tools.last).select()
-        #expect(model.tool == .text)
-        #expect(bar.tools.filter(\.isSelected).map(\.title) == ["Text"])
-        #expect(bar.swatchesAreEnabled)
+        #expect(model.tool == .redact)
+        #expect(bar.tools.filter(\.isSelected).map(\.title) == ["Redact"])
+        #expect(!bar.swatchesAreEnabled, "Redact has no color")
 
         let colors = bar.swatches.map(\.color)
         #expect(colors == ScreenshotAnnotationColor.allCases)

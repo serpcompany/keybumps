@@ -24,7 +24,7 @@ struct PluginManifestTests {
     func derived() {
         #expect(CapabilityDescriptor.timer.shortcuts == [.timer])
         #expect(CapabilityDescriptor.screenshotTools.shortcuts == [
-            .screenshotScreen, .screenshotScreenAndEdit, .screenshotArea,
+            .screenshotScreen, .screenshotScreenAndEdit, .screenshotAreaAndEdit,
             .screencast, .screencastPause, .screencastStop, .screencastDiscard, .screencastDraw,
         ])
         #expect(CapabilityDescriptor.timer.preferenceGroups.map(\.title) == ["When a timer ends", "Menu bar"])
@@ -417,7 +417,7 @@ struct PluginSettingsPageTests {
                 ShortcutRowControl(shortcut: .screencast, control: .restoreDefault, isEnabled: runs),
             ]
             #expect(recordScreen == expected, "macOS \(version)")
-            let area = controls.filter { $0.shortcut == .screenshotArea && $0.control == .field }
+            let area = controls.filter { $0.shortcut == .screenshotAreaAndEdit && $0.control == .field }
             #expect(area.map(\.isEnabled) == [true], "macOS \(version): a screenshot hotkey's field")
         }
     }
