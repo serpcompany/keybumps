@@ -22,9 +22,9 @@ name: Web deploy
 # links (#565), because the zone's bot protection gives runners HTTP 403 on updates.keybumps.app.
 # The read uses CLOUDFLARE_R2_TOKEN, the Release Keybumps workflow's token for the keybumps-updates
 # bucket, in a step of its own before pnpm install; only that step gets it. The Build step passes
-# the file as RELEASE_INDEX, which the site build reads once #565's site change lands. If the read
-# fails, the job stops before deploying. If it fails with an authorization error, ask the owner;
-# don't widen the token.
+# the file as RELEASE_INDEX, which the site build reads (apps/web/scripts/release-index.mjs). If the
+# read fails, the job stops before deploying. If it fails with an authorization error, ask the
+# owner; don't widen the token.
 on:
   push:
     branches: [main]
