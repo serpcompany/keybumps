@@ -5,7 +5,8 @@ import SwiftUI
 @MainActor
 @Observable
 final class ScreenshotEditorModel {
-    var tool: ScreenshotEditorTool = .pixelate { didSet { onChange?() } }
+    /// Opens on the first tool, Arrow (#544).
+    var tool: ScreenshotEditorTool = .arrow { didSet { onChange?() } }
     var color: ScreenshotAnnotationColor = .red { didSet { onChange?() } }
     private(set) var history = ScreenshotEditorHistory() { didSet { onChange?() } }
     var isEditingText = false
