@@ -365,6 +365,17 @@ struct ScreencastReviewEditingTests {
         return names.filter { $0.contains(".editing.") }
     }
 
+    /// Waits until the export is under way and the stand-in has written its 2 edited copies. The
+    /// model is exporting before the export's closure runs, off the main actor, so a test that acted
+    /// on `isExporting` alone could find no copies yet, or have them written after it removed them (#562).
+    private func eventuallyWritingCopies(
+        _ model: ScreencastReviewModel,
+        _ recording: ScreencastReviewInput,
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) async throws {
+        try await eventually({ model.isExporting && partialFiles(of: recording).count == 2 }, sourceLocation: sourceLocation)
+    }
+
     /// The fixture's stand-in originals, as written.
     private func originalsUntouched(_ input: ScreencastReviewInput) -> Bool {
         guard case .video(let capture) = input else { return false }
@@ -382,8 +393,7 @@ struct ScreencastReviewEditingTests {
         let model = fixture.model(recording, export: export.export)
         trimmed(model)
         let saving = Task { await model.save() }
-        try await eventually { model.isExporting }
-        #expect(partialFiles(of: recording).count == 2, "the stand-in's copies are there")
+        try await eventuallyWritingCopies(model, recording)
 
         await model.close()
         await saving.value
@@ -403,7 +413,7 @@ struct ScreencastReviewEditingTests {
         let model = fixture.model(recording, export: export.export)
         trimmed(model)
         let saving = Task { await model.save() }
-        try await eventually { model.isExporting }
+        try await eventuallyWritingCopies(model, recording)
 
         model.saveNow()
         #expect(fixture.outcomes == [.saved(recording)], "at once")
@@ -426,7 +436,7 @@ struct ScreencastReviewEditingTests {
         let model = try #require(panel.model)
         trimmed(model)
         let saving = Task { await model.save() }
-        try await eventually { model.isExporting }
+        try await eventuallyWritingCopies(model, recording)
 
         panel.makeWayForNextCapture()
         try await eventually { !outcomes.outcomes.isEmpty }
