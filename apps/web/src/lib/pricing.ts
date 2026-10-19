@@ -1,9 +1,8 @@
 /**
  * What Keybumps costs and what a purchase includes: the one place to change when trying a different
- * price or pricing model. The pricing card, the home page's pricing section, /pricing/, the page
- * descriptions, and the terms and refund policy all read from here, and `pricing.test.ts` fails if
- * any of it is written out anywhere else. One exception so far: /license/ still says "one Mac"
- * (#269).
+ * price or pricing model. The pricing card, /pricing/, the page descriptions, and the terms and
+ * refund policy all read from here, and `pricing.test.ts` fails if any of it is written out
+ * anywhere else. One exception so far: /license/ still says "one Mac" (#269).
  *
  * Terms of sale: `renewalPrice`, `macs`, `macsInWords`, `refundDays`, `guarantee`, `scope`, and
  * `model.terms` appear on the legal pages, so changing one changes them. `pricing.test.ts` pins these
@@ -53,25 +52,23 @@ export const pricing = {
   model: {
     /** The pricing card's pill. */
     label: 'One-time purchase',
-    /** The home page pricing section's headline. */
-    headline: 'One price. Yours to keep.',
-    /** Under the home page pricing headline, before the guarantee. */
-    summary: 'Pay once. A year of updates included.',
     /** Under /pricing/'s headline. */
     pageLede: 'Pay once and keep it. A year of updates and new plugins included.',
     /** On the pricing card's list. */
     updates: '1 year of updates, including new plugins',
     /** On the pricing card's list, after `updates`. */
-    renewal: `Then ${renewalPrice}/year for updates, or keep the version you have`,
+    keep: 'Yours to keep, even if you don’t renew',
+    /** The pricing card's fine print, before taxes. */
+    renewal: `After the first year, updates are ${renewalPrice}/year. Renewing is optional.`,
     /** /pricing/'s first question. */
     question: {
-      q: 'Is this a subscription?',
-      a: `No. You pay ${price} once, and that includes a year of updates and new plugins. After that, updates are ${renewalPrice} a year. If you don’t renew, the version you have is yours to keep and keeps working.`
+      q: 'Do I have to renew?',
+      a: `No. You pay ${price} once, and that includes a year of updates and new plugins. After that, renewing updates is optional, at ${renewalPrice} a year. If you don’t renew, Keybumps keeps working, and the last version released in your year is yours to keep.`
     },
     /** /pricing/'s description, before the guarantee. */
     description: `Keybumps is a ${price} one-time purchase for ${macsText}, including a year of updates`,
     /** Terms § 3, after the grant: how long the license lasts and what it includes. */
-    terms: `A license does not expire. It includes the updates released in the year after purchase, new plugins among them. When that year ends you may keep using the last version released in it, or renew updates for another year (currently ${renewalPrice} a year). Licenses bought before October 19, 2026 include the updates released through October 19, 2027.`
+    terms: `A license does not expire. It includes the updates released in the year after purchase, new plugins among them; a license bought before October 19, 2026 includes the updates released through October 19, 2027. When that year ends you may keep using the last version released in it, or renew updates for another year (currently ${renewalPrice} a year).`
   }
 } as const
 
@@ -80,7 +77,7 @@ export const pricingIncludes = [
   'Every plugin that runs on your Mac',
   `License for ${pricing.macsLabel} — move it to a new Mac any time`,
   pricing.model.updates,
-  pricing.model.renewal,
+  pricing.model.keep,
   'No account and no cloud sync',
   pricing.guarantee
 ]

@@ -57,6 +57,8 @@ describe('pricing', () => {
       'subscription',
       'yours to keep',
       'future updates',
+      'year of updates',
+      'October 19, 2027',
       ...strings(pricing.model)
     ].map(word => word.toLowerCase())
     // #269: /license/ is a (sensitive-url) page, so it moves with its own leak test.
@@ -101,7 +103,7 @@ describe('pricing', () => {
       scope:
         'The license covers the Keybumps features that run on your Mac. Online services that run on our servers, such as AI or cloud features, are not included; if we offer them, they are sold separately.',
       terms:
-        'A license does not expire. It includes the updates released in the year after purchase, new plugins among them. When that year ends you may keep using the last version released in it, or renew updates for another year (currently $49 a year). Licenses bought before October 19, 2026 include the updates released through October 19, 2027.'
+        'A license does not expire. It includes the updates released in the year after purchase, new plugins among them; a license bought before October 19, 2026 includes the updates released through October 19, 2027. When that year ends you may keep using the last version released in it, or renew updates for another year (currently $49 a year).'
     })
   })
 })
