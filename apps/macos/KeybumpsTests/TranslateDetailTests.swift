@@ -459,7 +459,7 @@ struct PaletteAccessibility {
             let accessibility = PaletteAccessibility(panel: panel, root: root)
             // The palette's own element, once SwiftUI has built them, and its list, once laid out.
             _ = try #require(await accessibility.waitFor {
-                children(of: root).first { label(of: $0) == "Keybumps command palette" }
+                children(of: root).first { label(of: $0) == "Quick Search" }
             }, "SwiftUI built no accessibility elements")
             _ = await accessibility.waitFor {
                 root.layoutSubtreeIfNeeded()

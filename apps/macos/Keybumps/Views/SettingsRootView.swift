@@ -961,12 +961,12 @@ struct KeyboardShortcutterSettingsView: View {
                 KeyboardGlyphLegendContent(entries: KeyboardShortcutRegistry.legendEntries)
             }
             SettingsGroup {
-                Toggle("Show Hotkeys tab in the Command Palette", isOn: Binding(
+                Toggle("Show Hotkeys tab in Quick Search", isOn: Binding(
                     get: { model.preferences.showsHotkeysTab },
                     set: { model.preferences.showsHotkeysTab = $0 }
                 ))
                 Button("Open Shortcut Coach History") { model.showKeyboardShortcutterHistory() }
-                Text("View, filter, and clear detected actions in the Command Palette.")
+                Text("View, filter, and clear detected actions in Quick Search’s Hotkeys tab.")
                     .foregroundStyle(.secondary)
             }
         }

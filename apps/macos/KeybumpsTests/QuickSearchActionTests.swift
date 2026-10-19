@@ -218,7 +218,7 @@ struct QuickSearchActionTests {
         #expect(action.shortcut == nil && action.commandKey == nil, "No Command-key of its own")
         #expect(!action.isTurnedOff(enabledCapabilities: []))
         #expect(action.destination(enabledCapabilities: [.screenshotTools]) == .action(Self.start("⌃⌥⇧R")))
-        #expect(action.destination(enabledCapabilities: []).hint == "Closes the palette, then runs Record Screen")
+        #expect(action.destination(enabledCapabilities: []).hint == "Closes Quick Search, then runs Record Screen")
         #expect(PaletteFilter.commands.matches(.command(action)), "/'s Commands filter keeps it")
     }
 
