@@ -91,13 +91,13 @@ const featured: readonly {
     headline: 'Capture, mark up, and paste in seconds.',
     lede: 'Take a screenshot, cover what shouldn’t be seen, and paste it anywhere.',
     features: [
-      'Blur, redact, arrows, drawing, and text',
-      'Screenshot Screen and Edit (⇧⌘3) copies only when you save, so nothing unredacted reaches the clipboard',
+      'Arrows, text, drawing, blur, and redaction',
+      '⇧⌘3 and ⇧⌘4 open the editor and copy only when you save, so nothing unredacted reaches the clipboard',
       'Your screenshots and recordings in a grid of large thumbnails in their own tab'
     ],
     options: {
       label: 'Capture',
-      values: ['Area ⇧⌘4', 'Every screen ⇧⌘2', 'Every screen, then edit ⇧⌘3']
+      values: ['Area, then edit ⇧⌘4', 'Every screen ⇧⌘2', 'Every screen, then edit ⇧⌘3']
     },
     visual: <ScreenshotVisual />
   },

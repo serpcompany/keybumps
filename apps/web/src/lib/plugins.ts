@@ -301,7 +301,7 @@ export const plugins: readonly Plugin[] = [
     shortcuts: [
       { title: 'Screenshot Screen', keys: '⇧⌘2' },
       { title: 'Screenshot Screen and Edit', keys: '⇧⌘3' },
-      { title: 'Screenshot Area', keys: '⇧⌘4' },
+      { title: 'Screenshot Area and Edit', keys: '⇧⌘4' },
       { title: 'Record Screen', keys: '⇧⌘5' },
       { title: 'Pause & Resume Recording', keys: null, note: 'Only while recording' },
       { title: 'Stop Recording', keys: null, note: 'Only while recording' },
@@ -339,7 +339,7 @@ export const plugins: readonly Plugin[] = [
     requires: ['clipboard-history'],
     isDefault: true,
     overview: [
-      'ScreenGrabs takes screenshots with its own hotkeys, saves them in your Screenshots folder, and puts them in Clipboard History, ready to paste. ⇧⌘2 captures every screen, ⇧⌘3 captures every screen and opens the editor, and ⇧⌘4 captures an area you select. Mark up a screenshot, or any image you copied, with blur, redact, arrow, draw, and text.',
+      'ScreenGrabs takes screenshots with its own hotkeys, saves them in your Screenshots folder, and puts them in Clipboard History, ready to paste. ⇧⌘2 captures every screen, ⇧⌘3 captures every screen and opens the editor, and ⇧⌘4 captures an area you select and opens the editor. Mark up a screenshot, or any image you copied, with arrow, text, draw, blur, and redact.',
       'On macOS 15 or later, ⇧⌘5 records an area, a window, a screen, or all your screens, with your voice and the Mac’s sound. When you stop, the recording opens in a window where you can trim, crop, and blur it before you save it in your Recordings folder. The ScreenGrabs tab (⌘3) lists your recordings beside your screenshots, newest first.'
     ],
     features: [
@@ -347,8 +347,8 @@ export const plugins: readonly Plugin[] = [
       'Choose where screenshots and, on macOS 15 or later, recordings save in Settings › ScreenGrabs, each recording in a folder of its own; until you do, both go where macOS saves screenshots, usually the Desktop',
       'Screenshots from these hotkeys and from macOS’s own tools appear in Clipboard History and the ScreenGrabs tab, a grid of large thumbnails',
       'New screenshots also go on the clipboard, unless you turn that off or copied something since',
-      'An editor with blur, redact, arrow, draw, and text; Save (Return) copies the result and saves “<name> (edited).png” beside the original',
-      'Screenshot Screen and Edit copies only when you Save, so an unredacted shot never lands on the clipboard',
+      'An editor with arrow, text, draw, blur, and redact; Save (Return) copies the result and saves “<name> (edited).png” beside the original',
+      'Screenshot Screen and Edit and Screenshot Area and Edit copy only when you Save, so an unredacted shot never lands on the clipboard',
       'In the ScreenGrabs tab, Return or ⌘C copies a screenshot or a recording, ⌘P pastes it into the app you were using, and ⌘Return opens a screenshot in the editor or a recording in its window; ⌘E edits any image in Clipboard History',
       'On macOS 15 or later, Record Screen (⇧⌘5, or “record” in Quick Search) records an area, a window, a screen, or all your screens',
       'Records your voice and the Mac’s sound, each with its own switch, after a countdown you can change',
@@ -360,7 +360,10 @@ export const plugins: readonly Plugin[] = [
       'While it’s on, Keybumps uses ⇧⌘3, ⇧⌘4, and ⇧⌘5 in place of macOS’s own, and gives them back when you turn it off'
     ],
     howTo: [
-      { text: 'Press ⇧⌘4 and select an area, or ⇧⌘2 for every screen.', keys: '⇧⌘4' },
+      {
+        text: 'Press ⇧⌘4 and select an area to open it in the editor, or ⇧⌘2 for every screen.',
+        keys: '⇧⌘4'
+      },
       {
         text: 'Open the Command Palette and press ⌘3 for the ScreenGrabs tab, which lists your screenshots and recordings. ⌘Return marks a screenshot up or opens a recording.',
         keys: '⌘3'
@@ -383,14 +386,14 @@ export const plugins: readonly Plugin[] = [
         q: 'Which Macs can record?',
         a: 'Recording needs macOS 15 or later. On macOS 14, ScreenGrabs takes screenshots as before and leaves ⇧⌘5 to macOS.'
       },
-      { q: 'What can I add to a screenshot?', a: 'Blur, redact, arrows, drawing, and text.' },
+      { q: 'What can I add to a screenshot?', a: 'Arrows, text, drawing, blur, and redaction.' },
       {
         q: 'Can I edit a recording?',
         a: 'Yes. When you stop, it opens in a window where you can trim the ends, cut out a section, crop it, and blur what shouldn’t show, then save or copy it.'
       },
       {
         q: 'Can an unredacted screenshot reach my clipboard?',
-        a: 'Not with Screenshot Screen and Edit (⇧⌘3): it copies only when you Save.'
+        a: 'Not with Screenshot Screen and Edit (⇧⌘3) or Screenshot Area and Edit (⇧⌘4): they copy only when you Save.'
       },
       {
         q: 'Where are screenshots and recordings saved?',
