@@ -1080,7 +1080,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
     }
 
     /// Emoji Picker's part in Quick Search (#333): the emoji a query finds, and what using one
-    /// records. `matches` returns none while it's off or Show emoji in Quick Search is.
+    /// records. `matches` returns none while it's off or Show emoji in the Search tab is.
     func setQuickSearchEmoji(
         matches: @escaping (_ query: String) -> [QuickSearchEmoji],
         use: @escaping (QuickSearchEmoji) -> Void

@@ -134,7 +134,7 @@ struct PluginManifestTests {
         #expect(MacPermission.accessibility.explanation.contains("⌘V in Quick Search"))
     }
 
-    @Test("What plugins and permissions say calls the window Quick Search, never the Command Palette or the palette (ADR 0012)")
+    @Test("What plugins and permissions say calls the window Quick Search, never the Command Palette or the palette, and its first tab's results the Search tab's (ADR 0012)")
     func quickSearchIsTheWindowsName() {
         var texts = MacPermission.allCases.map(\.explanation)
         for descriptor in CapabilityCatalog.descriptors {
@@ -147,6 +147,11 @@ struct PluginManifestTests {
         for text in texts {
             #expect(!text.localizedCaseInsensitiveContains("palette"), "\(text)")
         }
+        // Results are the Search tab's, not the whole window's, and so is the switch that adds emoji to them.
+        for text in texts where text.localizedCaseInsensitiveContains("results") {
+            #expect(!text.contains("Quick Search"), "\(text)")
+        }
+        #expect(PluginPreference.emojiInQuickSearch.title == "Show emoji in the Search tab")
         #expect(CapabilityDescriptor.snippets.settingsPage?.summary == "Save text you reuse, then copy or paste it from Quick Search.")
     }
 
