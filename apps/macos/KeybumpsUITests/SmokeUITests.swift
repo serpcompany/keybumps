@@ -51,7 +51,9 @@ final class SmokeUITests: XCTestCase {
 
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 5), "The sidebar has the stock search field")
-        // Typed at the app, not the field, so the rows filter only if Command-F gave the field the keyboard.
+        // The list has the keyboard, and the typing goes to the app, not the field, so the rows filter
+        // only if Command-F moved the keyboard to the field; otherwise typing selects a row by name.
+        element("settings.sidebar.general").click()
         app.typeKey("f", modifierFlags: .command)
         app.typeText("clip")
         XCTAssertTrue(element("settings.sidebar.clipboard").waitForExistence(timeout: 5))
