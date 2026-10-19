@@ -125,6 +125,14 @@ extension IndexedRecording {
     /// it started, and "video". Never its review.
     var searchableText: String { "\(screenRecordingName) video" }
 
+    /// Each display's full video and its mixdown, the files that hold it: what Delete's Move to Trash
+    /// checks its folder holds, and what the detail pane's Size adds up.
+    var files: [URL] {
+        videos.flatMap { video in
+            [folder.appendingPathComponent(video.file)] + [video.mixdown].compactMap { $0.map(folder.appendingPathComponent) }
+        }
+    }
+
     /// Its length on the tile: `0:42`, or `1:02:05` past an hour.
     static func lengthText(_ seconds: Double) -> String {
         let total = seconds.isFinite ? max(Int(seconds.rounded(.down)), 0) : 0
@@ -240,8 +248,12 @@ enum ScreengrabsTabContent: Equatable {
 /// (`ScreengrabsTabContent`). Screenshots need Clipboard History on; recordings don't, and show only
 /// where ScreenGrabs records.
 ///
-/// - A click highlights a screengrab, going into the grid as Down does, and the footer names its
-///   actions (`PaletteClickAction.selects`, #552).
+/// - The grid is two columns, with the highlighted screengrab in full beside it, in the Dictation
+///   tab's list-and-detail layout (#552): its picture, a button for each of its keys, its name, and
+///   its information (`detail(row:query:)`, `ScreengrabDetail`). Until Down or a click goes into the
+///   grid, the detail says how to show one there.
+/// - A click highlights a screengrab, going into the grid as Down does, and the detail and the
+///   footer name its actions (`PaletteClickAction.selects`, #552).
 /// - **Return** or a double-click copies: a screenshot as Clipboard History restores it, a recording
 ///   as its files, every display's, as the recording window's Copy does, kept out of Clipboard
 ///   History. **⌘V** pastes it.
@@ -251,12 +263,13 @@ enum ScreengrabsTabContent: Equatable {
 /// - **Space** opens it in Quick Look (`ScreengrabsQuickLooking`).
 /// - **Delete** removes a screenshot from the tab and leaves its file. On a recording it asks, then
 ///   moves its folder to the Trash (`RecordingTrash`). Clear All clears screenshots only.
-/// - The footer and the context menu name these keys in that order, Delete's last (#552).
+/// - The footer, the detail's buttons, and the context menu name these keys in that order, Delete's
+///   last (#552), and each button does what its key does (`run(_:on:at:palette:)`).
 /// - A recording moved or deleted outside Keybumps, its folder or a display's video, stays, dimmed,
 ///   marked "Moved or deleted" (`IndexedRecording.isMissing`, looked at again each time the tab
 ///   shows): its keys say it couldn't open, as the recording window can't, and Delete removes it
 ///   from the tab at once, with no question.
-/// - The context menu has Show in Finder too.
+/// - The context menu and the detail have Show in Finder too, which no key does.
 @MainActor
 final class ScreengrabsPaletteContent: CapabilityPaletteContent {
     let tab = CommandPaletteTab.screenshots
@@ -313,9 +326,9 @@ final class ScreengrabsPaletteContent: CapabilityPaletteContent {
     /// then keeps Left and Right for its caret.
     var gridOwnsUpAndDown: Bool { true }
 
-    /// Up and Down move a row and Left and Right one screengrab. Each stays put where there's
-    /// nothing to move to, so Down above a shorter last row stays put, and Up from the top row
-    /// leaves the grid.
+    /// Up and Down move a row of the grid's two columns and Left and Right one screengrab. Each stays
+    /// put where there's nothing to move to, so Down above a shorter last row stays put, and Up from
+    /// the top row leaves the grid.
     func selection(after move: PaletteMove, from row: Int, query: String) -> Int? {
         let target = switch move {
         case .up: row - ScreengrabGrid.columnCount
@@ -427,6 +440,43 @@ final class ScreengrabsPaletteContent: CapabilityPaletteContent {
         }
     }
 
+    /// The screengrab at `row` as the detail beside the grid shows it (#552), or nil where there's
+    /// none, as before Down or a click goes into the grid, when the palette highlights no row.
+    ///
+    /// Its buttons are the footer's actions, in its order, with its names and keys: Copy ↵ (⌘C
+    /// too), Paste ⌘V, Edit ⌘E, and Quick Look Space; then Show in Finder, which no key does, where
+    /// the context menu has it; then Delete ⌫, last, Move to Trash on a recording. One moved or
+    /// deleted has only Remove. While the search field has text or a filter, Delete reads ⌘⌫ and
+    /// Quick Look has no key, as in the footer, since ⌫ and Space edit the search there.
+    func detail(row: Int, query: String) -> ScreengrabDetail? {
+        guard let item = item(at: row, query: query) else { return nil }
+        let footer = footerActions(row: row, query: query)
+        var buttons: [ScreengrabDetail.ActionButton] = []
+        if let copy = footer.primary {
+            buttons.append(.init(action: .copy, title: copy, systemImage: "doc.on.doc", shortcuts: [["↵"], ["⌘", "C"]]))
+        }
+        if let paste = footer.secondary.first(where: \.isPaste) {
+            buttons.append(.init(action: .paste, title: paste.title, systemImage: "doc.on.clipboard", shortcuts: [paste.keys]))
+        }
+        if let edit = footer.secondary.first(where: { $0 == .edit }) {
+            buttons.append(.init(action: .edit, title: edit.title, systemImage: "pencil", shortcuts: [edit.keys]))
+        }
+        if let playback = playback(row: row, query: query), playback.listsInFooter {
+            let space = PaletteKeyAction.space(playback.title)
+            buttons.append(.init(action: .quickLook, title: space.title, systemImage: "eye", shortcuts: query.isEmpty ? [space.keys] : []))
+        }
+        if !item.isMissing, !item.finderFiles.isEmpty {
+            buttons.append(.init(action: .showInFinder, title: "Show in Finder", systemImage: "folder", shortcuts: []))
+        }
+        if let delete = footer.secondary.last(where: \.isDelete) {
+            let keys = query.isEmpty && filter() == nil ? delete.keys : delete.withCommand.keys
+            buttons.append(.init(
+                action: .delete, title: delete.title, systemImage: item.isMissing ? "minus.circle" : "trash", shortcuts: [keys], isDestructive: true
+            ))
+        }
+        return ScreengrabDetail(item: item, buttons: buttons, information: ScreengrabDetail.information(of: item))
+    }
+
     /// Delete on a recording, which asks, then moves its folder to the Trash.
     static let moveToTrash = PaletteKeyAction.delete("Move to Trash")
 
@@ -446,6 +496,21 @@ final class ScreengrabsPaletteContent: CapabilityPaletteContent {
 
     /// A ⌘-click edits, as ⌘Return and ⌘E do.
     var commandClicks: Bool { true }
+
+    /// A tile's context menu or trash button, or one of the detail's buttons, on the screengrab it
+    /// shows, at `row`: each does what its key does, and nothing of its own. Copy is Return's and
+    /// ⌘C's, Paste ⌘V's, Edit ⌘E's, Quick Look Space's, and Delete the Delete key's on `row`, which
+    /// asks first on a recording; Show in Finder has no key.
+    func run(_ action: ScreengrabAction, on item: Screengrab, at row: Int, palette: PaletteContentActions) {
+        switch action {
+        case .copy: choose(item, withCommand: false, palette: palette)
+        case .paste: paste(item, palette: palette)
+        case .edit: choose(item, withCommand: true, palette: palette)
+        case .quickLook: preview(item)
+        case .showInFinder: reveal(item)
+        case .delete: palette.deleteRow(row)
+        }
+    }
 
     /// Each time the tab shows, the index looks at each recording's folder again, so one moved or
     /// deleted since shows as such.
@@ -523,11 +588,8 @@ final class ScreengrabsPaletteContent: CapabilityPaletteContent {
 
     /// Delete's Move to Trash: the recording's folder goes to the Trash, and it leaves the index.
     func moveToTrash(_ recording: IndexedRecording) {
-        let files = recording.videos.flatMap { video in
-            [recording.folder.appendingPathComponent(video.file)] + [video.mixdown].compactMap { $0.map(recording.folder.appendingPathComponent) }
-        }
         do {
-            try trash.moveToTrash(folder: recording.folder, holding: files)
+            try trash.moveToTrash(folder: recording.folder, holding: recording.files)
         } catch {
             palette?.warn(Self.trashFailedMessage)
             return
@@ -606,26 +668,40 @@ private struct ScreengrabsResultsView: View {
                 PaletteEmptyState(title: content.emptyTitle(query: query), systemImage: "camera.viewfinder")
             }
         case .items(let items):
-            ScreengrabGrid(
-                items: items,
-                selection: selection,
-                listsScreenshots: content.listsScreenshots,
-                listsRecordings: content.listsRecordings,
-                recordings: recordings,
-                content: content,
-                actions: actions,
-                click: click,
-                clear: clipboard.clearScreenshots,
-                confirmationPresentationChanged: confirmationPresentationChanged
-            )
+            // The grid on the left and the highlighted screengrab in full on the right (#552), the
+            // hint there until Down or a click goes into the grid.
+            PaletteListDetail(listWidth: ScreengrabGrid.width, highlighted: content.detail(row: selection, query: query)) {
+                ScreengrabGrid(
+                    items: items,
+                    selection: selection,
+                    listsScreenshots: content.listsScreenshots,
+                    listsRecordings: content.listsRecordings,
+                    recordings: recordings,
+                    content: content,
+                    actions: actions,
+                    click: click,
+                    clear: clipboard.clearScreenshots,
+                    confirmationPresentationChanged: confirmationPresentationChanged
+                )
+            } detail: { detail in
+                ScreengrabDetailPane(detail: detail, recordings: recordings) { action in
+                    content.run(action, on: detail.item, at: selection, palette: actions)
+                }
+                .id(detail.item.id)
+            } placeholder: {
+                ScreengrabDetailHint(text: ScreengrabDetail.hint(for: items))
+            }
         }
     }
 }
 
 /// Raycast's Search Screenshots: a grid of large thumbnails with the name and age underneath, so
-/// screengrabs are recognizable at a glance. Arrow keys move through the grid.
+/// screengrabs are recognizable at a glance, in two columns beside the highlighted one in full
+/// (#552). Arrow keys move through the grid.
 private struct ScreengrabGrid: View {
-    static let columnCount = 3
+    static let columnCount = 2
+    /// About 46% of the palette's 1,040 points, so the detail beside it has the rest.
+    static let width: CGFloat = 478
 
     let items: [Screengrab]
     let selection: Int
@@ -655,11 +731,16 @@ private struct ScreengrabGrid: View {
                         )
                         .buttonStyle(PalettePillButtonStyle())
                     } else {
-                        // Recordings don't need Clipboard History; screenshots still do.
+                        // Recordings don't need Clipboard History; screenshots still do. The grid's
+                        // column is too narrow for the whole sentence beside Open Settings, so it's
+                        // shortened there.
                         HStack(spacing: 12) {
-                            Text("Screenshots aren’t listed while Clipboard History is off")
-                                .font(.system(size: 12))
-                                .foregroundStyle(.secondary)
+                            ViewThatFits(in: .horizontal) {
+                                Text("Screenshots aren’t listed while Clipboard History is off")
+                                Text("Screenshots need Clipboard History")
+                            }
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
                             Button("Open Settings") { actions.openSettings(.clipboard) }
                                 .buttonStyle(PalettePillButtonStyle())
                                 .help("Open Settings › Clipboard History")
@@ -684,14 +765,7 @@ private struct ScreengrabGrid: View {
                                     click: { click($0, index) },
                                     run: { action in
                                         actions.selectRow(index)
-                                        switch action {
-                                        case .copy: content.choose(item, withCommand: false, palette: actions)
-                                        case .paste: content.paste(item, palette: actions)
-                                        case .edit: content.choose(item, withCommand: true, palette: actions)
-                                        case .quickLook: content.preview(item)
-                                        case .showInFinder: content.reveal(item)
-                                        case .delete: actions.deleteRow(index)
-                                        }
+                                        content.run(action, on: item, at: index, palette: actions)
                                     }
                                 )
                                 .paletteHoverHighlights(row: index)
@@ -709,15 +783,15 @@ private struct ScreengrabGrid: View {
     }
 }
 
-/// What a tile's trash button and context menu do.
-private enum ScreengrabCardAction {
+/// What a tile's trash button and context menu, and the detail's buttons, do: each what its key
+/// does (`ScreengrabsPaletteContent.run(_:on:at:palette:)`). Its raw value names the detail's button
+/// (`palette.screengrabs.detail.<action>`).
+enum ScreengrabAction: String, CaseIterable {
     case copy, paste, edit, quickLook, showInFinder, delete
 }
 
-/// A screengrab's tile: its thumbnail fitted on the gray well, the name and age under it. A
-/// recording's has its poster frame, a play badge, and its length (Snapzy's badge), and a recording
-/// of more than one screen says how many; one moved or deleted is dimmed, with a warning in the
-/// play badge's place and "Moved or deleted" in its age's.
+/// A screengrab's tile: its picture fitted on the gray well (`ScreengrabPicture`), the name and age
+/// under it, and "Moved or deleted" in its age's place for a recording moved or deleted.
 private struct ScreengrabCard: View {
     let item: Screengrab
     let isSelected: Bool
@@ -726,51 +800,18 @@ private struct ScreengrabCard: View {
     let copyTitle: String
     let clickAction: PaletteClickAction
     let click: (PaletteClick) -> Void
-    let run: (ScreengrabCardAction) -> Void
-    @State private var thumbnail: NSImage?
-    /// The `Screengrab.thumbnailKey` `thumbnail` was loaded for.
-    @State private var thumbnailKey: String?
+    let run: (ScreengrabAction) -> Void
     @State private var isHovering = false
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
         VStack(alignment: .leading, spacing: 6) {
             PaletteClickButton(clickAction: clickAction, click: click) {
-                ZStack {
-                    PaletteTheme.keycapFill
-                    Group {
-                        if let thumbnail {
-                            Image(nsImage: thumbnail)
-                                .resizable()
-                                .scaledToFit()
-                        } else {
-                            Image(systemName: item.recording == nil ? "photo" : "film")
-                                .font(.system(size: 22))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .opacity(item.isMissing ? 0.32 : 1)
-                    .grayscale(item.isMissing ? 1 : 0)
-                    if let recording = item.recording {
-                        ScreengrabPlayBadge(isMissing: recording.isMissing)
-                    }
-                }
-                .aspectRatio(16 / 10, contentMode: .fit)
-                .overlay(alignment: .bottomTrailing) {
-                    if let recording = item.recording, !recording.isMissing {
-                        ScreengrabLengthBadge(text: IndexedRecording.lengthText(recording.duration))
-                            .padding(8)
-                    }
-                }
-                .overlay(alignment: .bottomLeading) {
-                    if let recording = item.recording, !recording.isMissing, recording.videos.count > 1 {
-                        ScreengrabDisplaysBadge(count: recording.videos.count)
-                            .padding(8)
-                    }
-                }
-                .clipShape(shape)
-                .overlay(shape.strokeBorder(isSelected ? Color.accentColor : PaletteTheme.border, lineWidth: isSelected ? 3 : 1))
-                .contentShape(shape)
+                ScreengrabPicture(item: item, recordings: recordings, maxPixelSize: ScreengrabPicture.tilePixelSize)
+                    .aspectRatio(16 / 10, contentMode: .fit)
+                    .clipShape(shape)
+                    .overlay(shape.strokeBorder(isSelected ? Color.accentColor : PaletteTheme.border, lineWidth: isSelected ? 3 : 1))
+                    .contentShape(shape)
             }
             .paletteLayoutProbe(.gridItem)
             .accessibilityLabel(item.thumbnailLabel)
@@ -806,16 +847,6 @@ private struct ScreengrabCard: View {
         .contextMenu { menu }
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .task(id: item.thumbnailKey) {
-            let key = item.thumbnailKey
-            // A new poster frame: the old one goes at once rather than showing while it's made.
-            if thumbnailKey != key { thumbnail = nil }
-            guard let url = await thumbnailURL() else { return }
-            let image = await ClipboardEntryPreview.loadThumbnail(from: url, maxPixelSize: 640)
-            guard !Task.isCancelled else { return }
-            thumbnail = image
-            thumbnailKey = key
-        }
     }
 
     /// The stock context menu, with the footer's names and keys (#552): Copy ⌘C, Paste ⌘V, Edit ⌘E
@@ -848,6 +879,81 @@ private struct ScreengrabCard: View {
         case .recording(let recording): recording.isMissing ? "Remove" : "Move to Trash"
         }
     }
+}
+
+/// A screengrab's picture on the gray well, fitted: a screenshot, or a recording's poster frame with
+/// a play badge, its length (Snapzy's badge), and, for a recording of more than one screen, how
+/// many; one moved or deleted is dimmed, with a warning in the play badge's place. The tile draws
+/// it, and the detail beside the grid draws it larger (#552). It fills what it's offered.
+struct ScreengrabPicture: View {
+    /// The longest side, in pixels, a tile's picture is loaded at.
+    static let tilePixelSize = 640
+
+    let item: Screengrab
+    let recordings: RecordingLibrary?
+    /// The longest side, in pixels, it's loaded at.
+    let maxPixelSize: Int
+    @State private var thumbnail: NSImage?
+    /// The `Screengrab.thumbnailKey` `thumbnail` was loaded for.
+    @State private var thumbnailKey: String?
+
+    init(item: Screengrab, recordings: RecordingLibrary?, maxPixelSize: Int) {
+        self.item = item
+        self.recordings = recordings
+        self.maxPixelSize = maxPixelSize
+        // Loaded before, at this size or a tile's: it shows at once, so the detail of a tile just
+        // highlighted, or a tile scrolled back to, doesn't flash the placeholder.
+        let loaded = ScreengrabThumbnails.image(for: item.thumbnailKey, maxPixelSize: maxPixelSize)
+        _thumbnail = State(initialValue: loaded ?? ScreengrabThumbnails.image(for: item.thumbnailKey, maxPixelSize: Self.tilePixelSize))
+        _thumbnailKey = State(initialValue: loaded == nil ? nil : item.thumbnailKey)
+    }
+
+    var body: some View {
+        ZStack {
+            PaletteTheme.keycapFill
+            Group {
+                if let thumbnail {
+                    Image(nsImage: thumbnail)
+                        .resizable()
+                        .scaledToFit()
+                } else {
+                    Image(systemName: item.recording == nil ? "photo" : "film")
+                        .font(.system(size: 22))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .opacity(item.isMissing ? 0.32 : 1)
+            .grayscale(item.isMissing ? 1 : 0)
+            if let recording = item.recording {
+                ScreengrabPlayBadge(isMissing: recording.isMissing)
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if let recording = item.recording, !recording.isMissing {
+                ScreengrabLengthBadge(text: IndexedRecording.lengthText(recording.duration))
+                    .padding(8)
+            }
+        }
+        .overlay(alignment: .bottomLeading) {
+            if let recording = item.recording, !recording.isMissing, recording.videos.count > 1 {
+                ScreengrabDisplaysBadge(count: recording.videos.count)
+                    .padding(8)
+            }
+        }
+        .task(id: item.thumbnailKey) {
+            let key = item.thumbnailKey
+            guard thumbnailKey != key else { return }
+            // A new poster frame: the old one goes at once rather than showing while it's made.
+            thumbnail = ScreengrabThumbnails.image(for: key, maxPixelSize: maxPixelSize)
+                ?? ScreengrabThumbnails.image(for: key, maxPixelSize: Self.tilePixelSize)
+            guard let url = await thumbnailURL() else { return }
+            guard let image = await ClipboardEntryPreview.loadThumbnail(from: url, maxPixelSize: maxPixelSize),
+                  !Task.isCancelled else { return }
+            ScreengrabThumbnails.store(image, for: key, maxPixelSize: maxPixelSize)
+            thumbnail = image
+            thumbnailKey = key
+        }
+    }
 
     /// A screenshot's media copy; a recording's poster frame, made the first time, or for one moved
     /// or deleted, the one cached before.
@@ -858,6 +964,27 @@ private struct ScreengrabCard: View {
             guard let recordings else { return nil }
             return recording.isMissing ? recordings.cachedPosterFrame(for: recording) : await recordings.posterFrame(for: recording)
         }
+    }
+}
+
+/// The pictures the ScreenGrabs tab loaded, by `Screengrab.thumbnailKey` and size, kept in memory
+/// while there's room. A key stands for one file's pixels: a screenshot's media copy never changes,
+/// and a recording's key changes with its poster frame, which an edit makes again, so nothing an
+/// edit cropped, blurred, or trimmed away shows from here. `NSCache` is safe from any thread.
+enum ScreengrabThumbnails {
+    private static let cache: NSCache<NSString, NSImage> = {
+        let cache = NSCache<NSString, NSImage>()
+        cache.totalCostLimit = 64 * 1_024 * 1_024
+        return cache
+    }()
+
+    static func image(for key: String, maxPixelSize: Int) -> NSImage? {
+        cache.object(forKey: "\(maxPixelSize)/\(key)" as NSString)
+    }
+
+    static func store(_ image: NSImage, for key: String, maxPixelSize: Int) {
+        // Its pixels' bytes: an image made at its pixel size (`loadThumbnail`) is that many points.
+        cache.setObject(image, forKey: "\(maxPixelSize)/\(key)" as NSString, cost: Int(image.size.width * image.size.height) * 4)
     }
 }
 

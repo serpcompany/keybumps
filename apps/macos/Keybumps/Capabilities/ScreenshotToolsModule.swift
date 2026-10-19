@@ -19,7 +19,7 @@ extension CapabilityDescriptor {
             prompt: "Search ScreenGrabs",
             primaryActionTitle: "Copy",
             secondaryActions: [.paste(), .edit, .delete()],
-            // The footer names the highlighted screengrab's actions.
+            // The detail beside the grid shows the highlighted screengrab's actions (#552).
             clickAction: .selects,
             // Its screenshots; its recordings need neither (#494).
             dataSource: .clipboardHistory,

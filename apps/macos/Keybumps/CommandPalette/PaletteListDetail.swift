@@ -1,29 +1,46 @@
 import SwiftUI
 
-/// Raycast's list-and-detail layout, shared by the Dictation and Translate tabs: the list on the
-/// left at a fixed width, a hairline, and the highlighted item in full on the right, or nothing
-/// while no item is highlighted.
-struct PaletteListDetail<Item, ListView: View, Detail: View>: View {
-    static var listWidth: CGFloat { 330 }
+/// Raycast's list-and-detail layout, shared by the Dictation, Translate, and ScreenGrabs tabs: the
+/// list on the left at a fixed width, a hairline, and the highlighted item in full on the right, or
+/// the placeholder while no item is highlighted: nothing, or a hint, as beside the ScreenGrabs grid.
+struct PaletteListDetail<Item, ListView: View, Detail: View, Placeholder: View>: View {
+    /// The Dictation and Translate lists' width.
+    static var defaultListWidth: CGFloat { 330 }
 
+    /// The list's width: a list's, or a grid's wider column, as ScreenGrabs' (#552).
+    var listWidth: CGFloat = Self.defaultListWidth
     /// The highlighted item, which the detail shows.
     let highlighted: Item?
     @ViewBuilder let list: ListView
     @ViewBuilder let detail: (Item) -> Detail
+    /// What the detail's side shows while no item is highlighted.
+    @ViewBuilder let placeholder: Placeholder
 
     var body: some View {
         HStack(spacing: 0) {
             list
-                .frame(width: Self.listWidth)
+                .frame(width: listWidth)
             Rectangle()
                 .fill(PaletteTheme.border)
                 .frame(width: 1)
             if let highlighted {
                 detail(highlighted)
             } else {
-                Spacer()
+                placeholder
             }
         }
+    }
+}
+
+extension PaletteListDetail where Placeholder == Spacer {
+    /// Nothing on the detail's side while no item is highlighted.
+    init(
+        listWidth: CGFloat = Self.defaultListWidth,
+        highlighted: Item?,
+        @ViewBuilder list: () -> ListView,
+        @ViewBuilder detail: @escaping (Item) -> Detail
+    ) {
+        self.init(listWidth: listWidth, highlighted: highlighted, list: list, detail: detail, placeholder: { Spacer() })
     }
 }
 
@@ -157,5 +174,49 @@ struct PaletteActionButton: View {
         .help(shortcuts.isEmpty ? title : "\(title) (\(shortcuts.map { $0.joined() }.joined(separator: " or ")))")
         .accessibilityLabel(title)
         .accessibilityHint(shortcuts.map(PaletteKeyAction.spokenShortcut).joined(separator: ", or "))
+    }
+}
+
+/// A detail pane's action buttons where one line is too narrow for them, as beside the ScreenGrabs
+/// grid (#552): they keep their order and go on to the next line where the next wouldn't fit, and
+/// the last, Delete's, keeps the trailing end of its line, as a `Spacer` before it does in one line.
+/// Each button is its ideal width, never shortened. VoiceOver reads them in order.
+struct PaletteActionFlow: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let lines = lines(of: subviews, width: proposal.width ?? .infinity)
+        let height = lines.map(\.height).reduce(0, +) + spacing * CGFloat(max(lines.count - 1, 0))
+        let widest = lines.map(\.width).max() ?? 0
+        // As wide as it's offered, as a line with a `Spacer` is; its widest line where it's offered any.
+        return CGSize(width: proposal.width.map { $0.isFinite ? $0 : widest } ?? widest, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for line in lines(of: subviews, width: bounds.width) {
+            var x = bounds.minX
+            for index in line.indices {
+                let size = subviews[index].sizeThatFits(.unspecified)
+                if index == subviews.indices.last { x = max(x, bounds.maxX - size.width) }
+                subviews[index].place(at: CGPoint(x: x, y: y + (line.height - size.height) / 2), proposal: ProposedViewSize(size))
+                x += size.width + spacing
+            }
+            y += line.height + spacing
+        }
+    }
+
+    /// The buttons on each line, left to right, and how wide and tall each line is.
+    private func lines(of subviews: Subviews, width: CGFloat) -> [(indices: Range<Int>, width: CGFloat, height: CGFloat)] {
+        var lines: [(indices: Range<Int>, width: CGFloat, height: CGFloat)] = []
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(.unspecified)
+            if let line = lines.last, line.width + spacing + size.width <= width {
+                lines[lines.count - 1] = (line.indices.lowerBound..<index + 1, line.width + spacing + size.width, max(line.height, size.height))
+            } else {
+                lines.append((index..<index + 1, size.width, size.height))
+            }
+        }
+        return lines
     }
 }

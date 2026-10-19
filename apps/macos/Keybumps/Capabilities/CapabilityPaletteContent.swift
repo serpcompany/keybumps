@@ -122,9 +122,9 @@ enum PaletteClickAction: Equatable {
     /// it twice, as pausing a timer, then resuming it.
     case acts
     /// One click highlights the row, and a double-click does what Return does, where the tab shows
-    /// the highlighted row's actions: in the detail beside the list (Dictation, Translate) or in the
-    /// footer (ScreenGrabs). A click in a grid goes into it, as Down does. The Hotkeys tab's rows
-    /// have no action, so they only highlight.
+    /// the highlighted row's actions in the detail beside the list or grid (Dictation, Translate,
+    /// ScreenGrabs). A click in a grid goes into it, as Down does. The Hotkeys tab's rows have no
+    /// action, so they only highlight.
     case selects
 
     /// Does what a click does here: `select` highlights the row, `activate` does what Return does,
@@ -349,7 +349,7 @@ struct PaletteContentActions {
     /// Closes the palette.
     let dismiss: () -> Void
     /// Moves the selection to a row, as a click on it does. In a grid, it goes into the grid's items,
-    /// as Down does, so the arrow keys move on from it and the footer names its actions.
+    /// as Down does, so the arrow keys move on from it and the footer and the detail name its actions.
     let selectRow: (Int) -> Void
     /// Empties the search field, as after a row has used what was typed. On a tab whose rows reset
     /// the selection while typing, it also moves the selection back to the first row, so select a

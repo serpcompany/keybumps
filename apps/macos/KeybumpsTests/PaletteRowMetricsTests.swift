@@ -71,7 +71,11 @@ struct PaletteRowMetricsTests {
         let row = try clipboard.require(.row)
         let well = try clipboard.require(.well)
 
-        #expect(try screenshots.require(.header) == header)
+        // Its header is the grid column's, beside the detail (#552), so only as wide as that.
+        let screenshotsHeader = try screenshots.require(.header)
+        #expect(screenshotsHeader.minX == header.minX)
+        #expect(screenshotsHeader.minY == header.minY)
+        #expect(screenshotsHeader.height == header.height)
         // A flexible grid's columns are fractions of a point off.
         let thumbnail = try screenshots.require(.gridItem)
         #expect(abs(thumbnail.minX - well.minX) < 0.5, "The first thumbnail starts where the wells do")
