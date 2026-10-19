@@ -32,8 +32,8 @@ export function PricingCard() {
         <DownloadLink className="btn btn-lg price-cta">Download Keybumps</DownloadLink>
       )}
       <p className="fine">
-        Taxes calculated at checkout. Payments are processed by Polar, our merchant of record. See
-        the <Link href="/legal/refunds/">refund policy</Link>.
+        {pricing.model.renewal} Taxes calculated at checkout. Payments are processed by Polar, our
+        merchant of record. See the <Link href="/legal/refunds/">refund policy</Link>.
       </p>
     </div>
   )
