@@ -69,7 +69,7 @@ _Avoid_: Feedback, bug report, ticket
 ### Capabilities
 
 **Search tab**:
-Quick Search's first tab (⌘1): finding and opening local applications, files, and folders, finding snippets by keyword, name, or text and emoji by name (while Emoji Picker shows them there), and running Quick Search commands. It belongs to the Quick Search plugin, which is always on. Its show switch in Settings › Quick Search hides it, which took the place of turning Quick Search off: an install that had Quick Search off starts with the tab hidden (#553). While it's hidden, ⌘Space opens Quick Search on the first shown tab. In code, `CommandPaletteTab.search`, and the `QuickSearch` types (`QuickSearchModel`, `QuickSearchRanking`) are this tab's.
+Quick Search's first tab (⌘1): finding and opening local applications, files, and folders, finding snippets by keyword, name, or text and emoji by name (while Emoji Picker shows them there), and running Quick Search commands. It belongs to the Quick Search plugin, which is always on. Its show switch in Settings › Quick Search hides it, which took the place of turning Quick Search off: an install that had Quick Search off starts with the tab hidden and Open Quick Search unassigned, so ⌘Space stays free as it was (#553). While it's hidden, ⌘Space opens Quick Search on the first shown tab. In code, `CommandPaletteTab.search`, and the `QuickSearch` types (`QuickSearchModel`, `QuickSearchRanking`) are this tab's.
 _Avoid_: Quick Search tab, web search, workflow launcher
 
 **Quick Search command**:
