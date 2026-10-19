@@ -125,6 +125,24 @@ struct PaletteHoverTests {
         #expect(fixture.palette.state.selection == 0)
     }
 
+    @Test("Where hover moves the highlight, it doesn't while a Delete question shows: a snippet's, in the Snippets tab")
+    func snippetDeleteQuestionKeepsTheHighlight() throws {
+        let fixture = HoverFixture()
+        defer { fixture.tearDown() }
+        try fixture.snippets.add(SnippetDraft(name: "Made-up one", keyword: ";one", text: "made-up one"))
+        try fixture.snippets.add(SnippetDraft(name: "Made-up two", keyword: ";two", text: "made-up two"))
+        fixture.palette.selectOnOpening(.snippets)
+        #expect(CommandPaletteTab.snippets.clickAction == .acts, "a tab where hover selects")
+        fixture.pointer = NSPoint(x: 10, y: 20)
+        fixture.palette.hover(row: 1)
+        #expect(fixture.palette.state.selection == 1, "Hover selects here")
+
+        fixture.palette.requestSnippetDeletion(try #require(fixture.snippets.snippets.first))
+        fixture.pointer = NSPoint(x: 10, y: 60)
+        fixture.palette.hover(row: 0)
+        #expect(fixture.palette.state.selection == 1, "The pointer behind the question changes nothing")
+    }
+
     @Test("Arrowing past the visible rows scrolls the real Clipboard list to the highlight (#352)")
     func clipboardScrollsToTheHighlight() throws {
         let fixture = HoverFixture()
@@ -225,6 +243,7 @@ private final class HoverFixture {
     let pasteboard = NSPasteboard(name: NSPasteboard.Name("KeybumpsHover-\(UUID().uuidString)"))
     let clipboard: ClipboardHistoryService
     let dictationHistory: DictationHistoryService
+    let snippets: SnippetStore
     let palette: CommandPaletteController
     var pointer = NSPoint(x: -1000, y: -1000)
     var clock: TimeInterval = 100
@@ -240,6 +259,7 @@ private final class HoverFixture {
         dictationHistory = DictationHistoryService(
             recordingsDirectoryURL: root.appendingPathComponent("recordings", isDirectory: true)
         )
+        snippets = folder.makeStore()
         palette = CommandPaletteController(
             clipboard: clipboard,
             dictationHistory: dictationHistory,
@@ -247,7 +267,7 @@ private final class HoverFixture {
                 language: "en-US", history: dictationHistory, paster: InertTextPaster(), allowsSystemAccess: false
             ),
             preferences: AppPreferences(defaults: InMemoryDefaults()),
-            snippets: folder.makeStore(),
+            snippets: snippets,
             pasteboard: pasteboard,
             notices: HoverNotices(),
             search: QuickSearchModel.forTests(in: root)
