@@ -18,6 +18,12 @@
 // https://updates.keybumps.app/releases/<build>/Keybumps-<version>.dmg, no version or build twice,
 // highest build first. Anything else, or a list it can't read, stops the build with the reason,
 // so a deploy fails and the live site keeps its previous version rather than losing the links.
+//
+// A list read for a deployed build (RELEASE_INDEX set: the live list or a file) must also hold
+// every version the fixture lists, each with the same build. The release tooling only adds or
+// replaces entries (docs/releases/cloudflare.md), so a shorter list is a bad copy, such as a
+// restore from an old one, and would silently drop links. Newer versions are fine. Removing a
+// version on purpose means removing it from the fixture too.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -30,6 +36,7 @@ const TIMEOUT_MS = 15_000
 const RETRY_MS = 1000
 
 const web = join(dirname(fileURLToPath(import.meta.url)), '..')
+const fixture = join(web, 'scripts', 'release-index.fixture.json')
 
 class ReleaseIndexError extends Error {}
 
@@ -71,6 +78,25 @@ function checkedIndex(value) {
   return entries
 }
 
+/** Throws ReleaseIndexError unless `entries` lists every fixture version with the same build. */
+function checkCoverage(entries) {
+  const builds = new Map(entries.map(entry => [entry.version, entry.build]))
+  const known = checkedIndex(readFile(fixture))
+  const missing = known.filter(entry => !builds.has(entry.version)).map(entry => entry.version)
+  const moved = known
+    .filter(entry => builds.has(entry.version) && builds.get(entry.version) !== entry.build)
+    .map(entry => `${entry.version} (build ${builds.get(entry.version)}, not ${entry.build})`)
+  const problems = [
+    missing.length && `it lacks ${missing.join(', ')}`,
+    moved.length && `it lists ${moved.join(', ')}`
+  ].filter(Boolean)
+  if (problems.length)
+    throw new ReleaseIndexError(
+      `${problems.join('; ')}, which scripts/release-index.fixture.json lists. A deployed build ` +
+        'needs every release the fixture names, with the same build'
+    )
+}
+
 /** The live list, trying again after a network error or a 5xx. */
 async function fetchLive() {
   for (let attempt = 1; ; attempt++) {
@@ -100,12 +126,13 @@ function readFile(path) {
   }
 }
 
-const source = process.env.RELEASE_INDEX || join(web, 'scripts', 'release-index.fixture.json')
+const source = process.env.RELEASE_INDEX || fixture
 const output =
   process.env.RELEASE_INDEX_OUTPUT || join(web, 'src', 'generated', 'release-index.json')
 try {
   const live = source === 'live'
   const entries = checkedIndex(live ? await fetchLive() : readFile(resolve(source)))
+  if (process.env.RELEASE_INDEX) checkCoverage(entries)
   mkdirSync(dirname(output), { recursive: true })
   writeFileSync(output, `${JSON.stringify(entries, null, 2)}\n`)
   const path = relative(web, resolve(source))

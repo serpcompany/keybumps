@@ -93,8 +93,34 @@ describe('scripts/release-index.mjs', () => {
   })
 
   it('accepts a list in the release tooling format, keeping only what the page needs', () => {
-    const list = [entry('0.0.3-beta.29', 4034), entry('0.0.3-beta.6', 4011)]
+    // A release newer than the fixture is fine: the list grows with each release.
+    const list = [entry('0.0.3-beta.30', 4035), ...fixture]
     expect(runOn(list)).toMatchObject({ status: 0, written: copied(list) })
+  })
+
+  it('stops a deployed build on a list that drops a release the fixture lists', () => {
+    // Only the newest release, as after a restore from an old or hand-made copy.
+    const result = runOn([fixture[0]])
+    expect(result).toMatchObject({ status: 1, written: null })
+    const reason = result.stderr.split('\n')[0]
+    for (const { version } of fixture.slice(1)) expect(reason).toContain(version)
+    expect(reason).not.toContain(`${fixture[0].version},`)
+    expect(reason).toContain('which scripts/release-index.fixture.json lists')
+    expect(result.stderr).toMatch(/build stops/)
+    // The same holds for the live list.
+    const live = runLive([200], fixture.slice(0, -1))
+    expect(live).toMatchObject({ status: 1, written: null })
+    expect(live.stderr).toContain(`it lacks ${fixture[fixture.length - 1].version},`)
+  })
+
+  it('stops a deployed build on a list that gives a fixture release another build', () => {
+    const [newest, ...rest] = fixture
+    const rebuilt = entry(newest.version, newest.build + 100, newest.releasedAt)
+    const result = runOn([rebuilt, ...rest])
+    expect(result).toMatchObject({ status: 1, written: null })
+    expect(result.stderr).toContain(
+      `it lists ${newest.version} (build ${newest.build + 100}, not ${newest.build})`
+    )
   })
 
   it('stops the build, writing nothing, on a list in any other shape', () => {
