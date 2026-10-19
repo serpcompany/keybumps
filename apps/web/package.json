@@ -15,7 +15,7 @@
     "changelog:sources": "node scripts/changelog-sources.mjs && node scripts/release-index.mjs",
     "test": "vitest run",
     "test:leak": "node scripts/leak-test.mjs",
-    "check": "sh scripts/release-index-probe.sh; pnpm check:code && opennextjs-cloudflare build",
+    "check": "pnpm check:code && opennextjs-cloudflare build",
     "check:code": "pnpm lint && pnpm typecheck && pnpm test",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "build:staging": "SITE_ENV=staging RELEASE_INDEX=live opennextjs-cloudflare build",
