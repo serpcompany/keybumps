@@ -26,10 +26,12 @@ final class AppPreferences {
         static let showsHotkeysTab = "showsHotkeysTab"
         /// The other tabs hidden in Settings › Quick Search, by `CommandPaletteTab` raw value (#553).
         static let quickSearchHiddenTabs = "quickSearchHiddenTabs"
-        /// Whether the one-time step that hides the Search tab, and unassigns ⌘Space, where Quick
-        /// Search was off has run (#553): Quick Search can't be turned off any more, and hiding its
-        /// tab replaced that.
+        /// Whether the one-time step that hides the Search tab where Quick Search was off has run
+        /// (#553): Quick Search can't be turned off any more, and hiding its tab replaced that.
         static let didMoveQuickSearchSwitchToSearchTab = "didMoveQuickSearchSwitchToSearchTab"
+        /// Whether the next launch turns Spotlight's ⌘Space off, once, for an install that had
+        /// Quick Search off before #553 (owner's decision on #553).
+        static let takesCommandSpaceFromSpotlightOnLaunch = "takesCommandSpaceFromSpotlightOnLaunch"
         static let foldsSettingsSidebarPlugins = "foldsSettingsSidebarPlugins"
         static let didRequestScreenRecording = "didRequestScreenRecording"
         static let copiesScreenshotsToClipboard = "copiesScreenshotsToClipboard"
@@ -139,15 +141,21 @@ final class AppPreferences {
         defaults.set(hiddenTabs.subtracting([.keyboardShortcutter]).map(\.rawValue).sorted(), forKey: Key.quickSearchHiddenTabs)
     }
 
+    /// Whether the next launch turns Spotlight's ⌘Space off, once, as first-time setup does: set by
+    /// the step below for an install that had Quick Search off, which never went through setup
+    /// with it on, and cleared by `AppModel` when it runs (owner's decision on #553).
+    var takesCommandSpaceFromSpotlightOnLaunch: Bool {
+        didSet { defaults.set(takesCommandSpaceFromSpotlightOnLaunch, forKey: Key.takesCommandSpaceFromSpotlightOnLaunch) }
+    }
+
     /// The tabs saved hidden, with the Search tab hidden once where Quick Search was saved off
     /// (#553). Quick Search could be turned off until it became the window's page, which can't
     /// be; hiding the Search tab took the switch's place, so an install that had it off starts
-    /// with the tab hidden instead. Turning it off also released ⌘Space, so the same step leaves
-    /// Open Quick Search unassigned: ⌘Space stays free for Spotlight or another launcher, and the
-    /// person can assign a key again in Settings › Quick Search. A new install, which saved no
-    /// plugins, and one with Quick Search on keep the tab shown and the shortcut as it was. It
-    /// runs once, whatever it found, so a Search tab shown or a key assigned after it stays, and
-    /// `init` runs it before it saves Quick Search on and reads the shortcuts.
+    /// with the tab hidden instead. Open Quick Search's shortcut stays as it was, ⌘Space or the key
+    /// saved, and the next launch takes ⌘Space from Spotlight once (owner's decisions on #553). A
+    /// new install, which saved no plugins, and one with Quick Search on show the tab. It runs
+    /// once, whatever it found, so a Search tab shown after it stays shown, and `init` runs it
+    /// before it saves Quick Search on.
     private static func loadHiddenTabs(in defaults: UserDefaults, storedCapabilities: [String]?) -> Set<CommandPaletteTab> {
         var hidden = Set((defaults.stringArray(forKey: Key.quickSearchHiddenTabs) ?? []).compactMap(CommandPaletteTab.init(rawValue:)))
             .subtracting([.keyboardShortcutter])
@@ -156,14 +164,7 @@ final class AppPreferences {
         if let storedCapabilities, !storedCapabilities.contains(Capability.quickSearch.rawValue) {
             hidden.insert(.search)
             defaults.set(hidden.subtracting([.keyboardShortcutter]).map(\.rawValue).sorted(), forKey: Key.quickSearchHiddenTabs)
-            // Unassigned, not reset: the shortcut store keeps an unassigned shortcut as the person's choice.
-            var shortcuts = defaults.data(forKey: Key.capabilityShortcuts)
-                .flatMap { try? JSONDecoder().decode([String: ShortcutBinding].self, from: $0) }
-                ?? defaultCapabilityShortcuts
-            shortcuts[CapabilityShortcut.quickSearch.rawValue] = nil
-            if let data = try? JSONEncoder().encode(shortcuts) {
-                defaults.set(data, forKey: Key.capabilityShortcuts)
-            }
+            defaults.set(true, forKey: Key.takesCommandSpaceFromSpotlightOnLaunch)
         }
         // Written last, so a launch cut short before the tab is saved hidden does it again.
         defaults.set(true, forKey: Key.didMoveQuickSearchSwitchToSearchTab)
@@ -383,9 +384,9 @@ final class AppPreferences {
         // Before anything is read: it rewrites what Screencast saved, whose ID `Capability` no longer has.
         Self.foldScreencastIntoScreengrabs(in: defaults)
         let stored = defaults.array(forKey: Key.enabledCapabilities) as? [String]
-        // Before Quick Search is saved on and the shortcuts are read below: where it was off, the
-        // Search tab starts hidden and ⌘Space unassigned.
+        // Before Quick Search is saved on below: where it was off, the Search tab starts hidden.
         hiddenTabs = Self.loadHiddenTabs(in: defaults, storedCapabilities: stored)
+        takesCommandSpaceFromSpotlightOnLaunch = defaults.bool(forKey: Key.takesCommandSpaceFromSpotlightOnLaunch)
         let initial = Self.initialCapabilities(
             stored: stored,
             known: defaults.array(forKey: Key.knownCapabilities) as? [String],

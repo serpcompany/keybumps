@@ -13,7 +13,7 @@ struct QuickSearchTabsTests {
 
     // MARK: Moving the Quick Search switch to the Search tab
 
-    @Test("An install with Quick Search turned off starts with the Search tab hidden, Quick Search on, and ⌘Space unassigned")
+    @Test("An install with Quick Search turned off starts with the Search tab hidden, Quick Search on, and ⌘Space still Quick Search's")
     func quickSearchOffHidesTheSearchTab() {
         let defaults = InMemoryDefaults()
         defaults.set(["clipboardHistory", "dictation"], forKey: "enabledCapabilities")
@@ -24,62 +24,74 @@ struct QuickSearchTabsTests {
         #expect(defaults.stringArray(forKey: "enabledCapabilities")?.contains("quickSearch") == true)
         #expect(defaults.stringArray(forKey: "quickSearchHiddenTabs") == ["search"])
         #expect(defaults.bool(forKey: "didMoveQuickSearchSwitchToSearchTab"))
-        #expect(preferences.capabilityShortcut(for: .quickSearch) == nil, "⌘Space stays free, as turning Quick Search off left it")
-        #expect(preferences.paletteOpeningTab == .clipboard, "The menu bar's Open Quick Search and the Dock open the Clipboard tab")
+        #expect(preferences.takesCommandSpaceFromSpotlightOnLaunch, "The next launch takes ⌘Space from Spotlight once")
+        #expect(preferences.capabilityShortcut(for: .quickSearch) == DefaultShortcut.quickSearch, "⌘Space stays Quick Search's (owner's decision on #553)")
+        #expect(defaults.data(forKey: "capabilityShortcuts") == nil, "The default is never saved")
+        #expect(preferences.paletteOpeningTab == .clipboard, "⌘Space, the menu bar's Open Quick Search and the Dock open the Clipboard tab")
         let relaunched = AppPreferences(defaults: defaults, compatibility: Self.mac15)
         #expect(!relaunched.showsTab(.search), "and it stays hidden")
-        #expect(relaunched.capabilityShortcut(for: .quickSearch) == nil, "and ⌘Space stays unassigned")
+        #expect(relaunched.capabilityShortcut(for: .quickSearch) == DefaultShortcut.quickSearch, "and ⌘Space stays assigned")
     }
 
-    @Test("Where Quick Search was off, its shortcut is unassigned, whatever key it had; every other shortcut stays")
-    func quickSearchOffUnassignsACustomShortcut() throws {
+    @Test("Where Quick Search was off, a key saved for it stays assigned to it, and every other shortcut stays")
+    func quickSearchOffKeepsACustomShortcut() throws {
         let custom = ShortcutBinding(keyCode: 49, modifiers: 2048, displayName: "⌥ Space")
         let defaults = InMemoryDefaults()
         defaults.set(["clipboardHistory"], forKey: "enabledCapabilities")
         defaults.set(try JSONEncoder().encode(["quickSearch": custom, "clipboardHistory": DefaultShortcut.clipboard]), forKey: "capabilityShortcuts")
         let preferences = AppPreferences(defaults: defaults, compatibility: Self.mac15)
 
-        #expect(preferences.capabilityShortcut(for: .quickSearch) == nil)
+        #expect(!preferences.showsTab(.search))
+        #expect(preferences.capabilityShortcut(for: .quickSearch) == custom)
         #expect(preferences.capabilityShortcut(for: .clipboardHistory) == DefaultShortcut.clipboard)
+        #expect(AppPreferences(defaults: defaults, compatibility: Self.mac15).capabilityShortcut(for: .quickSearch) == custom, "and after a relaunch")
     }
 
-    @Test("⌘Space stays assigned where Quick Search was on, and on a fresh install", arguments: [
+    @Test("⌘Space stays assigned whether Quick Search was on or off, and on a fresh install", arguments: [
         ["quickSearch", "clipboardHistory"],
+        ["clipboardHistory"],
         nil,
     ] as [[String]?])
-    func quickSearchOnKeepsItsShortcut(stored: [String]?) {
+    func quickSearchKeepsItsShortcut(stored: [String]?) {
         let defaults = InMemoryDefaults()
         if let stored { defaults.set(stored, forKey: "enabledCapabilities") }
         let preferences = AppPreferences(defaults: defaults, compatibility: Self.mac15)
         #expect(preferences.capabilityShortcut(for: .quickSearch) == DefaultShortcut.quickSearch)
     }
 
-    @Test("A key assigned after the move is never cleared, even if a later save lacks Quick Search")
-    func assignedShortcutIsKept() {
+    @Test("A Quick Search shortcut the person unassigned before the update stays unassigned")
+    func unassignedShortcutStaysUnassigned() throws {
         let defaults = InMemoryDefaults()
-        defaults.set(["dictation"], forKey: "enabledCapabilities")
-        let first = AppPreferences(defaults: defaults, compatibility: Self.mac15)
-        #expect(first.capabilityShortcut(for: .quickSearch) == nil)
-        first.setCapabilityShortcut(DefaultShortcut.quickSearch, for: .quickSearch)
+        defaults.set(["clipboardHistory"], forKey: "enabledCapabilities")
+        defaults.set(try JSONEncoder().encode(["clipboardHistory": DefaultShortcut.clipboard]), forKey: "capabilityShortcuts")
+        let preferences = AppPreferences(defaults: defaults, compatibility: Self.mac15)
 
-        // As a build from before #553 could save after a rollback, with Quick Search turned off there.
-        defaults.set(["dictation"], forKey: "enabledCapabilities")
-        let second = AppPreferences(defaults: defaults, compatibility: Self.mac15)
-        #expect(second.capabilityShortcut(for: .quickSearch) == DefaultShortcut.quickSearch)
+        #expect(preferences.capabilityShortcut(for: .quickSearch) == nil)
+        #expect(preferences.capabilityShortcut(for: .clipboardHistory) == DefaultShortcut.clipboard)
     }
 
-    @Test("After the update, an install that had Quick Search off doesn't register ⌘Space, and the Clipboard tab keeps ⇧⌘Space")
-    func upgradedInstallLeavesCommandSpaceFree() {
+    @Test("After the update, an install that had Quick Search off registers its key, ⌘Space or the one saved, and the window opens on the Clipboard tab", arguments: [
+        nil,
+        ShortcutBinding(keyCode: 49, modifiers: 2048, displayName: "⌥ Space"),
+    ] as [ShortcutBinding?])
+    func upgradedInstallRegistersItsShortcut(saved: ShortcutBinding?) throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("KeybumpsQuickSearchTabs-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let defaults = InMemoryDefaults()
         defaults.set(CapabilityCatalog.defaultCapabilities.subtracting([.quickSearch]).map(\.rawValue), forKey: "enabledCapabilities")
         defaults.set(Capability.allCases.map(\.rawValue), forKey: "knownCapabilities")
+        if let saved {
+            var shortcuts = AppPreferences(defaults: InMemoryDefaults()).capabilityShortcuts
+            shortcuts["quickSearch"] = saved
+            defaults.set(try JSONEncoder().encode(shortcuts), forKey: "capabilityShortcuts")
+            defaults.set(CapabilityShortcut.allCases.map(\.rawValue), forKey: "knownCapabilityShortcuts")
+        }
         let harness = WiringHarness(enabled: CapabilityCatalog.defaultCapabilities, missing: nil, root: root, defaults: defaults)
         harness.model.start()
 
-        #expect(harness.shortcuts()["quickSearch"] == nil, "⌘Space isn't registered")
+        let expected = saved ?? DefaultShortcut.quickSearch
+        #expect(harness.shortcuts()["quickSearch"] == "\(expected.displayName) [\(expected.keyCode)/\(expected.modifiers)]", "Quick Search's key is registered")
         #expect(harness.shortcuts()["clipboardHistory"] != nil)
         #expect(harness.model.commandPalette.openingTab == .clipboard)
     }
@@ -103,7 +115,8 @@ struct QuickSearchTabsTests {
         if !showsHotkeysTab { expected.insert(.keyboardShortcutter) }
         #expect(preferences.hiddenTabs == expected)
         #expect(defaults.bool(forKey: "showsHotkeysTab") == showsHotkeysTab, "The Hotkeys tab's switch is left alone")
-        #expect((preferences.capabilityShortcut(for: .quickSearch) == nil) == quickSearchWasOff)
+        #expect(preferences.capabilityShortcut(for: .quickSearch) == DefaultShortcut.quickSearch, "⌘Space stays Quick Search's either way")
+        #expect(preferences.takesCommandSpaceFromSpotlightOnLaunch == quickSearchWasOff)
         #expect(preferences.paletteOpeningTab == (quickSearchWasOff ? .clipboard : .search))
     }
 
@@ -308,5 +321,140 @@ struct QuickSearchTabsTests {
         #expect(search?.isShown == true)
         #expect(search?.isOnlyShownTab == true)
         #expect(search?.tabKey == "⌘1")
+    }
+}
+
+/// The update takes ⌘Space from Spotlight once where Quick Search was off (owner's decision on
+/// #553), with first-time setup's step.
+@MainActor
+@Suite("Quick Search takes ⌘Space from Spotlight after the update")
+struct QuickSearchSpotlightAfterUpdateTests {
+    final class FakeSpotlightResolver: SpotlightShortcutConflictResolving {
+        let statusResult: SpotlightShortcutConflictStatus
+        let resolution: SpotlightShortcutResolution
+        private(set) var checks: [ShortcutBinding] = []
+        private(set) var disables: [ShortcutBinding] = []
+
+        init(status: SpotlightShortcutConflictStatus, resolution: SpotlightShortcutResolution = .resolved) {
+            statusResult = status
+            self.resolution = resolution
+        }
+
+        func status(for binding: ShortcutBinding) -> SpotlightShortcutConflictStatus {
+            checks.append(binding)
+            return statusResult
+        }
+
+        func disableIfConflicting(_ binding: ShortcutBinding) -> SpotlightShortcutResolution {
+            disables.append(binding)
+            return resolution
+        }
+    }
+
+    private let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent("KeybumpsQuickSearchSpotlight-\(UUID().uuidString)", isDirectory: true)
+
+    /// What an install saved before #553 with every default plugin on but Quick Search.
+    private static func quickSearchOffInstall() -> InMemoryDefaults {
+        let defaults = InMemoryDefaults()
+        defaults.set(CapabilityCatalog.defaultCapabilities.subtracting([.quickSearch]).map(\.rawValue), forKey: "enabledCapabilities")
+        defaults.set(Capability.allCases.map(\.rawValue), forKey: "knownCapabilities")
+        return defaults
+    }
+
+    private func launch(_ defaults: InMemoryDefaults, resolver: FakeSpotlightResolver) -> WiringHarness {
+        let harness = WiringHarness(
+            enabled: CapabilityCatalog.defaultCapabilities, missing: nil, root: root,
+            defaults: defaults, spotlightShortcutResolver: resolver
+        )
+        harness.model.start()
+        return harness
+    }
+
+    @Test("Where Spotlight has ⌘Space, the first launch turns it off once and clears the flag")
+    func conflictResolvedOnce() {
+        defer { try? FileManager.default.removeItem(at: root) }
+        let defaults = Self.quickSearchOffInstall()
+        let resolver = FakeSpotlightResolver(status: .conflict)
+        let harness = launch(defaults, resolver: resolver)
+
+        #expect(resolver.disables == [DefaultShortcut.quickSearch])
+        #expect(!defaults.bool(forKey: "takesCommandSpaceFromSpotlightOnLaunch"))
+        #expect(!harness.model.preferences.takesCommandSpaceFromSpotlightOnLaunch)
+        #expect(harness.model.quickSearchShortcutConflictStatus == .noConflict)
+        #expect(harness.model.quickSearchSpotlightRecovery == nil)
+        #expect(harness.shortcuts()["quickSearch"] != nil, "⌘Space registers after Spotlight lets it go")
+    }
+
+    @Test("Where Spotlight's shortcut can't be turned off, Settings › Quick Search shows first-time setup's manual recovery")
+    func failureShowsManualRecovery() {
+        defer { try? FileManager.default.removeItem(at: root) }
+        let defaults = Self.quickSearchOffInstall()
+        let guidance = "Open System Settings and turn off Spotlight's shortcut."
+        let resolver = FakeSpotlightResolver(status: .conflict, resolution: .failed(manualRecovery: guidance))
+        let harness = launch(defaults, resolver: resolver)
+
+        #expect(resolver.disables.count == 1)
+        #expect(harness.model.quickSearchShortcutConflictStatus == .unavailable(manualRecovery: guidance))
+        #expect(harness.model.quickSearchSpotlightRecovery == guidance)
+        #expect(!defaults.bool(forKey: "takesCommandSpaceFromSpotlightOnLaunch"), "It isn't tried again on the next launch")
+    }
+
+    @Test("Where Spotlight doesn't use Quick Search's keys, nothing changes")
+    func noConflictChangesNothing() {
+        defer { try? FileManager.default.removeItem(at: root) }
+        let defaults = Self.quickSearchOffInstall()
+        let resolver = FakeSpotlightResolver(status: .noConflict)
+        let harness = launch(defaults, resolver: resolver)
+
+        #expect(resolver.checks == [DefaultShortcut.quickSearch])
+        #expect(resolver.disables.isEmpty)
+        #expect(harness.model.quickSearchShortcutConflictStatus == .noConflict)
+        #expect(harness.model.quickSearchSpotlightRecovery == nil)
+        #expect(!defaults.bool(forKey: "takesCommandSpaceFromSpotlightOnLaunch"))
+    }
+
+    @Test("A second launch doesn't take ⌘Space again, even if Spotlight has it back")
+    func secondLaunchDoesNothing() {
+        defer { try? FileManager.default.removeItem(at: root) }
+        let defaults = Self.quickSearchOffInstall()
+        _ = launch(defaults, resolver: FakeSpotlightResolver(status: .conflict))
+
+        let again = FakeSpotlightResolver(status: .conflict)
+        let harness = launch(defaults, resolver: again)
+        #expect(again.checks.isEmpty)
+        #expect(again.disables.isEmpty)
+        #expect(harness.model.quickSearchSpotlightRecovery == nil)
+    }
+
+    @Test("An install that had Quick Search on, and a fresh one after setup, never check Spotlight at launch", arguments: [
+        ["quickSearch", "clipboardHistory"],
+        nil,
+    ] as [[String]?])
+    func quickSearchOnInstallUnchanged(stored: [String]?) {
+        defer { try? FileManager.default.removeItem(at: root) }
+        let defaults = InMemoryDefaults()
+        if let stored { defaults.set(stored, forKey: "enabledCapabilities") }
+        let resolver = FakeSpotlightResolver(status: .conflict)
+        _ = launch(defaults, resolver: resolver)
+
+        #expect(resolver.checks.isEmpty)
+        #expect(resolver.disables.isEmpty)
+        #expect(!defaults.bool(forKey: "takesCommandSpaceFromSpotlightOnLaunch"))
+    }
+
+    @Test("Before first-time setup finishes, setup takes ⌘Space instead, and the flag is dropped")
+    func setupNotFinishedLeavesItToSetup() {
+        defer { try? FileManager.default.removeItem(at: root) }
+        let defaults = Self.quickSearchOffInstall()
+        let resolver = FakeSpotlightResolver(status: .conflict)
+        let harness = WiringHarness(
+            enabled: CapabilityCatalog.defaultCapabilities, missing: nil, root: root,
+            didCompleteOnboarding: false, defaults: defaults, spotlightShortcutResolver: resolver
+        )
+        harness.model.start()
+
+        #expect(resolver.disables.isEmpty)
+        #expect(!defaults.bool(forKey: "takesCommandSpaceFromSpotlightOnLaunch"))
     }
 }

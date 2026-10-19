@@ -287,7 +287,7 @@ final class WiringHarness {
     /// Mac runs macOS 15 unless `compatibility` says otherwise, so the snapshot doesn't depend on the
     /// Mac recording it; `defaults` holds what was saved before launch. It's licensed unless
     /// `licensing` says otherwise. The screenshot folder can be read unless `screenshotReader` says
-    /// otherwise.
+    /// otherwise, and Spotlight's shortcut never conflicts unless `spotlightShortcutResolver` says so.
     init(
         enabled: Set<Capability>,
         missing: MacPermission?,
@@ -298,7 +298,8 @@ final class WiringHarness {
         defaults: UserDefaults = InMemoryDefaults(),
         screenshotCapturer: ScreenshotCapturer? = nil,
         licensing: (any LicenseControlling)? = nil,
-        screenshotReader: any ScreenshotDirectoryReading = FakeScreenshotDirectoryReader(granted: true)
+        screenshotReader: any ScreenshotDirectoryReading = FakeScreenshotDirectoryReader(granted: true),
+        spotlightShortcutResolver: any SpotlightShortcutConflictResolving = InertSpotlightShortcutResolver()
     ) {
         let id = UUID().uuidString
         let directory = root.appendingPathComponent(id, isDirectory: true)
@@ -358,7 +359,7 @@ final class WiringHarness {
                 modelsRoot: directory.appendingPathComponent("models", isDirectory: true),
                 downloader: WhisperKitModelDownloader()
             ),
-            spotlightShortcutResolver: InertSpotlightShortcutResolver(),
+            spotlightShortcutResolver: spotlightShortcutResolver,
             clipboard: clipboard,
             dictationHistory: DictationHistoryService(
                 recordingsDirectoryURL: directory.appendingPathComponent("recordings", isDirectory: true)

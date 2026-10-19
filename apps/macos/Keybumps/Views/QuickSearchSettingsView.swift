@@ -60,6 +60,22 @@ struct QuickSearchSettingsView: View {
         let preferences = model.preferences
         SettingsPage {
             CapabilityControl(capability: .quickSearch, shortcuts: [.quickSearch])
+            if let manualRecovery = model.quickSearchSpotlightRecovery {
+                // After the update couldn't take ⌘Space from Spotlight (#553), as first-time setup shows it.
+                SettingsGroup {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Quick Search still needs attention.", systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text(manualRecovery)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                        HStack {
+                            Button("Open Keyboard Shortcuts…") { model.openKeyboardShortcutSettings() }
+                            Button("Check Again") { model.checkQuickSearchSpotlightAgain() }
+                        }
+                    }
+                }
+            }
             SettingsGroup {
                 LabeledContent {
                     Button("Open") { model.showQuickSearch() }
