@@ -33,6 +33,10 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     }
 
     var iconTint: Color { capability?.descriptor.iconTint ?? .gray }
+
+    /// Its row's name in the sidebar. The Plugins page's row sits under the Plugins header, so it
+    /// reads All Plugins there (#559); its page keeps the name Plugins.
+    var sidebarTitle: String { self == .plugins ? "All Plugins" : rawValue }
 }
 
 struct SettingsNavigationHistory: Equatable {
@@ -67,10 +71,10 @@ struct SettingsNavigationHistory: Equatable {
     }
 }
 
-/// The Settings sidebar: the account row on top (outside these groups); General, Permissions,
-/// Plugins, and Changelog; then a row per plugin, the default ones (Quick Search first, then by name) and the added
-/// ones in their own group below; filtered by search, which finds a page by its title and a plugin's
-/// page also by its search keywords, as Settings › Plugins and Quick Search do. It's a stock sidebar
+/// The Settings sidebar: the account row on top (outside these groups); General, Permissions, and
+/// Changelog; then, under a Plugins header, All Plugins (the Plugins page) and a row per plugin,
+/// Quick Search first, then by name (#559); filtered by search, which finds a page by its title and
+/// a plugin's page also by its search keywords, as Settings › Plugins and Quick Search do. It's a stock sidebar
 /// list (#559), so its text and row height follow System Settings › Appearance › Sidebar icon size,
 /// as System Settings' own sidebar does.
 enum SettingsSidebar {
@@ -101,16 +105,23 @@ enum SettingsSidebar {
         }
     }
 
-    static func groups(matching query: String) -> [[SettingsSection]] {
+    struct Group: Hashable {
+        /// The header over the group; nil for the app's own pages.
+        let title: String?
+        let sections: [SettingsSection]
+    }
+
+    static func groups(matching query: String) -> [Group] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let matches: (SettingsSection) -> Bool = { section in
-            trimmed.isEmpty || ([section.rawValue] + (section.capability?.descriptor.searchKeywords ?? [])).contains {
+            trimmed.isEmpty || ([section.rawValue, section.sidebarTitle] + (section.capability?.descriptor.searchKeywords ?? [])).contains {
                 $0.localizedCaseInsensitiveContains(trimmed)
             }
         }
-        let app = [SettingsSection.general, .permissions, .plugins, .changelog].filter(matches)
-        let plugins = PluginsTable.sections.map { $0.plugins.filter(matches) }
-        return ([app] + plugins).filter { !$0.isEmpty }
+        return [
+            Group(title: nil, sections: [SettingsSection.general, .permissions, .changelog].filter(matches)),
+            Group(title: "Plugins", sections: ([SettingsSection.plugins] + PluginsTable.plugins).filter(matches)),
+        ].filter { !$0.sections.isEmpty }
     }
 }
 
@@ -120,6 +131,8 @@ struct SettingsRootView: View {
         selection: UITestLaunchConfiguration.current.openSettings ?? .permissions
     )
     @State private var query = ""
+    @SceneStorage("settings.sidebar.showsPlugins") private var showsPlugins = true
+    @Environment(\.openURL) private var openURL
 
     /// Locked (no entitled license after onboarding): only the Account page, with the License group, is available.
     private var isLocked: Bool { model.preferences.didCompleteOnboarding && !model.isLicensed }
@@ -148,13 +161,19 @@ struct SettingsRootView: View {
                     }
                 }
                 ForEach(groups, id: \.self) { group in
-                    Section {
-                        ForEach(group) { section in
-                            SettingsSidebarRow(section: section, attentionCount: model.settingsAttentionCount(for: section))
-                                .tag(section)
-                                .disabled(isLocked)
-                                .selectionDisabled(isLocked)
-                                .accessibilityIdentifier("settings.sidebar.\(section.launchToken)")
+                    if let title = group.title {
+                        // Folds like a Finder sidebar section; a search always shows what it finds.
+                        Section(isExpanded: Binding(
+                            get: { showsPlugins || SettingsSidebar.isSearching(query) },
+                            set: { showsPlugins = $0 }
+                        )) {
+                            ForEach(group.sections, content: row)
+                        } header: {
+                            Text(title)
+                        }
+                    } else {
+                        Section {
+                            ForEach(group.sections, content: row)
                         }
                     }
                 }
@@ -236,6 +255,30 @@ struct SettingsRootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .openDictationHistory)) { _ in model.showDictationHistory() }
     }
 
+    private func row(_ section: SettingsSection) -> some View {
+        SettingsSidebarRow(
+            section: section,
+            attentionCount: model.settingsAttentionCount(for: section),
+            isOff: section.capability.map { !model.preferences.enabledCapabilities.contains($0) } ?? false
+        )
+        .tag(section)
+        .disabled(isLocked)
+        .selectionDisabled(isLocked)
+        .accessibilityIdentifier("settings.sidebar.\(section.launchToken)")
+        .contextMenu {
+            if let capability = section.capability, !isLocked {
+                let isOn = CapabilityToggleBinding(model: model, capability: capability).value
+                Button(isOn.wrappedValue ? "Turn Off \(capability.title)" : "Turn On \(capability.title)") {
+                    isOn.wrappedValue.toggle()
+                }
+                // A plugin that needs a newer macOS can't be turned on (#322).
+                .disabled(!isOn.wrappedValue && model.preferences.compatibility.requirement(for: capability) != nil)
+                Divider()
+                Button("Open on keybumps.app") { openURL(PluginLinks.page(for: capability)) }
+            }
+        }
+    }
+
     private func showRequestedSection() {
         guard let section = MainWindowRouter.shared.consumeRequestedSection() else { return }
         navigation.navigate(to: section)
@@ -280,23 +323,27 @@ private struct SettingsSearchShortcut: ViewModifier {
 }
 
 /// A page's row: its icon tile and name, which the list sizes and highlights, and a red count of
-/// what needs attention, such as missing permissions.
+/// what needs attention, such as missing permissions. A turned-off plugin's row is dimmed.
 private struct SettingsSidebarRow: View {
     @Environment(\.sidebarRowSize) private var rowSize
     let section: SettingsSection
     let attentionCount: Int
+    let isOff: Bool
 
     var body: some View {
         Label {
-            Text(section.rawValue)
+            Text(section.sidebarTitle)
+                .foregroundStyle(isOff ? .secondary : .primary)
         } icon: {
             SettingsIconTile(systemImage: section.icon, tint: section.iconTint, size: SettingsSidebar.iconSize(for: rowSize))
+                .opacity(isOff ? 0.45 : 1)
         }
         .badge(attentionCount)
         .badgeProminence(.increased)
         .accessibilityLabel(attentionCount > 0
-            ? "\(section.rawValue), \(SettingsSidebar.attentionLabel(attentionCount, for: section))"
-            : section.rawValue)
+            ? "\(section.sidebarTitle), \(SettingsSidebar.attentionLabel(attentionCount, for: section))"
+            : section.sidebarTitle)
+        .accessibilityValue(isOff ? "Off" : "")
     }
 }
 

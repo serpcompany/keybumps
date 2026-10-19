@@ -19,7 +19,7 @@ That model needs a runtime for outside code, an isolation and permission model, 
 2. **The default capabilities** are the seven the feature set was locked at: Quick Search, Clipboard History, Screenshot Tools, Dictation, Window Manager, Shortcut Coach, and Snippets (`CapabilityCatalog.defaultCapabilities`).
 3. **Added capabilities ship inside the app, first-party.** Each is built with the recipe in `docs/architecture.md` and reaches people in a normal release, through Sparkle. A new one:
    - is turned on once for existing installs (known capabilities), unless its manifest says it ships off (`isOnByDefault`), and can be turned on or off in Settings;
-   - is listed in its own Settings group, below the default ones.
+   - is listed in its own Settings group, below the default ones. *Changed 2026-10-19 (#559): every plugin, default or added, is listed together, under one Plugins header in the sidebar and in one list on the Plugins page, Quick Search first, then by name.*
 
    Timer is the first.
 4. **An official-only plugin list, modeled on Raycast's Store (#239).** The owner's call: build the Raycast shape now, listing only official plugins built by Keybumps.

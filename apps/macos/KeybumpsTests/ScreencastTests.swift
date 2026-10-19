@@ -78,10 +78,8 @@ struct ScreencastTests {
     func findsItByName(query: String, match: QuickSearchCommand.Match) {
         #expect(CapabilityDescriptor.screenshotTools.title == "ScreenGrabs")
         #expect(QuickSearchCommand.capability(.screenshotTools).match(query) == match)
-        let sidebar = SettingsSidebar.groups(matching: query)
-        #expect(sidebar == [[.screenshotTools]])
-        let plugins = PluginsTable.sections(matching: query).map(\.plugins)
-        #expect(plugins == [[.screenshotTools]])
+        #expect(SettingsSidebar.groups(matching: query).map(\.sections) == [[.screenshotTools]])
+        #expect(PluginsTable.plugins(matching: query) == [.screenshotTools])
     }
 
     // MARK: Preferences

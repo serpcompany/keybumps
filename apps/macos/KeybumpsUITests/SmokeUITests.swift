@@ -67,6 +67,24 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(element("settings.detail.general").exists, "and leaves Settings open")
     }
 
+    func testSidebarRowMenuTurnsAPluginOn() {
+        launch(permissions: "granted", ["-KBOpenSettings", "general"])
+        XCTAssertTrue(element("settings.detail.general").waitForExistence(timeout: 20))
+
+        // Emoji Picker ships off; its row's menu turns it on, as its switch does (#559).
+        let row = element("settings.sidebar.emojiPicker")
+        row.rightClick()
+        let turnOn = app.menuItems["Turn On Emoji Picker"]
+        XCTAssertTrue(turnOn.waitForExistence(timeout: 5), "A plugin's row has a menu")
+        XCTAssertTrue(app.menuItems["Open on keybumps.app"].exists)
+        turnOn.click()
+
+        row.click()
+        let toggle = element("capability.toggle.emojiPicker")
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForValue(of: toggle, 1), "The menu turned it on")
+    }
+
     func testReportAProblemOpensFromGeneralSettings() {
         launch(permissions: "granted", ["-KBOpenSettings", "general"])
         XCTAssertTrue(element("settings.detail.general").waitForExistence(timeout: 20))

@@ -1,24 +1,14 @@
 import SwiftUI
 
-/// The Plugins table's sections: the default plugins (Quick Search first, then by name), then
-/// added ones by name (ADR 0006).
+/// Every plugin, Quick Search first, then by name, in one list on the Plugins page and under the
+/// Plugins header in the sidebar (#559, which retired ADR 0006's separate group for added plugins).
 enum PluginsTable {
-    struct Section: Equatable {
-        let title: String
-        let plugins: [SettingsSection]
-    }
-
-    static var sections: [Section] {
-        let pages = CapabilityCatalog.descriptors.compactMap(\.settingsPage?.section)
+    static var plugins: [SettingsSection] {
+        CapabilityCatalog.descriptors.compactMap(\.settingsPage?.section)
             .sorted { lhs, rhs in
                 if (lhs == .search) != (rhs == .search) { return lhs == .search }
                 return lhs.rawValue.localizedStandardCompare(rhs.rawValue) == .orderedAscending
             }
-        let isDefault: (SettingsSection) -> Bool = { $0.capability.map(CapabilityCatalog.defaultCapabilities.contains) ?? false }
-        return [
-            Section(title: "Default", plugins: pages.filter(isDefault)),
-            Section(title: "Added", plugins: pages.filter { !isDefault($0) }),
-        ].filter { !$0.plugins.isEmpty }
     }
 
     /// A plugin's palette tab Command-number, while the tab can be shown; the Hotkeys tab only
@@ -35,23 +25,21 @@ enum PluginsTable {
         return assigned.count > 1 ? "\(first) +\(assigned.count - 1)" : first
     }
 
-    /// The sections, keeping plugins whose name or Quick Search keywords contain `query`.
-    static func sections(matching query: String) -> [Section] {
+    /// The plugins whose name or Quick Search keywords contain `query`.
+    static func plugins(matching query: String) -> [SettingsSection] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return sections }
-        return sections.map { section in
-            Section(title: section.title, plugins: section.plugins.filter { page in
-                guard let descriptor = page.capability?.descriptor else { return false }
-                return ([descriptor.title] + (descriptor.searchKeywords ?? [])).contains {
-                    $0.localizedCaseInsensitiveContains(trimmed)
-                }
-            })
-        }.filter { !$0.plugins.isEmpty }
+        guard !trimmed.isEmpty else { return plugins }
+        return plugins.filter { page in
+            guard let descriptor = page.capability?.descriptor else { return false }
+            return ([descriptor.title] + (descriptor.searchKeywords ?? [])).contains {
+                $0.localizedCaseInsensitiveContains(trimmed)
+            }
+        }
     }
 }
 
-/// Settings › Plugins, like Raycast's Extensions list: every plugin, the default ones then added
-/// ones, with its palette tab, its shortcut, and its switch. Clicking one opens its own page, which
+/// Settings › Plugins, like Raycast's Extensions list: every plugin, Quick Search first, then by
+/// name, with its palette tab, its shortcut, and its switch. Clicking one opens its own page, which
 /// has its own row in the sidebar.
 struct PluginsSettingsView: View {
     @Environment(\.openURL) private var openURL
@@ -59,7 +47,7 @@ struct PluginsSettingsView: View {
     @State private var query = ""
 
     var body: some View {
-        let sections = PluginsTable.sections(matching: query)
+        let plugins = PluginsTable.plugins(matching: query)
         SettingsPage {
             HStack(spacing: 8) {
                 SettingsSearchField(text: $query, prompt: "Search plugins…", identifier: "plugins.search")
@@ -70,12 +58,11 @@ struct PluginsSettingsView: View {
                 .help("Opens keybumps.app/plugins in your browser")
                 .accessibilityIdentifier("plugins.browseWebsite")
             }
-            if sections.isEmpty {
+            if plugins.isEmpty {
                 SettingsNote("No plugins match.")
-            }
-            ForEach(sections, id: \.title) { section in
-                SettingsGroup(section.title) {
-                    ForEach(section.plugins) { page in
+            } else {
+                SettingsGroup {
+                    ForEach(plugins) { page in
                         PluginsListRow(page: page) { open(page) }
                     }
                 }
