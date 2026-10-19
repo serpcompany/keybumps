@@ -78,6 +78,10 @@ struct QuickSearchSnippetTests {
         // `;clip` without its punctuation is still a keyword match, but it doesn't jump above the
         // apps: typing "mail" should still put Mail first.
         #expect(rows == [.snippet(typed), .result(app), .command(clipboard), .snippet(bare), .snippet(named), .result(file), .snippet(text)])
+        // Until Spotlight answers, the text match waits, so files never push a highlighted row down.
+        #expect(QuickSearchRanking.items(
+            matching: "clip", applications: [app], files: [], commands: [clipboard], snippets: [text, named, bare, typed], filesPending: true
+        ) == [.snippet(typed), .result(app), .command(clipboard), .snippet(bare), .snippet(named)])
         #expect(QuickSearchRanking.items(matching: ";clip", applications: [], files: [], commands: [], snippets: [named, bare]).first
             == .snippet(bare), "…and comes first when typed with it")
         #expect(QuickSearchRanking.items(matching: "clip", applications: [app], files: [file], commands: [clipboard])

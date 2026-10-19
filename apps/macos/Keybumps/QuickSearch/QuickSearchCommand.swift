@@ -311,7 +311,9 @@ extension QuickSearchRanking {
     /// keyword, punctuation included, is the query comes first of all, since a keyword is typed to
     /// find exactly it; other keyword and name matches follow the apps and commands, before files.
     /// So `mail` keeps Mail first even with a `;mail` snippet. Snippets that match only by their text
-    /// (#555) come last of all, after files, so a word in a snippet never buries what it names.
+    /// (#555) come last of all, after files, so a word in a snippet never buries what it names. While
+    /// `filesPending` (Spotlight hasn't answered yet), they're held back, so they appear once, already
+    /// below the files, instead of being highlighted first and then pushed down under them.
     @MainActor
     static func items(
         matching term: String,
@@ -321,7 +323,8 @@ extension QuickSearchRanking {
         actions: [QuickSearchAction] = [],
         snippets: [Snippet] = [],
         emoji: [QuickSearchEmoji] = [],
-        usage: ApplicationUsageStore? = nil
+        usage: ApplicationUsageStore? = nil,
+        filesPending: Bool = false
     ) -> [QuickSearchItem] {
         let normalizedTerm = normalized(term)
         let matches = (commands + actions.map(QuickSearchCommand.action)).compactMap { command in
@@ -342,7 +345,7 @@ extension QuickSearchRanking {
             }
             .map(\.element.item)
         let snippetMatches = SnippetSearch.quickSearchMatches(snippets, query: term)
-        let byText = snippetMatches.filter { $0.match == .text }.map(\.snippet)
+        let byText = filesPending ? [] : snippetMatches.filter { $0.match == .text }.map(\.snippet)
         let byKeywordOrName = snippetMatches.filter { $0.match != .text }.map(\.snippet)
         let typedKeywords = byKeywordOrName.filter { SnippetSearch.isWholeKeyword($0, query: term) }
         let otherSnippets = byKeywordOrName.filter { !SnippetSearch.isWholeKeyword($0, query: term) }
