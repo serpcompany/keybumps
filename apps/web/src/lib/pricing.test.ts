@@ -42,6 +42,8 @@ describe('pricing', () => {
   it('keeps prices and terms of sale out of every other file', () => {
     const written = [
       pricing.price,
+      pricing.renewalPrice,
+      pricing.scope,
       `${pricing.refundDays}-day`,
       `${pricing.refundDays} days`,
       pricing.macsText,
@@ -82,18 +84,24 @@ describe('pricing', () => {
   it('dates the legal pages with the terms of sale they show', () => {
     expect({
       LEGAL_UPDATED,
+      renewalPrice: pricing.renewalPrice,
       macs: pricing.macs,
       macsInWords: pricing.macsInWords,
       refundDays: pricing.refundDays,
       guarantee: pricing.guarantee,
+      scope: pricing.scope,
       terms: pricing.model.terms
     }).toEqual({
-      LEGAL_UPDATED: 'October 8, 2026',
+      LEGAL_UPDATED: 'October 19, 2026',
+      renewalPrice: '$49',
       macs: 1,
       macsInWords: 'one',
       refundDays: 30,
       guarantee: '30-day money-back guarantee',
-      terms: 'A one-time license does not expire. It includes all future updates to Keybumps.'
+      scope:
+        'The license covers the Keybumps features that run on your Mac. Online services that run on our servers, such as AI or cloud features, are not included; if we offer them, they are sold separately.',
+      terms:
+        'A license does not expire. It includes the updates released in the year after purchase, new plugins among them. When that year ends you may keep using the last version released in it, or renew updates for another year (currently $49 a year). Licenses bought before October 19, 2026 include the updates released through October 19, 2027.'
     })
   })
 })

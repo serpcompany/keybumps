@@ -5,14 +5,16 @@
  * any of it is written out anywhere else. One exception so far: /license/ still says "one Mac"
  * (#269).
  *
- * Terms of sale: `macs`, `macsInWords`, `refundDays`, `guarantee`, and `model.terms` appear on the
- * legal pages, so changing one changes them. `pricing.test.ts` pins these values next to
- * `LEGAL_UPDATED` (in ./site): it fails until the pinned values are updated, which is the moment to
- * move the date. A model with renewals, such as a subscription, also needs new terms written for it:
- * renewal, cancellation, and what happens when it lapses.
+ * Terms of sale: `renewalPrice`, `macs`, `macsInWords`, `refundDays`, `guarantee`, `scope`, and
+ * `model.terms` appear on the legal pages, so changing one changes them. `pricing.test.ts` pins these
+ * values next to `LEGAL_UPDATED` (in ./site): it fails until the pinned values are updated, which is
+ * the moment to move the date. Automatic renewal, once it's sold (#548), also needs terms written for
+ * it: how it renews, how to cancel, and refunds of a renewal.
  */
 
-const price = '$49'
+const price = '$97'
+/** What another year of updates costs once the first year ends. */
+const renewalPrice = '$49'
 /** Macs one license covers. */
 const macs = 1
 /** Days in which a purchase is refunded in full, no questions asked. */
@@ -27,6 +29,7 @@ const macsText = `${macsInWords} Mac${plural}`
 
 export const pricing = {
   price,
+  renewalPrice,
   /** After the price, such as "/month"; empty for a one-time purchase. */
   period: '',
   currency: 'USD',
@@ -43,6 +46,9 @@ export const pricing = {
   macsLabel: `${macs} Mac${plural}`,
   macsText,
   guarantee: `${refundDays}-day money-back guarantee`,
+  /** What a license covers and what it doesn't, on the terms and /pricing/ (#547). */
+  scope:
+    'The license covers the Keybumps features that run on your Mac. Online services that run on our servers, such as AI or cloud features, are not included; if we offer them, they are sold separately.',
   /** Everything that depends on how Keybumps is sold. */
   model: {
     /** The pricing card's pill. */
@@ -50,28 +56,31 @@ export const pricing = {
     /** The home page pricing section's headline. */
     headline: 'One price. Yours to keep.',
     /** Under the home page pricing headline, before the guarantee. */
-    summary: 'No subscription, no account.',
+    summary: 'Pay once. A year of updates included.',
     /** Under /pricing/'s headline. */
-    pageLede: 'One app, one price. No subscription, no account.',
+    pageLede: 'Pay once and keep it. A year of updates and new plugins included.',
     /** On the pricing card's list. */
-    updates: 'All future updates included',
+    updates: '1 year of updates, including new plugins',
+    /** On the pricing card's list, after `updates`. */
+    renewal: `Then ${renewalPrice}/year for updates, or keep the version you have`,
     /** /pricing/'s first question. */
     question: {
       q: 'Is this a subscription?',
-      a: `No. You pay ${price} once and the license is yours to keep. It includes all future updates.`
+      a: `No. You pay ${price} once, and that includes a year of updates and new plugins. After that, updates are ${renewalPrice} a year. If you don’t renew, the version you have is yours to keep and keeps working.`
     },
     /** /pricing/'s description, before the guarantee. */
-    description: `Keybumps is a ${price} one-time purchase for ${macsText}`,
+    description: `Keybumps is a ${price} one-time purchase for ${macsText}, including a year of updates`,
     /** Terms § 3, after the grant: how long the license lasts and what it includes. */
-    terms: 'A one-time license does not expire. It includes all future updates to Keybumps.'
+    terms: `A license does not expire. It includes the updates released in the year after purchase, new plugins among them. When that year ends you may keep using the last version released in it, or renew updates for another year (currently ${renewalPrice} a year). Licenses bought before October 19, 2026 include the updates released through October 19, 2027.`
   }
 } as const
 
 /** The pricing card's list. */
 export const pricingIncludes = [
-  'Every plugin',
+  'Every plugin that runs on your Mac',
   `License for ${pricing.macsLabel} — move it to a new Mac any time`,
   pricing.model.updates,
+  pricing.model.renewal,
   'No account and no cloud sync',
   pricing.guarantee
 ]

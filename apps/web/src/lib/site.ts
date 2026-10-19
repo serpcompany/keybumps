@@ -3,7 +3,7 @@ export const SUPPORT_EMAIL = 'support@keybumps.app'
 /** Polar customer portal: purchases, license keys, and freeing a Mac. */
 export const CUSTOMER_PORTAL_URL = 'https://polar.sh/serp/portal'
 
-export const LEGAL_UPDATED = 'October 8, 2026'
+export const LEGAL_UPDATED = 'October 19, 2026'
 /** The privacy policy changes with the app's features, apart from the other legal pages. */
 export const PRIVACY_UPDATED = 'October 18, 2026'
 
