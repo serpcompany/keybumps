@@ -5,12 +5,15 @@
 # Phase 1 uploads immutable assets to releases/<build>/ (refusing to overwrite different bytes)
 # and verifies each uploaded object byte for byte, read back from R2. Phase 2 then publishes the pointers last:
 # appcast.xml (production) or staging/appcast.xml (staging), plus latest.json on production.
+# On production, phase 3 then adds the release to the release index, releases.json, through
+# publish-release-index.sh, so the index lists only releases that are live.
 #
 # usage: publish-release.sh <release-output-directory> <production|staging> [--publish]
 # env:   CLOUDFLARE_API_TOKEN  bucket-scoped R2 token with read and write (read by wrangler; never stored here)
 #        KEYBUMPS_WRANGLER     wrangler command (default: wrangler)
 set -euo pipefail
 source "${0:A:h}/lib/update-url-validation.sh"
+source "${0:A:h}/lib/r2-objects.sh"
 
 (( $# == 2 || $# == 3 )) || { print -u2 "usage: $0 <release-output-directory> <production|staging> [--publish]"; exit 64; }
 output=${1:A}; channel=$2; mode=${3:-}
@@ -43,20 +46,6 @@ assert data["dmgURL"] == f"https://updates.keybumps.app/releases/{sys.argv[2]}/K
 PY
 fi
 
-content_type() {
-  case $1 in
-    *.zip) print application/zip ;;
-    *.dmg) print application/x-apple-diskimage ;;
-    *.md) print "text/markdown; charset=utf-8" ;;
-    *.sha256) print "text/plain; charset=utf-8" ;;
-    *.xml) print "application/xml; charset=utf-8" ;;
-    *.json) print "application/json; charset=utf-8" ;;
-    *) print -u2 "unsupported release file: $1"; return 1 ;;
-  esac
-}
-immutable_cache="public, max-age=31536000, immutable"
-pointer_cache="public, max-age=60, must-revalidate"
-
 typeset -a asset_files pointer_files pointer_keys
 asset_files=("$assets_dir"/*(N.))
 (( ${#asset_files} > 0 )) || { print -u2 "no release assets"; exit 66; }
@@ -66,6 +55,12 @@ done
 for file in $asset_files; do content_type "$file" >/dev/null; done
 if [[ "$channel" == production ]]; then
   pointer_files=("$appcast" "$latest"); pointer_keys=(appcast.xml latest.json)
+  # The release index entry: this release's DMG and the release date its appcast item carries (ADR 0011).
+  released_at=$(/usr/bin/xmllint --xpath "string(//*[local-name()='item'][1]/*[local-name()='releaseDate'])" "$appcast")
+  [[ -n "$released_at" ]] || { print -u2 "appcast has no release date (<keybumps:releaseDate>) for the release index"; exit 65; }
+  index_entry=$(/usr/bin/mktemp)
+  trap '/bin/rm -f "$index_entry"' EXIT
+  /usr/bin/python3 "${0:A:h}/lib/release_index.py" entry "$version" "$build" "$released_at" "$index_entry"
 else
   pointer_files=("$appcast"); pointer_keys=(staging/appcast.xml)
 fi
@@ -75,43 +70,14 @@ print "Phase 1 (immutable assets):"
 for file in $asset_files; do print "  $release_prefix/${file:t}"; done
 print "Phase 2 (pointers, last):"
 for key in $pointer_keys; do print "  $key"; done
+if [[ "$channel" == production ]]; then
+  print "Phase 3 (release index, after the pointers):"
+  print "  releases.json adds $version ($build), released $released_at"
+fi
 if [[ "$mode" != --publish ]]; then
   print "Dry run only. Re-run with --publish (owner authorization required) to upload."
   exit 0
 fi
-
-sha() { /usr/bin/shasum -a 256 "$1" | /usr/bin/awk '{print $1}' }
-# Reads the object from the R2 bucket itself. Cloudflare Bot Fight Mode blocks CI runners from the
-# public updates.keybumps.app host, so public-edge checks use scripts/verify-update-publication.sh
-# from a normal network instead.
-# Prints nothing when the object does not exist; any other read failure stops the publish, so an
-# unreadable object is never mistaken for a missing one and overwritten.
-remote_sha() {
-  local target=$1 temporary errors
-  temporary=$(/usr/bin/mktemp); errors=$(/usr/bin/mktemp)
-  if $wrangler r2 object get "$bucket/$target" --remote --pipe > "$temporary" 2> "$errors"; then
-    sha "$temporary"
-  elif ! /usr/bin/grep -q "The specified key does not exist" "$errors"; then
-    print -u2 "could not read $target from R2:"; /bin/cat "$errors" >&2
-    /bin/rm -f "$temporary" "$errors"
-    return 1
-  fi
-  /bin/rm -f "$temporary" "$errors"
-}
-put() {
-  local file=$1 key=$2 cache=$3
-  $wrangler r2 object put "$bucket/$key" --file "$file" --content-type "$(content_type "$file")" --cache-control "$cache" --remote >/dev/null
-}
-verify() {
-  local file=$1 key=$2 expected actual
-  expected=$(sha "$file")
-  for _ in {1..10}; do
-    actual=$(remote_sha "$key")
-    [[ "$actual" == "$expected" ]] && { print "  verified $key"; return 0; }
-    sleep 3
-  done
-  print -u2 "published $key does not match the local file"; return 1
-}
 
 print "Publishing phase 1…"
 for file in $asset_files; do
@@ -122,15 +88,19 @@ for file in $asset_files; do
     print "  already published $key"
     continue
   fi
-  put "$file" "$key" "$immutable_cache"
+  put "$file" "$key" "$R2_IMMUTABLE_CACHE"
   verify "$file" "$key"
 done
 
 print "Publishing phase 2…"
 for index in {1..${#pointer_files}}; do
-  put "${pointer_files[$index]}" "${pointer_keys[$index]}" "$pointer_cache"
+  put "${pointer_files[$index]}" "${pointer_keys[$index]}" "$R2_POINTER_CACHE"
 done
 for index in {1..${#pointer_files}}; do
   verify "${pointer_files[$index]}" "${pointer_keys[$index]}"
 done
+if [[ "$channel" == production ]]; then
+  print "Publishing phase 3…"
+  "${0:A:h}/publish-release-index.sh" "$index_entry" --publish
+fi
 print "Published Keybumps $version ($build) to $channel."
