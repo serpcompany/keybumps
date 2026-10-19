@@ -181,10 +181,11 @@ struct PaletteClickButton<Label: View>: View {
 
     /// The click count of the mouse event the button is handling. Any other press, such as
     /// VoiceOver's, is one click, even right after a double-click elsewhere: the last mouse event
-    /// counts only while it's within the double-click interval.
+    /// counts only while it's recent, within the double-click interval or a second, whichever is
+    /// longer, so a busy main thread doesn't turn a double-click's second click into a first.
     @MainActor private static var clickCount: Int {
         guard let event = NSApp.currentEvent, event.type == .leftMouseUp || event.type == .leftMouseDown,
-              ProcessInfo.processInfo.systemUptime - event.timestamp <= NSEvent.doubleClickInterval else { return 1 }
+              ProcessInfo.processInfo.systemUptime - event.timestamp <= max(NSEvent.doubleClickInterval, 1) else { return 1 }
         return event.clickCount
     }
 
