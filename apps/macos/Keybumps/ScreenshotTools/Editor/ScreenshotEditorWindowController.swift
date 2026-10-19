@@ -5,7 +5,8 @@ import SwiftUI
 @MainActor
 @Observable
 final class ScreenshotEditorModel {
-    var tool: ScreenshotEditorTool = .pixelate { didSet { onChange?() } }
+    /// Opens on the first tool, Arrow (#544).
+    var tool: ScreenshotEditorTool = .arrow { didSet { onChange?() } }
     var color: ScreenshotAnnotationColor = .red { didSet { onChange?() } }
     private(set) var history = ScreenshotEditorHistory() { didSet { onChange?() } }
     var isEditingText = false
@@ -151,7 +152,7 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
         return (key == "\r" || key == "\u{3}") && (flags.isEmpty || flags == .command)
     }
 
-    /// Unmodified 1–5 or B/R/A/D/T select a tool; anything with Command, Option, or Control does not.
+    /// Unmodified 1–5 or A/T/D/B/R select a tool; anything with Command, Option, or Control does not.
     static func tool(forKey key: String, modifiers: NSEvent.ModifierFlags) -> ScreenshotEditorTool? {
         guard shortcutFlags(modifiers).isEmpty else { return nil }
         return ScreenshotEditorTool.matching(key: key)

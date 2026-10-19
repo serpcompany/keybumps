@@ -2,45 +2,45 @@ import AppKit
 
 /// Editor tools for the v1 ScreenGrabs markup editor.
 enum ScreenshotEditorTool: String, CaseIterable, Identifiable {
-    case pixelate, redact, arrow, draw, text
+    case arrow, text, draw, pixelate, redact
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
+        case .arrow: "Arrow"
+        case .text: "Text"
+        case .draw: "Draw"
         case .pixelate: "Blur"
         case .redact: "Redact"
-        case .arrow: "Arrow"
-        case .draw: "Draw"
-        case .text: "Text"
         }
     }
 
     var systemImage: String {
         switch self {
+        case .arrow: "arrow.up.right"
+        case .text: "textformat"
+        case .draw: "pencil.tip"
         case .pixelate: "square.grid.3x3.fill"
         case .redact: "rectangle.fill"
-        case .arrow: "arrow.up.right"
-        case .draw: "pencil.tip"
-        case .text: "textformat"
         }
     }
 
     /// Single-key shortcut shown in tooltips and handled by the canvas.
     var key: String {
         switch self {
+        case .arrow: "a"
+        case .text: "t"
+        case .draw: "d"
         case .pixelate: "b"
         case .redact: "r"
-        case .arrow: "a"
-        case .draw: "d"
-        case .text: "t"
         }
     }
 
-    /// Number key in the editor bar's order: 1 Blur … 5 Text.
+    /// Number key in the editor bar's order: 1 Arrow … 5 Redact (#544).
     var number: String { String((Self.allCases.firstIndex(of: self) ?? 0) + 1) }
 
-    /// Matches a number (1–5) or letter (B/R/A/D/T) shortcut.
+    /// Matches a number (1–5) or letter (A/T/D/B/R) shortcut.
     static func matching(key: String) -> ScreenshotEditorTool? {
         let key = key.lowercased()
         return allCases.first { $0.number == key || $0.key == key }
