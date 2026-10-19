@@ -12,39 +12,45 @@ struct UpdateYearFilterTests {
         UpdateCandidate(version: build, displayVersion: "v\(build)", releaseDate: released.flatMap(PolarDates.parse), runsHere: runsHere)
     }
 
+    @Test("With no license and no update year learned, nothing installs and nothing asks for a renewal")
+    func noLicense() {
+        #expect(UpdateYearFilter.choose([candidate("5000", nil), candidate("5100", "2027-12-01T00:00:00Z")], hostVersion: "4032", coverage: .noLicense) == .init(pick: .nothing))
+    }
+
     @Test("Without an update year, or with nothing it leaves out, Sparkle picks as before")
     func sparklePicks() {
-        #expect(UpdateYearFilter.choose([candidate("5000", "2027-12-01T00:00:00Z")], hostVersion: "4032", updateYear: nil) == .init(pick: .sparkle))
+        #expect(UpdateYearFilter.choose([candidate("5000", "2027-12-01T00:00:00Z")], hostVersion: "4032", coverage: .unknown) == .init(pick: .sparkle))
         let covered = [candidate("5000", "2027-11-05T22:00:00Z"), candidate("4040", nil)]
-        #expect(UpdateYearFilter.choose(covered, hostVersion: "4032", updateYear: year) == .init(pick: .sparkle))
+        #expect(UpdateYearFilter.choose(covered, hostVersion: "4032", coverage: .updateYear(year)) == .init(pick: .sparkle))
     }
 
     @Test("A newer version released after the update year is shown for renewal, never installed")
     func renewalOnly() {
-        let choice = UpdateYearFilter.choose([candidate("5000", "2027-11-06T00:00:00Z")], hostVersion: "4032", updateYear: year)
+        let choice = UpdateYearFilter.choose([candidate("5000", "2027-11-06T00:00:00Z")], hostVersion: "4032", coverage: .updateYear(year))
         #expect(choice == .init(pick: .nothing, renewalVersion: "v5000"))
     }
 
     @Test("The newest covered version still installs beside ones that need a renewal")
     func coveredBesideRenewal() {
         let items = [candidate("4040", "2027-10-01T00:00:00Z"), candidate("5000", "2027-12-01T00:00:00Z"), candidate("5100", "2028-01-01T00:00:00Z")]
-        #expect(UpdateYearFilter.choose(items, hostVersion: "4032", updateYear: year) == .init(pick: .candidate(0), renewalVersion: "v5100"))
-        #expect(UpdateYearFilter.choose(items, hostVersion: "4040", updateYear: year) == .init(pick: .nothing, renewalVersion: "v5100"))
+        #expect(UpdateYearFilter.choose(items, hostVersion: "4032", coverage: .updateYear(year)) == .init(pick: .candidate(0), renewalVersion: "v5100"))
+        #expect(UpdateYearFilter.choose(items, hostVersion: "4040", coverage: .updateYear(year)) == .init(pick: .nothing, renewalVersion: "v5100"))
     }
 
     @Test("A version this Mac can't run, or one no newer than it, never asks for a renewal")
     func notOffered() {
         let tooNew = [candidate("5000", "2027-12-01T00:00:00Z", runsHere: false)]
-        #expect(UpdateYearFilter.choose(tooNew, hostVersion: "4032", updateYear: year) == .init(pick: .sparkle))
+        #expect(UpdateYearFilter.choose(tooNew, hostVersion: "4032", coverage: .updateYear(year)) == .init(pick: .sparkle))
         // A newer build installed by hand is the appcast's own release.
-        #expect(UpdateYearFilter.choose([candidate("5000", "2027-12-01T00:00:00Z")], hostVersion: "5000", updateYear: year) == .init(pick: .sparkle))
+        #expect(UpdateYearFilter.choose([candidate("5000", "2027-12-01T00:00:00Z")], hostVersion: "5000", coverage: .updateYear(year)) == .init(pick: .sparkle))
     }
 
     @Test("Check for Updates… is quiet only once the update year has ended")
     func quietCheck() {
-        #expect(!UpdateYearFilter.checksQuietly(updateYear: nil, now: .now))
-        #expect(!UpdateYearFilter.checksQuietly(updateYear: year, now: PolarDates.parse("2027-11-05T23:00:00Z")!))
-        #expect(UpdateYearFilter.checksQuietly(updateYear: year, now: PolarDates.parse("2027-11-06T00:00:00Z")!))
+        #expect(!UpdateYearFilter.checksQuietly(coverage: .unknown, now: .now))
+        #expect(!UpdateYearFilter.checksQuietly(coverage: .noLicense, now: .now))
+        #expect(!UpdateYearFilter.checksQuietly(coverage: .updateYear(year), now: PolarDates.parse("2027-11-05T23:00:00Z")!))
+        #expect(UpdateYearFilter.checksQuietly(coverage: .updateYear(year), now: PolarDates.parse("2027-11-06T00:00:00Z")!))
     }
 }
 
@@ -101,7 +107,10 @@ struct UpdateRenewalStateTests {
         #expect(UpdateCandidate(item: try item(build: "4033", version: "0.0.3", released: nil)).releaseDate == nil)
 
         #expect(updater.choose([covered, after], hostVersion: "4032") == nil, "No update year yet: Sparkle picks")
-        updater.setUpdateYear(UpdateYear(lastDay: UpdateYear.day("2027-11-05")!))
+        updater.setUpdateCoverage(.noLicense)
+        #expect(updater.choose([covered, after], hostVersion: "4032") === SUAppcastItem.empty(), "No license: nothing installs")
+        #expect(updater.pendingRenewalVersion == nil)
+        updater.setUpdateCoverage(.updateYear(UpdateYear(lastDay: UpdateYear.day("2027-11-05")!)))
         #expect(updater.choose([covered, after], hostVersion: "4032") === covered)
         #expect(updater.choose([after], hostVersion: "4032") === SUAppcastItem.empty())
         #expect(updater.pendingRenewalVersion == "0.0.5")
@@ -141,17 +150,24 @@ struct UpdateRenewalStateTests {
                 licensing: licensing
             )
         }
+        let neverLicensed = FakeUpdateController()
+        _ = makeModel(updater: neverLicensed, licensing: FixedLicenseController(state: .unlicensed))
+        #expect(neverLicensed.coverages.last == .noLicense, "A Mac that never learned a year installs nothing yet")
+        let yearUnknown = FakeUpdateController()
+        _ = makeModel(updater: yearUnknown, licensing: FixedLicenseController())
+        #expect(yearUnknown.coverages.last == .unknown, "An active license whose year isn't known yet filters nothing")
+
         let updater = FakeUpdateController()
         let model = makeModel(updater: updater, licensing: FixedLicenseController(updateYear: year))
-        #expect(updater.updateYears.last == year)
+        #expect(updater.coverages.last == .updateYear(year))
 
         await model.deactivateLicense()
         #expect(model.licenseSnapshot.updateYear == nil)
-        #expect(updater.updateYears.last == year, "Deactivating keeps the filter")
+        #expect(updater.coverages.last == .updateYear(year), "Deactivating keeps the filter")
 
         let relaunched = FakeUpdateController()
         _ = makeModel(updater: relaunched, licensing: FixedLicenseController(state: .unlicensed))
-        #expect(relaunched.updateYears.last == year, "So does relaunching with no license")
+        #expect(relaunched.coverages.last == .updateYear(year), "So does relaunching with no license")
     }
 
     @Test("Settings › Changelog says when the updates ended")

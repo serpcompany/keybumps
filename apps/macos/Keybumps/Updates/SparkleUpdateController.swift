@@ -106,8 +106,8 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
     private let telemetry: UpdateTelemetry
     private var updaterController: SPUStandardUpdaterController?
     private var started = false
-    /// The license's update year (ADR 0011), which `bestValidUpdate(in:for:)` filters by.
-    private(set) var updateYear: UpdateYear?
+    /// What the license lets Sparkle install (ADR 0011), which `bestValidUpdate(in:for:)` filters by.
+    private(set) var coverage: UpdateCoverage = .unknown
     /// The newer version the last appcast held that only a renewal installs; shown once Sparkle
     /// reports that it found nothing to install, and cleared when the next appcast loads.
     private(set) var pendingRenewalVersion: String?
@@ -159,7 +159,7 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
         // Sparkle's alert would call Keybumps up to date when only a renewal installs the newer
         // version, so after the update year the check is quiet, and Settings › Changelog shows its
         // result with Renew (ADR 0011).
-        if UpdateYearFilter.checksQuietly(updateYear: updateYear, now: Date()) {
+        if UpdateYearFilter.checksQuietly(coverage: coverage, now: Date()) {
             updater.checkForUpdatesInBackground()
             onShowVersionHistory?()
         } else {
@@ -167,11 +167,13 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
         }
     }
 
-    func setUpdateYear(_ year: UpdateYear?) {
-        guard year != updateYear else { return }
-        updateYear = year
-        // A renewal moved the last day: check again, so a version it now covers installs.
-        if snapshot.renewalVersion != nil, let updater = updaterController?.updater, updater.canCheckForUpdates {
+    func setUpdateCoverage(_ coverage: UpdateCoverage) {
+        guard coverage != self.coverage else { return }
+        let wasWaiting = self.coverage == .noLicense || snapshot.renewalVersion != nil
+        self.coverage = coverage
+        // A key was activated, or a renewal moved the last day: check again, so a version the
+        // license now covers installs.
+        if wasWaiting, let updater = updaterController?.updater, updater.canCheckForUpdates {
             updater.checkForUpdatesInBackground()
         }
     }
@@ -190,7 +192,7 @@ final class SparkleUpdateController: NSObject, UpdateControlling, SPUUpdaterDele
 
     /// `bestValidUpdate(in:for:)` for a list of items, which tests can build.
     func choose(_ items: [SUAppcastItem], hostVersion: String) -> SUAppcastItem? {
-        let choice = UpdateYearFilter.choose(items.map(UpdateCandidate.init(item:)), hostVersion: hostVersion, updateYear: updateYear)
+        let choice = UpdateYearFilter.choose(items.map(UpdateCandidate.init(item:)), hostVersion: hostVersion, coverage: coverage)
         pendingRenewalVersion = choice.renewalVersion
         switch choice.pick {
         case .sparkle: return nil

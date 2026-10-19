@@ -361,7 +361,8 @@ private struct LicenseSettingsGroup: View {
                     SettingsRowLabel(title: "Move to another Mac", subtitle: "Frees this Mac’s activation so the key can be used elsewhere.")
                 }
             }
-            if !snapshot.isEntitled && !releasedAfterUpdateYear {
+            // Also when this build came out after the update year: a new license's key goes here.
+            if !snapshot.isEntitled {
                 HStack(spacing: 8) {
                     TextField("KEYBUMPS-…", text: $key)
                         .textFieldStyle(.roundedBorder)
@@ -440,7 +441,7 @@ private struct LicenseSettingsGroup: View {
             return "Polar says this license key has expired. Contact support@keybumps.app."
         case .locked(.releasedAfterUpdateYear):
             let ended = snapshot.updateYear.map { " on \($0.lastDayText)" } ?? ""
-            return "This version of Keybumps came out after your license’s updates ended\(ended). Renew updates to use it, or install an earlier version from keybumps.app/changelog."
+            return "This version of Keybumps came out after your license’s updates ended\(ended). Renew updates to use it, install an earlier version from keybumps.app/changelog, or enter a new license’s key below."
         case .locked(.needsCheck):
             return "Keybumps hasn’t been able to check your license for 45 days. Connect to the internet and check again."
         }

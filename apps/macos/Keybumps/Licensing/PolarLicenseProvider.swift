@@ -160,12 +160,14 @@ struct PolarLicenseProvider: LicenseProviding {
             // No metadata, or a renewal date that isn't one, leaves the renewal unknown.
             guard let metadata = try? container.nestedContainer(keyedBy: CustomerKeys.self, forKey: .customer)
                 .nestedContainer(keyedBy: MetadataKeys.self, forKey: .metadata) else { return }
-            guard metadata.contains(.updatesUntil) else {
+            // No key, or an empty one, means no renewal is left; the site's webhook removes it (ADR 0011).
+            let value = metadata.contains(.updatesUntil) ? try? metadata.decode(String.self, forKey: .updatesUntil) : ""
+            guard let value else { return }
+            if value.trimmingCharacters(in: .whitespaces).isEmpty {
                 dates.readRenewals = true
                 return
             }
-            guard let value = try? metadata.decode(String.self, forKey: .updatesUntil),
-                  let day = UpdateYear.day(value) else { return }
+            guard let day = UpdateYear.day(value) else { return }
             dates.renewedThrough = day
             dates.readRenewals = true
         }

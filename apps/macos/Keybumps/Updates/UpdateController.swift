@@ -106,9 +106,8 @@ protocol UpdateControlling: AnyObject {
     func setAutomaticallyChecks(_ enabled: Bool)
     func installationSafetyDidChange()
     func restartWhenSafe()
-    /// The license's update year, which newer versions must fall in to install (ADR 0011); nil
-    /// while unknown, when every version counts as covered.
-    func setUpdateYear(_ year: UpdateYear?)
+    /// What the license lets the updater install (ADR 0011).
+    func setUpdateCoverage(_ coverage: UpdateCoverage)
 }
 
 @MainActor
@@ -131,7 +130,7 @@ final class DisabledUpdateController: UpdateControlling {
     func setAutomaticallyChecks(_ enabled: Bool) {}
     func installationSafetyDidChange() {}
     func restartWhenSafe() {}
-    func setUpdateYear(_ year: UpdateYear?) {}
+    func setUpdateCoverage(_ coverage: UpdateCoverage) {}
 }
 
 @MainActor

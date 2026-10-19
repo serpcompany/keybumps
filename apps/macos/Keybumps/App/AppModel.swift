@@ -430,11 +430,17 @@ final class AppModel {
         refreshUpdateAttention()
     }
 
-    /// The update year the updater filters by (ADR 0011): the license's, or, while no license has
-    /// one, the last one this Mac learned.
+    /// What the updater may install (ADR 0011): through the license's update year, or, while no
+    /// license has one, the last one this Mac learned. A Mac that never learned one installs
+    /// nothing until a key is activated, and nothing is filtered while an active license's year
+    /// isn't known yet.
     private func applyUpdateYear(_ year: UpdateYear?) {
         if let year { preferences.lastUpdateYearDay = year.lastDay }
-        updater.setUpdateYear(year ?? preferences.lastUpdateYearDay.map(UpdateYear.init(lastDay:)))
+        if let known = year ?? preferences.lastUpdateYearDay.map(UpdateYear.init(lastDay:)) {
+            updater.setUpdateCoverage(.updateYear(known))
+        } else {
+            updater.setUpdateCoverage(licenseSnapshot.state == .unlicensed ? .noLicense : .unknown)
+        }
     }
 
     private func refreshUpdateAttention() {

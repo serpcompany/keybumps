@@ -28,6 +28,18 @@ extension UpdateCandidate {
     }
 }
 
+/// What the updater may install under the license (ADR 0011).
+enum UpdateCoverage: Equatable {
+    /// Every version: a license is active, but its update year isn't known yet (decision 8).
+    case unknown
+    /// The versions released through this update year.
+    case updateYear(UpdateYear)
+    /// Nothing, until a key is activated: no license, and no update year this Mac ever learned. A
+    /// lapsed customer setting up a Mac with an earlier version must not get the newest one before
+    /// activating, only to find it Locked.
+    case noLicense
+}
+
 /// Which appcast item Sparkle may install under the license's update year (ADR 0011). An item
 /// released after the year is never offered for installing; the newest such one is shown instead,
 /// with Renew. With no update year known, or nothing it leaves out, Sparkle picks as it always has.
@@ -50,10 +62,15 @@ enum UpdateYearFilter {
     static func choose(
         _ candidates: [UpdateCandidate],
         hostVersion: String,
-        updateYear: UpdateYear?,
+        coverage: UpdateCoverage,
         compare: (String, String) -> ComparisonResult = SUStandardVersionComparator.default.compareVersion(_:toVersion:)
     ) -> Choice {
-        guard let updateYear else { return Choice(pick: .sparkle) }
+        let updateYear: UpdateYear
+        switch coverage {
+        case .unknown: return Choice(pick: .sparkle)
+        case .noLicense: return Choice(pick: .nothing)
+        case .updateYear(let year): updateYear = year
+        }
         func isCovered(_ candidate: UpdateCandidate) -> Bool {
             candidate.releaseDate.map(updateYear.covers(releaseDate:)) ?? true
         }
@@ -74,7 +91,8 @@ enum UpdateYearFilter {
 
     /// Whether Check for Updates… should check quietly: once the update year has ended, a newer
     /// version needs a renewal, and Sparkle's own alert would call Keybumps up to date.
-    static func checksQuietly(updateYear: UpdateYear?, now: Date) -> Bool {
-        updateYear?.hasEnded(at: now) == true
+    static func checksQuietly(coverage: UpdateCoverage, now: Date) -> Bool {
+        if case .updateYear(let year) = coverage { return year.hasEnded(at: now) }
+        return false
     }
 }

@@ -148,11 +148,16 @@ struct PolarLicenseProviderTests {
         await #expect(throws: LicenseActionError.unexpected) { try await polar.validate(key: "K", activationID: "A") }
     }
 
-    @Test("Customer metadata without a renewal date means there's no renewal")
+    @Test("Customer metadata without a renewal date, or with an empty one, means there's no renewal")
     func noRenewal() async throws {
         let http = RecordingHTTPClient()
-        http.responses = [(200, #"{"status":"granted","customer":{"metadata":{}}}"#)]
-        #expect(try await provider(http).validate(key: "K", activationID: "A") == .granted(LicenseKeyDates(readRenewals: true)))
+        http.responses = [
+            (200, #"{"status":"granted","customer":{"metadata":{}}}"#),
+            (200, #"{"status":"granted","customer":{"metadata":{"keybumps_updates_until":""}}}"#),
+        ]
+        let polar = provider(http)
+        #expect(try await polar.validate(key: "K", activationID: "A") == .granted(LicenseKeyDates(readRenewals: true)))
+        #expect(try await polar.validate(key: "K", activationID: "A") == .granted(LicenseKeyDates(readRenewals: true)))
     }
 
     @Test("Deactivation succeeds when removed or already gone")
