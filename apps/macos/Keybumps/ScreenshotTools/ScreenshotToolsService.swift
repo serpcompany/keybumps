@@ -139,10 +139,11 @@ struct ScreenshotClipboardDelivery {
 
     /// Takes a hotkey's screenshots and adds them here once `screencapture` has exited and they're
     /// marked; the watcher leaves them alone meanwhile, as it can't see the mark land. Screenshot
-    /// Screen and Screenshot Area add only while ScreenGrabs runs with Clipboard History
-    /// (`ScreenshotToolsStatus.addsScreenshots`), whichever folder they're saved in and whether or
+    /// Screen adds only while ScreenGrabs runs with Clipboard History
+    /// (`ScreenshotToolsStatus.addsScreenshots`), whichever folder it's saved in and whether or
     /// not the watcher can read macOS's (#504); one the watcher also sees isn't added again
-    /// (`add`). Screen and Edit (`forEditing`) always adds, since the editor opens the item. The QA
+    /// (`add`). Screen and Edit and Area and Edit (`forEditing`) always add, since the editor opens
+    /// the item. The QA
     /// smoke test takes its screenshots through this too. Calls `completion` with the files
     /// written, main first.
     func capture(
@@ -166,15 +167,15 @@ struct ScreenshotClipboardDelivery {
         }
     }
 
-    /// Adds a Screenshot Screen or Screenshot Area capture: every display's file, the main
+    /// Adds a capture that doesn't open the editor (Screenshot Screen, or the QA smoke test's): every display's file, the main
     /// display's last so it's the newest item, and only the main display's is copied.
     func addCapture(_ files: [URL]) {
         for file in files.reversed() { add(file, copying: file == files.first) }
     }
 
-    /// Adds a Screen and Edit capture without copying (Save copies the edited image, so an
-    /// unredacted screenshot never reaches the clipboard from here). Every display's file is
-    /// added, the main display's last so it's the newest item. Returns the file to edit.
+    /// Adds a Screen and Edit or Area and Edit capture without copying (Save copies the edited
+    /// image, so an unredacted screenshot never reaches the clipboard from here). Every display's
+    /// file is added, the main display's last so it's the newest item. Returns the file to edit.
     func addForEditing(_ files: [URL]) -> URL? {
         for file in files.reversed() { add(file, copying: false) }
         return files.first

@@ -59,7 +59,7 @@ struct SettingsSidebarTests {
         let key = ShortcutBinding(keyCode: 1, modifiers: 0, displayName: "⇧⌘2")
         // ScreenGrabs' three screenshot hotkeys and Record Screen; the recording shortcuts work only while recording.
         #expect(PluginsTable.shortcutText(for: .screenshotTools) { _ in key } == "⇧⌘2 +3")
-        #expect(PluginsTable.shortcutText(for: .screenshotTools) { $0 == .screenshotArea ? key : nil } == "⇧⌘2")
+        #expect(PluginsTable.shortcutText(for: .screenshotTools) { $0 == .screenshotAreaAndEdit ? key : nil } == "⇧⌘2")
         #expect(PluginsTable.shortcutText(for: .timer) { _ in nil } == "", "Unassigned")
     }
 

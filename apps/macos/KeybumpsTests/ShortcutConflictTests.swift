@@ -74,20 +74,20 @@ struct ShortcutConflictTests {
         let keys = DefaultShortcut.recordScreen
         #expect(old.capabilityShortcut(for: .screencast) == keys, "Record Screen starts with ⇧⌘5")
 
-        let asked: ShortcutOwner? = old.shortcutConflict(for: keys, assigningTo: .capability(.screenshotArea))
+        let asked: ShortcutOwner? = old.shortcutConflict(for: keys, assigningTo: .capability(.screenshotAreaAndEdit))
         #expect(asked == nil, "Nobody is asked about keys that do nothing here")
-        let moved: [ShortcutOwner] = old.setShortcut(keys, for: .capability(.screenshotArea))
+        let moved: [ShortcutOwner] = old.setShortcut(keys, for: .capability(.screenshotAreaAndEdit))
         #expect(moved == [.capability(.screencast)])
-        #expect(old.capabilityShortcut(for: .screenshotArea) == keys)
+        #expect(old.capabilityShortcut(for: .screenshotAreaAndEdit) == keys)
         #expect(old.capabilityShortcut(for: .screencast) == nil, "Two actions never share the keys, for an update to macOS 15")
         let note: String? = old.movedShortcut(for: .capability(.screencast))?.note
-        #expect(note == "⇧⌘5 moved to ScreenGrabs › Screenshot Area.")
+        #expect(note == "⇧⌘5 moved to ScreenGrabs › Screenshot Area and Edit.")
     }
 
     @Test("On macOS 15, Record Screen's ⇧⌘5 is a conflict like any other")
     func recordScreenOnMacOS15IsAConflict() {
         let current = AppPreferences(defaults: InMemoryDefaults(), compatibility: PluginCompatibility(macOSMajorVersion: 15))
-        let asked: ShortcutOwner? = current.shortcutConflict(for: DefaultShortcut.recordScreen, assigningTo: .capability(.screenshotArea))
+        let asked: ShortcutOwner? = current.shortcutConflict(for: DefaultShortcut.recordScreen, assigningTo: .capability(.screenshotAreaAndEdit))
         #expect(asked == .capability(.screencast))
         #expect(asked?.displayName == "ScreenGrabs › Record Screen")
     }
@@ -260,14 +260,14 @@ struct ShortcutConflictTests {
     @Test("Replace asks again when another action took the keys after it asked")
     func replaceAsksAgainAfterAnotherReplace() {
         let preferences = AppPreferences(defaults: InMemoryDefaults())
-        let area = DefaultShortcut.screenshotArea
+        let area = DefaultShortcut.screenshotAreaAndEdit
         // One row records at a time (#345), so each records in turn; both then ask.
         let screen = Recording(preferences: preferences, owner: .capability(.screenshotScreen))
         screen.recorder.receive(area)
         let edit = Recording(preferences: preferences, owner: .capability(.screenshotScreenAndEdit))
         edit.recorder.receive(area)
-        #expect(screen.recorder.pendingReplacement?.owner == .capability(.screenshotArea))
-        #expect(edit.recorder.pendingReplacement?.owner == .capability(.screenshotArea))
+        #expect(screen.recorder.pendingReplacement?.owner == .capability(.screenshotAreaAndEdit))
+        #expect(edit.recorder.pendingReplacement?.owner == .capability(.screenshotAreaAndEdit))
 
         screen.recorder.confirmReplacement()
         #expect(preferences.capabilityShortcut(for: .screenshotScreen) == area)
@@ -339,7 +339,7 @@ struct ShortcutConflictTests {
     @Test("When Replace finds another action has the keys by now, VoiceOver hears the new question")
     func theNewQuestionIsAnnounced() {
         let preferences = AppPreferences(defaults: InMemoryDefaults())
-        let area = DefaultShortcut.screenshotArea
+        let area = DefaultShortcut.screenshotAreaAndEdit
         let screen = Recording(preferences: preferences, owner: .capability(.screenshotScreen))
         screen.recorder.receive(area)
         let edit = Recording(preferences: preferences, owner: .capability(.screenshotScreenAndEdit))
@@ -397,9 +397,9 @@ struct ShortcutConflictTests {
         #expect(model.shortcuts.isSuspendedForRecording, "The first field ending doesn't turn them on")
 
         // Other rows' clear buttons, on a plugin page and on Window Manager's.
-        ShortcutRowActions.clear(.capability(.screenshotArea), model: model)()
+        ShortcutRowActions.clear(.capability(.screenshotAreaAndEdit), model: model)()
         ShortcutRowActions.clear(.window(.left), model: model)()
-        #expect(preferences.capabilityShortcut(for: .screenshotArea) == nil)
+        #expect(preferences.capabilityShortcut(for: .screenshotAreaAndEdit) == nil)
         #expect(preferences.windowShortcut(for: .left) == nil)
         #expect(model.shortcuts.isSuspendedForRecording, "Clearing a row doesn't turn them on")
         #expect(model.shortcuts.activeOwners.isEmpty)
@@ -451,7 +451,7 @@ struct WindowShortcutGridTests {
             #expect(recorder.error != nil)
         case .question:
             recorder.offer(
-                DefaultShortcut.screenshotArea, identifier: WindowAction.left.rawValue,
+                DefaultShortcut.screenshotAreaAndEdit, identifier: WindowAction.left.rawValue,
                 conflict: { _ in .capability(.screenshotScreenAndEdit) }, replace: {}
             )
             #expect(recorder.pendingReplacement != nil)
