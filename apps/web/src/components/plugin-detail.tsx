@@ -8,13 +8,15 @@ import { KeybumpsAvatar } from '@/components/keybumps-avatar'
 import { PluginIcon } from '@/components/plugin-icon'
 import { linkPrefetch } from '@/lib/pages'
 import {
+  defaultTabKey,
   iconTints,
   keycaps,
   otherPlugins,
   type Plugin,
   type PluginPermission,
   pluginFor,
-  pluginPath
+  pluginPath,
+  tabShowsOnce
 } from '@/lib/plugins'
 import { MINIMUM_MACOS } from '@/lib/site'
 
@@ -237,6 +239,9 @@ function AtAGlance({ plugin }: { plugin: Plugin }) {
   // A plugin with shortcuts that start unassigned can be given one; one without shortcuts can't.
   const noHotkey = plugin.shortcuts.length > 0 ? 'Not set by default' : 'None'
   const tab = plugin.paletteTab
+  // A tab that isn't shown by default has no key until it shows, and then one that depends on the
+  // tabs before it, so it names none.
+  const tabKey = defaultTabKey(plugin)
   const items: { label: string; value: ReactNode }[] = [
     {
       label: assigned.length > 1 ? 'Shortcuts' : 'Shortcut',
@@ -253,9 +258,14 @@ function AtAGlance({ plugin }: { plugin: Plugin }) {
       label: 'Tab in Quick Search',
       value: tab ? (
         <span className="glance-tab">
-          {tab.name} <Keycaps keys={`⌘${tab.commandKey}`} />{' '}
-          <span className="glance-note">by default</span>
-          {tab.hiddenUnless && <span className="glance-note">once you turn it on</span>}
+          {tab.name}{' '}
+          {tabKey ? (
+            <>
+              <Keycaps keys={tabKey} /> <span className="glance-note">by default</span>
+            </>
+          ) : (
+            <span className="glance-note">{`${tabShowsOnce(plugin)}; hold ⌘ to see its key`}</span>
+          )}
         </span>
       ) : (
         'None'
@@ -301,6 +311,7 @@ function Keycaps({ keys }: { keys: string }) {
 
 function Commands({ plugin }: { plugin: Plugin }) {
   const tab = plugin.paletteTab
+  const tabKey = defaultTabKey(plugin)
   const many = plugin.shortcuts.length > 6
   // A shortcut with a note (Cancel Dictation) works only at certain times, not from any app.
   const anywhere = plugin.shortcuts.every(shortcut => !shortcut.note)
@@ -321,12 +332,12 @@ function Commands({ plugin }: { plugin: Plugin }) {
             <span className="command-name">
               {tab.name} tab
               <span className="command-note">
-                {tab.hiddenUnless
-                  ? `In Quick Search, once you show it in ${tab.hiddenUnless}`
-                  : 'In Quick Search, with its default key'}
+                {tabKey
+                  ? 'In Quick Search, with its default key'
+                  : `In Quick Search, ${tabShowsOnce(plugin)}. Hold ⌘ to see its key.`}
               </span>
             </span>
-            <Keycaps keys={`⌘${tab.commandKey}`} />
+            {tabKey && <Keycaps keys={tabKey} />}
           </li>
         </ul>
       )}

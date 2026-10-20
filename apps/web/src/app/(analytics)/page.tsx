@@ -9,7 +9,16 @@ import { PluginIcon } from '@/components/plugin-icon'
 import { getCurrentRelease } from '@/lib/latest-release'
 import { defaultOpenGraph } from '@/lib/metadata'
 import { linkPrefetch } from '@/lib/pages'
-import { cardShortcut, iconTints, pluginFor, pluginPath, plugins } from '@/lib/plugins'
+import {
+  cardShortcut,
+  defaultTabKey,
+  iconTints,
+  type Plugin,
+  pluginFor,
+  pluginPath,
+  plugins,
+  tabShownByDefault
+} from '@/lib/plugins'
 import { MINIMUM_MACOS, site } from '@/lib/site'
 import {
   ClipboardVisual,
@@ -185,11 +194,18 @@ const settings: readonly { title: string; text: string; control: ReactNode }[] =
   }
 ]
 
-/** The last tab key in "Jump to a tab": the highest of the tabs shown without a setting. */
-const lastTabKey = Math.max(
-  ...plugins.flatMap(plugin =>
-    plugin.paletteTab && !plugin.paletteTab.hiddenUnless ? [plugin.paletteTab.commandKey] : []
+/**
+ * "Jump to a tab": the tabs shown by default after the Search tab, the last one's key, and the tabs
+ * that join once their plugins are turned on, which have no key to name until then.
+ */
+const tabsShownByDefault = plugins.filter(tabShownByDefault)
+const lastTabKey = defaultTabKey(tabsShownByDefault[tabsShownByDefault.length - 1])?.slice(1)
+const tabNames = (list: readonly Plugin[]) =>
+  new Intl.ListFormat('en', { type: 'conjunction' }).format(
+    list.flatMap(plugin => (plugin.paletteTab ? [plugin.paletteTab.name] : []))
   )
+const tabsOnceOn = plugins.filter(
+  plugin => plugin.paletteTab && !plugin.paletteTab.hiddenUnless && plugin.shipsOff
 )
 
 const questions = [
@@ -274,7 +290,7 @@ export default async function Home() {
           <ol className="home-steps">
             <li>
               <h3>Open Quick Search</h3>
-              <p>From any app. It opens on the Search tab.</p>
+              <p>From any app. It opens on the Search tab by default.</p>
               <span className="keycaps">
                 <kbd>⌘</kbd>
                 <kbd>Space</kbd>
@@ -283,9 +299,9 @@ export default async function Home() {
             <li>
               <h3>Jump to a tab</h3>
               <p>
-                Clipboard, ScreenGrabs, Dictation, Snippets, and Timers, plus Emoji and Translate
-                once you turn on their plugins. These are the default keys; Settings › Quick Search
-                sets the order.
+                {tabNames(tabsShownByDefault.slice(1))}. These are the default keys; Settings ›
+                Quick Search sets the order. {tabNames(tabsOnceOn)} join once you turn on their
+                plugins: hold ⌘ to see every tab’s key.
               </p>
               <span className="keycaps">
                 <kbd>⌘</kbd>

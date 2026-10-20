@@ -12,6 +12,7 @@ import { indexablePages, sitePages } from './pages'
 import {
   cardShortcut,
   commandCount,
+  defaultTabKey,
   iconTints,
   keycaps,
   macPermissions,
@@ -22,7 +23,9 @@ import {
   pluginFor,
   pluginPath,
   plugins,
-  searchTerms
+  searchTerms,
+  tabShownByDefault,
+  tabShowsOnce
 } from './plugins'
 import { type MacOSVersion, MINIMUM_MACOS } from './site'
 
@@ -463,8 +466,84 @@ describe('plugin page at a glance', () => {
   })
 
   it('says when a tab in Quick Search is hidden until turned on', () => {
-    expect(glance('shortcut-coach')).toContain('once you turn it on')
+    expect(glance('shortcut-coach')).toContain('once you show it in Settings › Quick Search')
+    expect(glance('emoji-picker')).toContain('once you turn it on')
+    expect(glance('translation')).toContain('once you turn it on')
     expect(glance('clipboard-history')).not.toContain('once you turn it on')
+    expect(glance('clipboard-history')).not.toContain('once you show it')
+  })
+})
+
+describe('tab keys', () => {
+  const appCapabilities = fileURLToPath(
+    new URL('../../../macos/Keybumps/Capabilities/', import.meta.url)
+  )
+  /** The Swift module that describes `plugin`, found by its `capability:` line. */
+  const moduleSource = (plugin: Plugin) =>
+    readdirSync(appCapabilities)
+      .filter(file => file.endsWith('Module.swift'))
+      .map(file => readFileSync(join(appCapabilities, file), 'utf8'))
+      .find(source => source.includes(`capability: .${plugin.capability},`)) ?? ''
+
+  it('ships off, and puts each tab in the default order, as the app does', () => {
+    for (const plugin of plugins) {
+      const source = moduleSource(plugin)
+      expect(source, plugin.slug).not.toBe('')
+      expect(/isOnByDefault: false/.test(source), plugin.slug).toBe(plugin.shipsOff === true)
+      const position = source.match(/defaultPosition: (\d+)/)?.[1]
+      expect(position && Number(position), plugin.slug).toBe(plugin.paletteTab?.commandKey)
+    }
+  })
+
+  it('names a key, with by default, only for the tabs shown by default, in their order', () => {
+    expect(
+      plugins.flatMap(plugin => (tabShownByDefault(plugin) ? [defaultTabKey(plugin)] : []))
+    ).toEqual(['⌘1', '⌘2', '⌘3', '⌘4', '⌘5', '⌘6'])
+    expect(plugins.filter(tabShownByDefault).map(plugin => plugin.paletteTab?.name)).toEqual([
+      'Search',
+      'Clipboard',
+      'ScreenGrabs',
+      'Dictation',
+      'Snippets',
+      'Timers'
+    ])
+    for (const plugin of plugins.filter(tabShownByDefault)) {
+      expect(defaultTabKey(plugin), plugin.slug).toBe(`⌘${plugin.paletteTab?.commandKey}`)
+      expect(tabShowsOnce(plugin), plugin.slug).toBeNull()
+    }
+  })
+
+  it('gives a tab not shown by default no keycap or number anywhere on its plugin', () => {
+    const hidden = plugins.filter(plugin => plugin.paletteTab && !tabShownByDefault(plugin))
+    expect(hidden.map(plugin => plugin.paletteTab?.name)).toEqual(['Hotkeys', 'Emoji', 'Translate'])
+    for (const plugin of hidden) {
+      expect(defaultTabKey(plugin), plugin.slug).toBeNull()
+      expect(cardShortcut(plugin), plugin.slug).toBeNull()
+      expect(tabShowsOnce(plugin), plugin.slug).not.toBeNull()
+      const text = [
+        ...plugin.overview,
+        ...plugin.features,
+        ...plugin.howTo.flatMap(step => [step.text, step.keys ?? '']),
+        ...plugin.faq.flatMap(item => [item.q, item.a]),
+        ...plugin.keeps
+      ]
+      expect(
+        text.filter(line => /⌘ ?\d/.test(line)),
+        plugin.slug
+      ).toEqual([])
+      const html = renderPage(plugin)
+      expect(html, plugin.slug).not.toMatch(/<kbd>⌘<\/kbd><kbd>\d<\/kbd>/)
+      expect(html, plugin.slug).not.toMatch(/⌘ ?\d/)
+      expect(html, plugin.slug).toContain('hold ⌘ to see its key')
+    }
+  })
+
+  it('shows keycaps on /plugins/ only for the tabs shown by default', async () => {
+    const { default: PluginsPage } = await import(join(pluginsDir, 'page.tsx'))
+    const html = renderToStaticMarkup(createElement(PluginsPage))
+    expect(html.match(/<kbd>⌘\d<\/kbd>/g)).toEqual(
+      ['⌘1', '⌘2', '⌘3', '⌘4', '⌘5', '⌘6'].map(key => `<kbd>${key}</kbd>`)
+    )
   })
 })
 

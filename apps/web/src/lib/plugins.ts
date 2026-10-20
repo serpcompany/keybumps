@@ -120,9 +120,14 @@ export type Plugin = {
    * src/lib/changelog.ts.
    */
   formerNames?: readonly string[]
-  /** Its tab in Quick Search and that tab's default tab key, if it has one. */
+  /** Its tab in Quick Search, if it has one. */
   paletteTab: {
     name: string
+    /**
+     * The tab's place in the default order, from 1 (the app's `defaultPosition`). A tab key is ⌘
+     * and the tab's place among the tabs shown, so this is its key only while every tab before it
+     * is shown: pages show a tab's key with `defaultTabKey`, never this.
+     */
     commandKey: number
     /** Where the tab's show switch is: it's hidden until that shows it. */
     hiddenUnless?: string
@@ -135,6 +140,8 @@ export type Plugin = {
   optionalPermissions?: readonly PluginPermission[]
   /** Slugs of the plugins it needs turned on. */
   requires: readonly string[]
+  /** It ships turned off: the descriptor's `isOnByDefault` is false. */
+  shipsOff?: boolean
   /** One of the default capabilities, the set Keybumps's features were locked at. */
   isDefault: boolean
   /** The newest added capability, marked New on /plugins/. */
@@ -624,7 +631,9 @@ export const plugins: readonly Plugin[] = [
       {
         text: 'Work as usual. When you do something by hand that has a shortcut, the shortcut drops down from the notch.'
       },
-      { text: 'Look back at what it noticed in the Hotkeys tab, once you turn the tab on.' }
+      {
+        text: 'Show the Hotkeys tab in Settings › Quick Search, then look back at what it noticed there.'
+      }
     ],
     faq: [
       {
@@ -776,9 +785,10 @@ export const plugins: readonly Plugin[] = [
       }
     ],
     requires: [],
+    shipsOff: true,
     isDefault: false,
     overview: [
-      'Emoji Picker finds any emoji by name and puts it where you’re typing. Open the Emoji tab of Quick Search (⌘7 by default) and browse, or type a name, a keyword, or a :shortcode: such as thumbs, +1, or :joy:.',
+      'Emoji Picker finds any emoji by name and puts it where you’re typing. Open the Emoji tab of Quick Search and browse, or type a name, a keyword, or a :shortcode: such as thumbs, +1, or :joy:.',
       'Return copies the emoji, and ⌘V pastes it into the app you were using, then puts your clipboard back. It ships turned off: turn it on in Settings › Plugins.'
     ],
     features: [
@@ -791,7 +801,7 @@ export const plugins: readonly Plugin[] = [
     ],
     howTo: [
       { text: 'Turn it on in Settings › Plugins.' },
-      { text: 'Open Quick Search and press ⌘7 (by default) for the Emoji tab.', keys: '⌘7' },
+      { text: 'Open the Emoji tab in Quick Search (hold ⌘ to see its key).' },
       {
         text: 'Type a name, a keyword, or a :shortcode:, then press Return to copy it or ⌘V to paste it.',
         keys: '↩'
@@ -832,10 +842,11 @@ export const plugins: readonly Plugin[] = [
       }
     ],
     requires: [],
+    shipsOff: true,
     isDefault: false,
     minimumMacOS: '15',
     overview: [
-      'Understand text in another language and answer in it, without switching apps. Open the Translate tab of Quick Search (⌘8 by default), then type or paste: it translates as you type. Text in your language goes to your other language, and anything else comes back to yours.',
+      'Understand text in another language and answer in it, without switching apps. Open the Translate tab of Quick Search, then type or paste: it translates as you type. Text in your language goes to your other language, and anything else comes back to yours.',
       'Press Return to save the translation, or ⌘Return to save it and paste it into the app you were using. With the field empty, the tab lists your last 50 saved translations to copy, paste, or hear read aloud. Translation needs macOS 15 or later and ships turned off: turn it on in Settings › Plugins.'
     ],
     features: [
@@ -853,8 +864,7 @@ export const plugins: readonly Plugin[] = [
     howTo: [
       { text: 'Turn it on in Settings › Plugins. It needs macOS 15 or later.' },
       {
-        text: 'Open Quick Search, press ⌘8 (by default) for the Translate tab, and type or paste your text.',
-        keys: '⌘8'
+        text: 'Open the Translate tab in Quick Search (hold ⌘ to see its key) and type or paste your text.'
       },
       {
         text: 'Press Return to save the translation, or ⌘Return to save it and paste it where you were typing.',
@@ -906,6 +916,7 @@ export const plugins: readonly Plugin[] = [
       }
     ],
     requires: [],
+    shipsOff: true,
     isDefault: false,
     isNew: true,
     overview: [
@@ -989,7 +1000,7 @@ export function otherPlugins(slug: string, count = 3): Plugin[] {
 /**
  * The key a home page card shows, with a label saying what kind it is: its first default hotkey,
  * which works from any app, or else the default tab key of its tab in Quick Search. Null when it has
- * neither, or its tab is hidden until a setting shows it.
+ * neither, or its tab isn't shown by default (`defaultTabKey`).
  */
 export function cardShortcut(plugin: Plugin): { keys: string; label: string } | null {
   const hotkey = plugin.shortcuts.find(shortcut => shortcut.keys)
@@ -1000,8 +1011,41 @@ export function cardShortcut(plugin: Plugin): { keys: string; label: string } | 
     return { keys: hotkey.keys, label: `${what}, from any app` }
   }
   const tab = plugin.paletteTab
-  if (!tab || tab.hiddenUnless) return null
-  return { keys: `⌘${tab.commandKey}`, label: `The ${tab.name} tab in Quick Search, by default` }
+  const keys = defaultTabKey(plugin)
+  if (!tab || !keys) return null
+  return { keys, label: `The ${tab.name} tab in Quick Search, by default` }
+}
+
+/**
+ * Whether its tab is in Quick Search's tab bar on a new Mac: it has one, its plugin ships on, and
+ * no setting hides it until you show it.
+ */
+export function tabShownByDefault(plugin: Plugin): boolean {
+  return Boolean(plugin.paletteTab && !plugin.paletteTab.hiddenUnless && !plugin.shipsOff)
+}
+
+/**
+ * Its tab's key by default: ⌘ and the tab's place among the tabs shown by default. Null for a tab
+ * that isn't shown by default, which has no key until it shows, and then one that depends on the
+ * tabs shown before it, which the tab bar shows while ⌘ is held.
+ */
+export function defaultTabKey(plugin: Plugin): string | null {
+  if (!tabShownByDefault(plugin)) return null
+  const shown = plugins
+    .filter(tabShownByDefault)
+    .sort((a, b) => (a.paletteTab?.commandKey ?? 0) - (b.paletteTab?.commandKey ?? 0))
+  const place = shown.indexOf(plugin) + 1
+  return place >= 1 && place <= 9 ? `⌘${place}` : null
+}
+
+/**
+ * When a tab that isn't shown by default joins the tab bar: once its plugin is turned on, or once
+ * its show switch is. Null for a tab shown by default, or no tab.
+ */
+export function tabShowsOnce(plugin: Plugin): string | null {
+  const tab = plugin.paletteTab
+  if (!tab || tabShownByDefault(plugin)) return null
+  return tab.hiddenUnless ? `once you show it in ${tab.hiddenUnless}` : 'once you turn it on'
 }
 
 /** Its commands: its palette tab, if it has one, and its shortcuts. */
