@@ -58,20 +58,6 @@ enum QuickSearchTabList {
             )
         }
     }
-
-    /// What a dragged row carries: its tab, marked as Keybumps', so text dragged in from elsewhere
-    /// never moves a tab.
-    static func dragPayload(for tab: CommandPaletteTab) -> String {
-        dragPrefix + tab.rawValue
-    }
-
-    /// The tab a dropped `payload` carries, if it's a dragged row's (`dragPayload`).
-    static func tab(fromDragPayload payload: String) -> CommandPaletteTab? {
-        guard payload.hasPrefix(dragPrefix) else { return nil }
-        return CommandPaletteTab(rawValue: String(payload.dropFirst(dragPrefix.count)))
-    }
-
-    private static let dragPrefix = "keybumps.quickSearchTab:"
 }
 
 /// Settings › Quick Search, the window's page (#553). Quick Search is always on, so the page has
@@ -113,14 +99,12 @@ struct QuickSearchSettingsView: View {
                 subtitle: "Drag a tab, or use the arrows. ⌘1 is the first tab shown, ⌘2 the second, and so on, "
                     + "and Quick Search opens on the first. One tab always stays shown."
             ) {
-                ForEach(QuickSearchTabList.rows(
+                QuickSearchTabListView(rows: QuickSearchTabList.rows(
                     hidden: preferences.hiddenTabs,
                     enabled: preferences.enabledCapabilities,
                     compatibility: preferences.compatibility,
                     order: preferences.tabOrder
-                )) { row in
-                    QuickSearchTabRow(row: row)
-                }
+                ))
             } accessory: {
                 // Disabled while the order is already the default, so it never looks like it did nothing.
                 Button("Reset Order") { preferences.resetTabOrder() }
@@ -133,45 +117,83 @@ struct QuickSearchSettingsView: View {
     }
 }
 
+/// The tab list, a SwiftUI `List` whose rows drag to reorder as in any Mac list, with the system's
+/// insertion line (`ForEach.onMove`). It sits in its Settings group like the group's other rows:
+/// no background or selection of its own, the group's row height and separators, and tall enough
+/// for every row, so only the page scrolls.
+private struct QuickSearchTabListView: View {
+    @Environment(AppModel.self) private var model
+    let rows: [QuickSearchTabList.Row]
+
+    var body: some View {
+        List {
+            ForEach(rows) { row in
+                QuickSearchTabRow(row: row)
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+            }
+            // The rows are `tabOrder`'s tabs in order, so their offsets are its places.
+            .onMove { model.preferences.moveTabs(fromOffsets: $0, toOffset: $1) }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .scrollDisabled(true)
+        .frame(height: QuickSearchTabRow.listHeight(rows: rows.count))
+        // The group pads its one child as it pads a row; these rows carry that padding themselves,
+        // so the list fills the card from edge to edge, top to bottom.
+        .padding(.vertical, -QuickSearchTabRow.verticalPadding)
+    }
+}
+
 /// A tab's row: a grip to drag it by, its tab key, icon, and name, why it can't show while its
-/// plugin is off, buttons that move it up and down, and its show switch while its plugin is on.
+/// plugin is off, buttons that move it up and down, and its show switch while its plugin is on,
+/// then the group's separator unless it's last.
 private struct QuickSearchTabRow: View {
     @Environment(AppModel.self) private var model
     let row: QuickSearchTabList.Row
-    /// Whether a dragged row is over this one, which it moves to on drop.
-    @State private var isDropTarget = false
+
+    /// A Settings group row's padding above and below its content (`SettingsGroup`).
+    static let verticalPadding: CGFloat = 4
+
+    /// The list's height with `rows` rows: each a group row's height, with a separator between.
+    static func listHeight(rows: Int) -> CGFloat {
+        guard rows > 0 else { return 0 }
+        return CGFloat(rows) * (SettingsTheme.rowMinHeight + 2 * verticalPadding) + CGFloat(rows - 1)
+    }
 
     var body: some View {
+        VStack(spacing: 0) {
+            content
+                .frame(height: SettingsTheme.rowMinHeight)
+                .padding(.vertical, Self.verticalPadding)
+            if !row.isLast {
+                SettingsTheme.separator.frame(height: 1)
+            }
+        }
+    }
+
+    private var content: some View {
         let tab = row.tab
-        HStack(spacing: 11) {
-            // The grip, key, icon, and name drag the row; the buttons and switch stay clickable.
-            HStack(spacing: 11) {
-                Image(systemName: "line.3.horizontal")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.tertiary)
-                    .help("Drag to reorder")
-                    .accessibilityHidden(true)
-                Text(row.tabKey)
-                    .monospacedDigit()
-                    .foregroundStyle(row.isShown ? .secondary : .tertiary)
-                    .frame(width: 30, alignment: .leading)
-                    .help(row.isShown ? "Its tab key" : "Not in the tab bar")
-                    .accessibilityLabel(row.key.map { "Tab key \($0)" } ?? "Not in the tab bar")
-                    .accessibilityIdentifier("settings.quickSearch.key.\(tab.rawValue)")
-                SettingsIconTile(systemImage: tab.systemImage, tint: tab.owner.descriptor.iconTint, size: 22)
-                    .opacity(row.isShown ? 1 : 0.45)
-                    .accessibilityHidden(true)
-                SettingsRowLabel(title: tab.title, subtitle: row.note)
-                    .foregroundStyle(row.isShown ? .primary : .secondary)
-                Spacer(minLength: 12)
-            }
-            .contentShape(Rectangle())
-            .draggable(QuickSearchTabList.dragPayload(for: tab)) {
-                Label(tab.title, systemImage: tab.systemImage)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(SettingsTheme.card, in: RoundedRectangle(cornerRadius: SettingsTheme.controlRadius, style: .continuous))
-            }
+        return HStack(spacing: 11) {
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.tertiary)
+                .help("Drag to reorder")
+                .accessibilityHidden(true)
+            Text(row.tabKey)
+                .monospacedDigit()
+                .foregroundStyle(row.isShown ? .secondary : .tertiary)
+                .frame(width: 30, alignment: .leading)
+                .help(row.isShown ? "Its tab key" : "Not in the tab bar")
+                .accessibilityLabel(row.key.map { "Tab key \($0)" } ?? "Not in the tab bar")
+                .accessibilityIdentifier("settings.quickSearch.key.\(tab.rawValue)")
+            SettingsIconTile(systemImage: tab.systemImage, tint: tab.owner.descriptor.iconTint, size: 22)
+                .opacity(row.isShown ? 1 : 0.45)
+                .accessibilityHidden(true)
+            SettingsRowLabel(title: tab.title, subtitle: row.note)
+                .foregroundStyle(row.isShown ? .primary : .secondary)
+            Spacer(minLength: 12)
             HStack(spacing: 4) {
                 Button { model.preferences.moveTab(tab, by: -1) } label: {
                     Image(systemName: "chevron.up")
@@ -200,24 +222,17 @@ private struct QuickSearchTabRow: View {
                 .help(row.isOnlyShownTab ? "One tab always stays shown" : row.isShown ? "Hide the \(tab.title) tab" : "Show the \(tab.title) tab")
                 .accessibilityIdentifier("settings.quickSearch.show.\(tab.rawValue)")
             } else {
-                // A switch's room, kept empty while the plugin is off, so every row's move buttons line up.
+                // A switch's room, kept empty while the plugin is off, so every row's move buttons line
+                // up. A clear switch rather than `hidden()`, which left a wider room than the switch.
                 Toggle("", isOn: .constant(false))
                     .settingsCompactSwitch()
                     .labelsHidden()
-                    .hidden()
+                    .opacity(0)
+                    .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }
         }
-        .background(
-            isDropTarget ? Color.accentColor.opacity(0.14) : .clear,
-            in: RoundedRectangle(cornerRadius: SettingsTheme.controlRadius, style: .continuous)
-        )
-        .dropDestination(for: String.self) { payloads, _ in
-            guard let dragged = payloads.lazy.compactMap(QuickSearchTabList.tab(fromDragPayload:)).first,
-                  dragged != tab else { return false }
-            model.preferences.moveTab(dragged, to: tab)
-            return true
-        } isTargeted: { isDropTarget = $0 }
+        .contentShape(Rectangle())
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("settings.quickSearch.tab.\(tab.rawValue)")
     }

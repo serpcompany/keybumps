@@ -261,8 +261,7 @@ final class SmokeUITests: XCTestCase {
 
     /// #553: Settings › Quick Search's arrows move a tab, and its key, the tab Quick Search opens on,
     /// and Left and Right follow the order; Reset Order puts it back; a hidden tab's key goes to the
-    /// tab after it. Dragging a row makes the same move (`AppPreferences.moveTab(_:to:)`), which the
-    /// unit tests cover.
+    /// tab after it. `testQuickSearchTabRowsDragToReorder` drags the rows.
     func testQuickSearchTabOrder() {
         launch(permissions: "granted", ["-KBOpenSettings", "search"])
         XCTAssertTrue(element("settings.detail.search").waitForExistence(timeout: 20))
@@ -310,6 +309,36 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(waitForText(of: element("settings.quickSearch.key.clipboard"), "Not in the tab bar"))
         XCTAssertTrue(waitForText(of: element("settings.quickSearch.key.screenshots"), "Tab key ⌘2"), "The tabs after it move up")
         XCTAssertTrue(waitForEnabled(reset, false), "Hiding a tab doesn't change the order")
+    }
+
+    /// #553: Settings › Quick Search's rows drag to reorder, as in any Mac list (`List` with
+    /// `ForEach.onMove`): a row dropped on the top of another lands above it, and one dropped on the
+    /// bottom of another lands below it, and the tab keys follow.
+    func testQuickSearchTabRowsDragToReorder() {
+        launch(permissions: "granted", ["-KBOpenSettings", "search"])
+        XCTAssertTrue(element("settings.detail.search").waitForExistence(timeout: 20))
+        let snippetsKey = element("settings.quickSearch.key.snippets")
+        let searchKey = element("settings.quickSearch.key.search")
+        XCTAssertTrue(waitForText(of: snippetsKey, "Tab key ⌘5"))
+        XCTAssertTrue(waitForText(of: searchKey, "Tab key ⌘1"))
+
+        // Up: Snippets dropped on the top of the Search row goes first.
+        snippetsKey.press(
+            forDuration: 0.5,
+            thenDragTo: element("settings.quickSearch.tab.search").coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.15))
+        )
+        XCTAssertTrue(waitForText(of: snippetsKey, "Tab key ⌘1"), "Snippets is first")
+        XCTAssertTrue(waitForText(of: searchKey, "Tab key ⌘2"), "Search follows it")
+        XCTAssertTrue(waitForEnabled(element("settings.quickSearch.resetOrder"), true))
+
+        // Down: Snippets dropped on the bottom of the Clipboard row lands below it.
+        snippetsKey.press(
+            forDuration: 0.5,
+            thenDragTo: element("settings.quickSearch.tab.clipboard").coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85))
+        )
+        XCTAssertTrue(waitForText(of: snippetsKey, "Tab key ⌘3"), "Snippets is below Clipboard")
+        XCTAssertTrue(waitForText(of: searchKey, "Tab key ⌘1"))
+        XCTAssertTrue(waitForText(of: element("settings.quickSearch.key.clipboard"), "Tab key ⌘2"))
     }
 
     func testEmojiPickerShipsOffAndTurnsOnInSettings() {

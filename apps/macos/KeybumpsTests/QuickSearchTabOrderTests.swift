@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import Foundation
+import SwiftUI
 import Testing
 @testable import Keybumps
 
@@ -57,7 +58,7 @@ struct QuickSearchTabOrderTests {
         #expect(preferences.isDefaultTabOrder, "Moved back by hand, it's the default again")
         #expect(defaults.object(forKey: "quickSearchTabOrder") == nil)
 
-        preferences.moveTab(.translate, to: .search)
+        preferences.drag(.translate, onto: .search)
         preferences.resetTabOrder()
         #expect(preferences.tabOrder == Self.defaultOrder)
         #expect(preferences.isDefaultTabOrder)
@@ -79,15 +80,44 @@ struct QuickSearchTabOrderTests {
         #expect(preferences.tabOrder.count == Self.defaultOrder.count)
     }
 
-    @Test("A dropped tab takes the place of the row it's dropped on, moving up or down")
-    func moveToRow() {
+    @Test("A dragged row lands where the list's insertion line was, moving down or up, to either end")
+    func moveByOffsets() {
         let preferences = AppPreferences(defaults: InMemoryDefaults(), compatibility: Self.mac15)
-        preferences.moveTab(.search, to: .screenshots)
+        preferences.moveTabs(fromOffsets: [0], toOffset: 3)
+        #expect(Array(preferences.tabOrder.prefix(4)) == [.clipboard, .screenshots, .search, .dictation], "Down: Search dropped above Dictation")
+        preferences.moveTabs(fromOffsets: [7], toOffset: 0)
+        #expect(Array(preferences.tabOrder.prefix(4)) == [.translate, .clipboard, .screenshots, .search], "Up: Translate dropped above the first row")
+        preferences.moveTabs(fromOffsets: [0], toOffset: 9)
+        #expect(preferences.tabOrder.last == .translate, "Dropped below the last row")
+        preferences.moveTabs(fromOffsets: [8], toOffset: 0)
+        #expect(preferences.tabOrder == [
+            .translate, .clipboard, .screenshots, .search, .dictation, .snippets, .timers, .emoji, .keyboardShortcutter,
+        ], "From the last row to the first")
+
+        let before = preferences.tabOrder
+        preferences.moveTabs(fromOffsets: [2], toOffset: 2)
+        preferences.moveTabs(fromOffsets: [2], toOffset: 3)
+        #expect(preferences.tabOrder == before, "Dropped just above or below itself, nothing moves")
+        preferences.moveTabs(fromOffsets: [9], toOffset: 0)
+        preferences.moveTabs(fromOffsets: [0], toOffset: 10)
+        preferences.moveTabs(fromOffsets: [], toOffset: 0)
+        #expect(preferences.tabOrder == before, "Places outside the order move nothing")
+
+        preferences.moveTabs(fromOffsets: [0, 2], toOffset: 5)
+        #expect(preferences.tabOrder == [
+            .clipboard, .search, .dictation, .translate, .screenshots, .snippets, .timers, .emoji, .keyboardShortcutter,
+        ], "Several rows keep their order")
+    }
+
+    @Test("A row dragged onto another takes its place, moving down or up")
+    func dragOntoRow() {
+        let preferences = AppPreferences(defaults: InMemoryDefaults(), compatibility: Self.mac15)
+        preferences.drag(.search, onto: .screenshots)
         #expect(Array(preferences.tabOrder.prefix(4)) == [.clipboard, .screenshots, .search, .dictation])
-        preferences.moveTab(.translate, to: .clipboard)
+        preferences.drag(.translate, onto: .clipboard)
         #expect(Array(preferences.tabOrder.prefix(4)) == [.translate, .clipboard, .screenshots, .search])
         let before = preferences.tabOrder
-        preferences.moveTab(.translate, to: .translate)
+        preferences.drag(.translate, onto: .translate)
         #expect(preferences.tabOrder == before, "Dropped on itself, nothing moves")
     }
 
@@ -97,7 +127,7 @@ struct QuickSearchTabOrderTests {
         preferences.enabledCapabilities = Self.everything
         preferences.setShowsTab(.search, false)
         preferences.setShowsTab(.keyboardShortcutter, true)
-        preferences.moveTab(.keyboardShortcutter, to: .search)
+        preferences.drag(.keyboardShortcutter, onto: .search)
         let hidden = preferences.hiddenTabs
 
         preferences.resetTabOrder()
@@ -122,7 +152,7 @@ struct QuickSearchTabOrderTests {
 
         let preferences = AppPreferences(defaults: InMemoryDefaults(), compatibility: Self.mac15)
         preferences.enabledCapabilities = [.quickSearch, .clipboardHistory, .snippets, .translation]
-        preferences.moveTab(.translate, to: .search)
+        preferences.drag(.translate, onto: .search)
         preferences.setShowsTab(.search, false)
         #expect(preferences.shownPaletteTabs == [.translate, .clipboard, .snippets])
         #expect(preferences.shownPaletteTabs.map { CommandPaletteTab.tabKey(for: $0, among: preferences.shownPaletteTabs) }
@@ -140,9 +170,9 @@ struct QuickSearchTabOrderTests {
     func openingTabFollowsTheOrder() {
         let preferences = AppPreferences(defaults: InMemoryDefaults(), compatibility: Self.mac15)
         #expect(preferences.paletteOpeningTab == .search)
-        preferences.moveTab(.dictation, to: .search)
+        preferences.drag(.dictation, onto: .search)
         #expect(preferences.paletteOpeningTab == .dictation)
-        preferences.moveTab(.keyboardShortcutter, to: .dictation)
+        preferences.drag(.keyboardShortcutter, onto: .dictation)
         #expect(preferences.paletteOpeningTab == .dictation, "The Hotkeys tab is first, but hidden")
         preferences.resetTabOrder()
         #expect(preferences.paletteOpeningTab == .search)
@@ -151,10 +181,10 @@ struct QuickSearchTabOrderTests {
     @Test("The tab bar follows the order; a hidden tab that's open shows in its place, with no key")
     func tabBarFollowsTheOrder() {
         let preferences = AppPreferences(defaults: InMemoryDefaults(), compatibility: Self.mac15)
-        preferences.moveTab(.snippets, to: .search)
+        preferences.drag(.snippets, onto: .search)
         #expect(preferences.visiblePaletteTabs(selected: .snippets) == [.snippets, .search, .clipboard, .screenshots, .dictation, .timers])
 
-        preferences.moveTab(.keyboardShortcutter, to: .clipboard)
+        preferences.drag(.keyboardShortcutter, onto: .clipboard)
         let open = preferences.visiblePaletteTabs(selected: .keyboardShortcutter)
         #expect(open == [.snippets, .search, .keyboardShortcutter, .clipboard, .screenshots, .dictation, .timers])
         let shown = preferences.shownPaletteTabs
@@ -190,14 +220,38 @@ struct QuickSearchTabOrderTests {
         #expect(rows.dropLast().allSatisfy { !$0.isLast })
     }
 
-    @Test("A dragged row carries its tab, and text dragged in from elsewhere moves nothing")
-    func dragPayload() {
-        for tab in CommandPaletteTab.allCases {
-            #expect(QuickSearchTabList.tab(fromDragPayload: QuickSearchTabList.dragPayload(for: tab)) == tab)
+    @Test("The tab list is a Mac list whose rows drag to reorder, with room for every row, so only the page scrolls")
+    func tabListIsAListThatNeverScrolls() throws {
+        let model = AppModel.forShortcutTests(preferences: AppPreferences(defaults: InMemoryDefaults(), compatibility: Self.mac15))
+        let size = CGSize(width: SettingsWindowFrame.minimumContentSize.width - 280, height: 2000)
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let host = NSHostingView(rootView: QuickSearchSettingsView().environment(model))
+        host.frame = NSRect(origin: .zero, size: size)
+        window.contentView = host
+        defer {
+            window.contentView = nil
+            window.close()
         }
-        #expect(QuickSearchTabList.tab(fromDragPayload: "search") == nil)
-        #expect(QuickSearchTabList.tab(fromDragPayload: "keybumps.quickSearchTab:notATab") == nil)
-        #expect(QuickSearchTabList.tab(fromDragPayload: "") == nil)
+        host.layoutSubtreeIfNeeded()
+
+        let table = try #require(Self.firstSubview(of: NSTableView.self, in: host), "The tab list is a List")
+        #expect(table.numberOfRows == CommandPaletteTab.allCases.count)
+        let visible = try #require(table.enclosingScrollView).contentView.bounds.height
+        #expect(table.frame.height <= visible + 0.5, "Every row is in view, so the list never scrolls")
+        #expect(table.rect(ofRow: 0).height == SettingsTheme.rowMinHeight + 9, "A Settings group row's height, and its separator")
+        let writer: (any NSPasteboardWriting)? = if let outline = table as? NSOutlineView, let item = outline.item(atRow: 0) {
+            outline.dataSource?.outlineView?(outline, pasteboardWriterForItem: item)
+        } else {
+            table.dataSource?.tableView?(table, pasteboardWriterForRow: 0)
+        }
+        #expect(writer != nil, "A row drags")
+        #expect(!table.registeredDraggedTypes.isEmpty, "and the list takes it back as a move")
+    }
+
+    private static func firstSubview<View: NSView>(of type: View.Type, in view: NSView) -> View? {
+        if let match = view as? View { return match }
+        return view.subviews.lazy.compactMap { firstSubview(of: type, in: $0) }.first
     }
 
     // MARK: The palette's keys
@@ -206,7 +260,7 @@ struct QuickSearchTabOrderTests {
     func paletteKeysFollowTheOrder() {
         let fixture = OrderPaletteFixture()
         defer { fixture.tearDown() }
-        fixture.preferences.moveTab(.snippets, to: .search)
+        fixture.preferences.drag(.snippets, onto: .search)
         let palette = fixture.palette
 
         palette.selectOnOpening(.dictation)
@@ -233,7 +287,7 @@ struct QuickSearchTabOrderTests {
         defer { fixture.tearDown() }
         // The Hotkeys tab starts hidden. Placed before Clipboard History, it's open in the tab bar
         // there, as when its capability command opens it, between the Search and Clipboard tabs.
-        fixture.preferences.moveTab(.keyboardShortcutter, to: .clipboard)
+        fixture.preferences.drag(.keyboardShortcutter, onto: .clipboard)
         #expect(fixture.preferences.visiblePaletteTabs(selected: .keyboardShortcutter)
             == [.search, .keyboardShortcutter, .clipboard, .screenshots, .dictation, .snippets, .timers])
         let palette = fixture.palette
@@ -298,5 +352,14 @@ private final class OrderPaletteFixture {
         palette.dismiss()
         pasteboard.releaseGlobally()
         folder.remove()
+    }
+}
+
+private extension AppPreferences {
+    /// Drags `tab`'s row in Settings › Quick Search onto `destination`'s, as the list reports it
+    /// (`moveTabs(fromOffsets:toOffset:)`): dragged down, it lands below it; dragged up, above it.
+    func drag(_ tab: CommandPaletteTab, onto destination: CommandPaletteTab) {
+        guard let from = tabOrder.firstIndex(of: tab), let place = tabOrder.firstIndex(of: destination) else { return }
+        moveTabs(fromOffsets: [from], toOffset: place > from ? place + 1 : place)
     }
 }

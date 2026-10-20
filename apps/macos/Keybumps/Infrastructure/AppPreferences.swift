@@ -160,22 +160,21 @@ final class AppPreferences {
     /// Search's move buttons do.
     func moveTab(_ tab: CommandPaletteTab, by offset: Int) {
         guard let index = tabOrder.firstIndex(of: tab) else { return }
-        moveTab(tab, toIndex: min(max(index + offset, 0), tabOrder.count - 1))
+        let place = min(max(index + offset, 0), tabOrder.count - 1)
+        moveTabs(fromOffsets: [index], toOffset: place > index ? place + 1 : place)
     }
 
-    /// Moves `tab` to `destination`'s place, as dropping a dragged row on another does: a tab
-    /// dragged down lands after it, and one dragged up lands before it.
-    func moveTab(_ tab: CommandPaletteTab, to destination: CommandPaletteTab) {
-        guard let index = tabOrder.firstIndex(of: destination) else { return }
-        moveTab(tab, toIndex: index)
-    }
-
-    private func moveTab(_ tab: CommandPaletteTab, toIndex index: Int) {
-        guard let from = tabOrder.firstIndex(of: tab), from != index else { return }
-        var order = tabOrder
-        order.remove(at: from)
-        order.insert(tab, at: index)
-        tabOrder = order
+    /// Moves the tabs at `offsets` in the order to just before the tab at `destination`, as
+    /// Settings › Quick Search's list reports a dragged row (`ForEach.onMove`). Both count places
+    /// in the order before the move, so `destination` is `tabOrder.count` for the end. Offsets
+    /// outside the order move nothing.
+    func moveTabs(fromOffsets offsets: IndexSet, toOffset destination: Int) {
+        guard !offsets.isEmpty, offsets.allSatisfy(tabOrder.indices.contains),
+              (0...tabOrder.count).contains(destination) else { return }
+        let moving = offsets.map { tabOrder[$0] }
+        var order = tabOrder.enumerated().filter { !offsets.contains($0.offset) }.map(\.element)
+        order.insert(contentsOf: moving, at: destination - offsets.count(in: 0..<destination))
+        if order != tabOrder { tabOrder = order }
     }
 
     /// Puts the tabs back in the default order. Which tabs show stays as it is.
