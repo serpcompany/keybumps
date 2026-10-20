@@ -265,20 +265,20 @@ final class SmokeUITests: XCTestCase {
     func testQuickSearchTabOrder() {
         launch(permissions: "granted", ["-KBOpenSettings", "search"])
         XCTAssertTrue(element("settings.detail.search").waitForExistence(timeout: 20))
-        // The page is one list, taller than the window: the tab rows start below its bottom.
-        XCTAssertTrue(scrollQuickSearchPage(down: true, until: [tabRow("search"), tabRow("keyboardShortcutter")]), "Every tab row in view")
-        let reset = element("settings.quickSearch.resetOrder")
-        XCTAssertTrue(reset.waitForExistence(timeout: 5))
-        XCTAssertTrue(waitForEnabled(reset, false), "Nothing to reset in the default order")
+        // The page is one list, taller than the window, so each step first brings what it uses into view.
         // A tab key is static text, so macOS reports its accessibility label as its value.
-        let snippetsKey = element("settings.quickSearch.key.snippets")
-        XCTAssertTrue(waitForText(of: snippetsKey, "Tab key ⌘5"))
+        XCTAssertTrue(scrollQuickSearchPage(until: [tabRow("keyboardShortcutter")]), "The last tab row in view")
         XCTAssertTrue(waitForText(of: element("settings.quickSearch.key.keyboardShortcutter"), "Not in the tab bar"), "The Hotkeys tab starts hidden")
+        let reset = element("settings.quickSearch.resetOrder")
+        let snippetsKey = element("settings.quickSearch.key.snippets")
+        XCTAssertTrue(scrollQuickSearchPage(until: [reset, tabRow("snippets")]), "Reset Order and the Snippets row in view")
+        XCTAssertTrue(waitForEnabled(reset, false), "Nothing to reset in the default order")
+        XCTAssertTrue(waitForText(of: snippetsKey, "Tab key ⌘5"))
 
         // Snippets up to first.
         let up = element("settings.quickSearch.moveUp.snippets")
         for place in [4, 3, 2, 1] {
-            XCTAssertTrue(up.isHittable, "Snippets' Up arrow is in view")
+            XCTAssertTrue(scrollQuickSearchPage(until: [up]), "Snippets' Up arrow is in view")
             up.click()
             XCTAssertTrue(waitForText(of: snippetsKey, "Tab key ⌘\(place)"), "Snippets moves up to ⌘\(place)")
         }
@@ -288,7 +288,7 @@ final class SmokeUITests: XCTestCase {
 
         // Quick Search opens on the first tab shown, and its keys and Left and Right follow the order.
         let open = element("settings.quickSearch.open")
-        XCTAssertTrue(scrollQuickSearchPage(down: false, until: [open]), "Open is above the tab rows")
+        XCTAssertTrue(scrollQuickSearchPage(until: [open]), "Open is above the tab rows")
         open.click()
         XCTAssertTrue(paletteField("Search snippets").waitForExistence(timeout: 10), "It opens on Snippets")
         app.typeKey("2", modifierFlags: .command)
@@ -302,7 +302,7 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(waitForNonExistence(of: paletteField("Search clipboard history")), "Escape closes Quick Search")
 
         // Reset Order puts the keys back and turns itself off.
-        XCTAssertTrue(scrollQuickSearchPage(down: true, until: [reset, tabRow("search"), tabRow("keyboardShortcutter")]), "Every tab row in view")
+        XCTAssertTrue(scrollQuickSearchPage(until: [reset]), "Reset Order in view")
         reset.click()
         XCTAssertTrue(waitForText(of: snippetsKey, "Tab key ⌘5"))
         XCTAssertTrue(waitForText(of: element("settings.quickSearch.key.search"), "Tab key ⌘1"))
@@ -311,7 +311,7 @@ final class SmokeUITests: XCTestCase {
         // A hidden tab has no key, and the tabs after it move up; hiding one leaves the order alone.
         let clipboardSwitch = element("settings.quickSearch.show.clipboard")
         XCTAssertTrue(clipboardSwitch.waitForExistence(timeout: 5), "Every tab whose plugin is on has a show switch")
-        XCTAssertTrue(clipboardSwitch.isHittable, "The Clipboard tab's switch is in view")
+        XCTAssertTrue(scrollQuickSearchPage(until: [clipboardSwitch]), "The Clipboard tab's switch is in view")
         clipboardSwitch.click()
         XCTAssertTrue(waitForText(of: element("settings.quickSearch.key.clipboard"), "Not in the tab bar"))
         XCTAssertTrue(waitForText(of: element("settings.quickSearch.key.screenshots"), "Tab key ⌘2"), "The tabs after it move up")
@@ -320,13 +320,14 @@ final class SmokeUITests: XCTestCase {
 
     /// #553: Settings › Quick Search is one list (`List` with `ForEach.onMove` for its tab rows): the
     /// wheel over the tab rows scrolls the page, and the rows drag to reorder, as in any Mac list. A
-    /// row dropped on the top of another lands above it, one dropped on the bottom of another lands
-    /// below it, and the tab keys follow.
+    /// row dropped on the top edge of another lands above it, one dropped on the bottom edge of
+    /// another lands below it, and the tab keys follow. (Dropped on the middle of a row, the list
+    /// puts it below that row: the system's drop on an item.)
     func testQuickSearchTabRowsDragToReorder() {
         launch(permissions: "granted", ["-KBOpenSettings", "search"])
         XCTAssertTrue(element("settings.detail.search").waitForExistence(timeout: 20))
 
-        // The wheel over a tab row scrolls the page: the row moves up, and the last row comes into view.
+        // The wheel over a tab row scrolls the page: the row moves up.
         let searchRow = tabRow("search")
         XCTAssertTrue(searchRow.waitForExistence(timeout: 5))
         XCTAssertTrue(searchRow.isHittable, "The first tab row is in view when the page opens")
@@ -334,21 +335,25 @@ final class SmokeUITests: XCTestCase {
         searchRow.scroll(byDeltaX: 0, deltaY: -100)
         let moved = NSPredicate { _, _ in searchRow.frame.minY < top - 20 }
         XCTAssertEqual(XCTWaiter().wait(for: [expectation(for: moved, evaluatedWith: nil)], timeout: 5), .completed, "The page scrolls")
-        XCTAssertTrue(scrollQuickSearchPage(down: true, until: [searchRow, tabRow("keyboardShortcutter")]), "Every tab row in view")
 
+        // Each drag first brings into view the Tabs header and the rows from the first down to the
+        // one below the rows it uses, so neither row is at an edge, where the list scrolls as you drag.
+        let reset = element("settings.quickSearch.resetOrder")
         let snippetsKey = element("settings.quickSearch.key.snippets")
         let searchKey = element("settings.quickSearch.key.search")
+        XCTAssertTrue(scrollQuickSearchPage(until: [reset, tabRow("timers")]), "The Tabs header and the first six rows in view")
         XCTAssertTrue(waitForText(of: snippetsKey, "Tab key ⌘5"))
         XCTAssertTrue(waitForText(of: searchKey, "Tab key ⌘1"))
 
-        // Up: Snippets dropped on the top of the Search row goes first.
-        dragTabRow("snippets", onto: "search", at: 0.15)
+        // Up: Snippets dropped on the top edge of the Search row goes first.
+        dragTabRow("snippets", onto: "search", at: 0.1)
         XCTAssertTrue(waitForText(of: snippetsKey, "Tab key ⌘1"), "Snippets is first")
         XCTAssertTrue(waitForText(of: searchKey, "Tab key ⌘2"), "Search follows it")
-        XCTAssertTrue(waitForEnabled(element("settings.quickSearch.resetOrder"), true))
+        XCTAssertTrue(waitForEnabled(reset, true))
 
-        // Down: Snippets dropped on the bottom of the Clipboard row lands below it.
-        dragTabRow("snippets", onto: "clipboard", at: 0.85)
+        // Down: Snippets dropped on the bottom edge of the Clipboard row lands below it.
+        XCTAssertTrue(scrollQuickSearchPage(until: [reset, tabRow("dictation")]), "The Tabs header and the first five rows in view")
+        dragTabRow("snippets", onto: "clipboard", at: 0.9)
         XCTAssertTrue(waitForText(of: snippetsKey, "Tab key ⌘3"), "Snippets is below Clipboard")
         XCTAssertTrue(waitForText(of: searchKey, "Tab key ⌘1"))
         XCTAssertTrue(waitForText(of: element("settings.quickSearch.key.clipboard"), "Tab key ⌘2"))
@@ -1306,25 +1311,39 @@ final class SmokeUITests: XCTestCase {
         element("settings.quickSearch.tab.\(tab)")
     }
 
-    /// Scrolls Settings › Quick Search, one list taller than the window (#553), with the wheel over
-    /// a tab row in view, until every element given is in view and can be clicked.
-    private func scrollQuickSearchPage(down: Bool, until elements: [XCUIElement]) -> Bool {
+    /// Scrolls Settings › Quick Search, one list taller than the window (#553), with the wheel over a
+    /// tab row in view, until every element given is inside the list's frame. Each turn of the wheel
+    /// goes toward the first element still outside it, so the scrolling recovers if the list moves
+    /// on its own. Ask only for what fits in the list's height at once.
+    private func scrollQuickSearchPage(until elements: [XCUIElement]) -> Bool {
+        let list = app.scrollViews.containing(.any, identifier: "settings.detail.search").firstMatch
         let rows = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "settings.quickSearch.tab."))
-        let inView = NSPredicate { _, _ in elements.allSatisfy { $0.exists && $0.isHittable } }
-        for _ in 0..<12 {
+        func inList(_ element: XCUIElement) -> Bool {
+            element.exists && list.exists && list.frame.contains(element.frame)
+        }
+        let inView = NSPredicate { _, _ in elements.allSatisfy(inList) }
+        for _ in 0..<16 {
             if XCTWaiter().wait(for: [expectation(for: inView, evaluatedWith: nil)], timeout: 1) == .completed { return true }
-            guard let row = rows.allElementsBoundByIndex.first(where: { $0.isHittable }) else { return false }
-            row.scroll(byDeltaX: 0, deltaY: down ? -100 : 100)
+            guard list.exists else { return false }
+            // Rows the list hasn't laid out yet are below it, as the page opens at its top.
+            let outside = elements.first { !inList($0) }
+            let down = outside.map { !$0.exists || $0.frame.midY > list.frame.midY } ?? true
+            let wheel = rows.allElementsBoundByIndex.first(where: inList) ?? list
+            wheel.scroll(byDeltaX: 0, deltaY: down ? -100 : 100)
         }
         return XCTWaiter().wait(for: [expectation(for: inView, evaluatedWith: nil)], timeout: 2) == .completed
     }
 
-    /// Drags one tab's row by its name and drops it at `height` (0 the top, 1 the bottom) of
-    /// another's, slowly, as a person would, with both rows in view first.
+    /// Drags one tab's row by its name and drops it at `height` of another's row in the list (0 its
+    /// top edge, 1 its bottom edge), slowly, as a person would. The caller brings both into view
+    /// first, away from the list's edges. The row is the list row around the tab's content, whose
+    /// height includes the group's padding and separator: the list decides a drop by that height,
+    /// putting one on the middle of a row below it and one on a quarter by an edge beside that edge.
     private func dragTabRow(_ tab: String, onto target: String, at height: CGFloat) {
         let row = tabRow(tab)
-        let targetRow = tabRow(target)
-        XCTAssertTrue(scrollQuickSearchPage(down: true, until: [row, targetRow]), "Both rows in view")
+        let targetRow = app.outlineRows.containing(.any, identifier: "settings.quickSearch.tab.\(target)").firstMatch
+        XCTAssertTrue(row.isHittable, "The \(tab) row is in view")
+        XCTAssertTrue(targetRow.isHittable, "The \(target) row is in view")
         row.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.5)).press(
             forDuration: 1,
             thenDragTo: targetRow.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: height)),
