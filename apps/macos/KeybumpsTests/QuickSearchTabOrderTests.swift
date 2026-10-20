@@ -220,14 +220,19 @@ struct QuickSearchTabOrderTests {
         #expect(rows.dropLast().allSatisfy { !$0.isLast })
     }
 
-    @Test("The tab list is a Mac list whose rows drag to reorder, with room for every row, so only the page scrolls")
-    func tabListIsAListThatNeverScrolls() throws {
+    @Test("Settings › Quick Search is one Mac list, the page's only scroll view, and only its tab rows drag to reorder")
+    func pageIsOneListWhoseTabRowsDrag() throws {
         let model = AppModel.forShortcutTests(preferences: AppPreferences(defaults: InMemoryDefaults(), compatibility: Self.mac15))
-        let size = CGSize(width: SettingsWindowFrame.minimumContentSize.width - 280, height: 2000)
-        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
+        let width = SettingsWindowFrame.minimumContentSize.width - 280
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: width, height: 2000),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
         window.isReleasedWhenClosed = false
         let host = NSHostingView(rootView: QuickSearchSettingsView().environment(model))
-        host.frame = NSRect(origin: .zero, size: size)
+        host.frame = NSRect(x: 0, y: 0, width: width, height: 2000)
         window.contentView = host
         defer {
             window.contentView = nil
@@ -235,24 +240,49 @@ struct QuickSearchTabOrderTests {
         }
         host.layoutSubtreeIfNeeded()
 
-        let table = try #require(Self.firstSubview(of: NSTableView.self, in: host), "The tab list is a List")
-        #expect(table.numberOfRows == CommandPaletteTab.allCases.count)
-        let visible = try #require(table.enclosingScrollView).contentView.bounds.height
-        #expect(table.frame.height <= visible + 0.5, "Every row is in view, so the list never scrolls")
-        #expect(table.rect(ofRow: 0).height == SettingsTheme.rowMinHeight + 9, "A Settings group row's height, and its separator")
-        let writer: (any NSPasteboardWriting)? = if let outline = table as? NSOutlineView, let item = outline.item(atRow: 0) {
-            outline.dataSource?.outlineView?(outline, pasteboardWriterForItem: item)
-        } else {
-            table.dataSource?.tableView?(table, pasteboardWriterForRow: 0)
+        // A list inside the page's scroll view took XCUITest's scrolling, and maybe the wheel (#553).
+        #expect(Self.subviews(of: NSScrollView.self, in: host).count == 1, "The page's list is its only scroll view")
+        let table = try #require(Self.firstSubview(of: NSTableView.self, in: host), "The page is a List")
+        let tabs = CommandPaletteTab.allCases.count
+        #expect(table.numberOfRows > tabs, "The groups above the tabs are rows of the same list")
+        let firstTab = table.numberOfRows - tabs
+        #expect(table.rect(ofRow: firstTab).height == SettingsTheme.rowMinHeight + 9, "A Settings group row's height, and its separator")
+        #expect(table.rect(ofRow: table.numberOfRows - 1).height == SettingsTheme.rowMinHeight + 8, "The last tab has no separator")
+        for row in 0..<table.numberOfRows {
+            #expect((Self.pasteboardWriter(table, row: row) != nil) == (row >= firstTab), "Only a tab row drags (row \(row))")
         }
-        #expect(writer != nil, "A row drags")
         #expect(!table.registeredDraggedTypes.isEmpty, "and the list takes it back as a move")
+        // The rows' insets allow for where AppKit puts a row's content, so it lines up with its background.
+        let cell = try #require(table.view(atColumn: 0, row: firstTab, makeIfNecessary: true))
+        #expect(cell.frame.minX == SettingsTheme.listCellLeading)
+        #expect(table.bounds.width - cell.frame.maxX == SettingsTheme.listCellTrailing)
+
+        // In a window too short for the page, the list scrolls, as the page.
+        window.setContentSize(NSSize(width: width, height: 400))
+        host.frame = NSRect(x: 0, y: 0, width: width, height: 400)
+        host.layoutSubtreeIfNeeded()
+        let clip = try #require(table.enclosingScrollView).contentView.bounds.height
+        #expect(clip < 400.5)
+        #expect(table.frame.height > clip, "The page scrolls in its list")
+    }
+
+    /// The row's drag, as the list gives it to AppKit: nil for a row that doesn't move.
+    private static func pasteboardWriter(_ table: NSTableView, row: Int) -> (any NSPasteboardWriting)? {
+        if let outline = table as? NSOutlineView, let item = outline.item(atRow: row) {
+            return outline.dataSource?.outlineView?(outline, pasteboardWriterForItem: item)
+        }
+        return table.dataSource?.tableView?(table, pasteboardWriterForRow: row)
     }
 
     private static func firstSubview<View: NSView>(of type: View.Type, in view: NSView) -> View? {
         if let match = view as? View { return match }
         return view.subviews.lazy.compactMap { firstSubview(of: type, in: $0) }.first
     }
+
+    private static func subviews<View: NSView>(of type: View.Type, in view: NSView) -> [View] {
+        ((view as? View).map { [$0] } ?? []) + view.subviews.flatMap { subviews(of: type, in: $0) }
+    }
+
 
     // MARK: The palette's keys
 

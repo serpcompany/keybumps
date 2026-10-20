@@ -63,86 +63,80 @@ enum QuickSearchTabList {
 /// Settings › Quick Search, the window's page (#553). Quick Search is always on, so the page has
 /// no switch: it holds ⌘Space and the tab list, where a row drags or moves to reorder the tabs and
 /// its show switch takes its tab out of the tab bar.
+///
+/// The page is one SwiftUI `List` (`SettingsListPage`), its only scroll view, so the tab rows drag
+/// as in any Mac list, with the system's insertion line (`ForEach.onMove`), and the wheel over them
+/// scrolls the page. Each group is a section. The groups above the tabs are a row each, drawn as on
+/// any Settings page; the Tabs section is its header, then a row per tab on the group's card.
 struct QuickSearchSettingsView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
         let preferences = model.preferences
-        SettingsPage {
-            CapabilityControl(capability: .quickSearch, shortcuts: [.quickSearch])
+        let rows = QuickSearchTabList.rows(
+            hidden: preferences.hiddenTabs,
+            enabled: preferences.enabledCapabilities,
+            compatibility: preferences.compatibility,
+            order: preferences.tabOrder
+        )
+        SettingsListPage {
+            Section {
+                CapabilityControl(capability: .quickSearch, shortcuts: [.quickSearch])
+                    .settingsListRow()
+            }
             if let manualRecovery = model.quickSearchSpotlightRecovery {
                 // After the update couldn't take ⌘Space from Spotlight (#553), as first-time setup shows it.
-                SettingsGroup {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label("Quick Search still needs attention.", systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
-                        Text(manualRecovery)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                        HStack {
-                            Button("Open Keyboard Shortcuts…") { model.openKeyboardShortcutSettings() }
-                            Button("Check Again") { model.checkQuickSearchSpotlightAgain() }
+                Section {
+                    SettingsGroup {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Quick Search still needs attention.", systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                            Text(manualRecovery)
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                            HStack {
+                                Button("Open Keyboard Shortcuts…") { model.openKeyboardShortcutSettings() }
+                                Button("Check Again") { model.checkQuickSearchSpotlightAgain() }
+                            }
                         }
                     }
+                    .settingsListRow()
                 }
             }
-            SettingsGroup {
-                LabeledContent {
-                    Button("Open") { model.showQuickSearch() }
-                        .accessibilityIdentifier("settings.quickSearch.open")
-                } label: {
-                    SettingsRowLabel(title: "Open Quick Search", subtitle: "On the first tab shown.")
+            Section {
+                SettingsGroup {
+                    LabeledContent {
+                        Button("Open") { model.showQuickSearch() }
+                            .accessibilityIdentifier("settings.quickSearch.open")
+                    } label: {
+                        SettingsRowLabel(title: "Open Quick Search", subtitle: "On the first tab shown.")
+                    }
                 }
+                .settingsListRow()
             }
-            SettingsGroup(
-                "Tabs",
-                subtitle: "Drag a tab, or use the arrows. ⌘1 is the first tab shown, ⌘2 the second, and so on, "
-                    + "and Quick Search opens on the first. One tab always stays shown."
-            ) {
-                QuickSearchTabListView(rows: QuickSearchTabList.rows(
-                    hidden: preferences.hiddenTabs,
-                    enabled: preferences.enabledCapabilities,
-                    compatibility: preferences.compatibility,
-                    order: preferences.tabOrder
-                ))
-            } accessory: {
-                // Disabled while the order is already the default, so it never looks like it did nothing.
-                Button("Reset Order") { preferences.resetTabOrder() }
-                    .disabled(preferences.isDefaultTabOrder)
-                    .help("Puts the tabs back in their original order. Which tabs show stays as it is.")
-                    .accessibilityIdentifier("settings.quickSearch.resetOrder")
+            Section {
+                SettingsGroupHeader(
+                    "Tabs",
+                    subtitle: "Drag a tab, or use the arrows. ⌘1 is the first tab shown, ⌘2 the second, and so on, "
+                        + "and Quick Search opens on the first. One tab always stays shown."
+                ) {
+                    // Disabled while the order is already the default, so it never looks like it did nothing.
+                    Button("Reset Order") { preferences.resetTabOrder() }
+                        .disabled(preferences.isDefaultTabOrder)
+                        .help("Puts the tabs back in their original order. Which tabs show stays as it is.")
+                        .accessibilityIdentifier("settings.quickSearch.resetOrder")
+                }
+                .settingsListHeaderRow()
+                ForEach(rows) { row in
+                    QuickSearchTabRow(row: row)
+                        .settingsListCardRow(isFirst: row.isFirst, isLast: row.isLast)
+                }
+                // The rows are `tabOrder`'s tabs in order, so their offsets are its places. Only
+                // these rows move: the page's other rows aren't in this `ForEach`.
+                .onMove { preferences.moveTabs(fromOffsets: $0, toOffset: $1) }
             }
         }
         .navigationTitle("Quick Search")
-    }
-}
-
-/// The tab list, a SwiftUI `List` whose rows drag to reorder as in any Mac list, with the system's
-/// insertion line (`ForEach.onMove`). It sits in its Settings group like the group's other rows:
-/// no background or selection of its own, the group's row height and separators, and tall enough
-/// for every row, so only the page scrolls.
-private struct QuickSearchTabListView: View {
-    @Environment(AppModel.self) private var model
-    let rows: [QuickSearchTabList.Row]
-
-    var body: some View {
-        List {
-            ForEach(rows) { row in
-                QuickSearchTabRow(row: row)
-                    .listRowInsets(EdgeInsets())
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-            }
-            // The rows are `tabOrder`'s tabs in order, so their offsets are its places.
-            .onMove { model.preferences.moveTabs(fromOffsets: $0, toOffset: $1) }
-        }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .scrollDisabled(true)
-        .frame(height: QuickSearchTabRow.listHeight(rows: rows.count))
-        // The group pads its one child as it pads a row; these rows carry that padding themselves,
-        // so the list fills the card from edge to edge, top to bottom.
-        .padding(.vertical, -QuickSearchTabRow.verticalPadding)
     }
 }
 
@@ -153,20 +147,12 @@ private struct QuickSearchTabRow: View {
     @Environment(AppModel.self) private var model
     let row: QuickSearchTabList.Row
 
-    /// A Settings group row's padding above and below its content (`SettingsGroup`).
-    static let verticalPadding: CGFloat = 4
-
-    /// The list's height with `rows` rows: each a group row's height, with a separator between.
-    static func listHeight(rows: Int) -> CGFloat {
-        guard rows > 0 else { return 0 }
-        return CGFloat(rows) * (SettingsTheme.rowMinHeight + 2 * verticalPadding) + CGFloat(rows - 1)
-    }
-
     var body: some View {
         VStack(spacing: 0) {
+            // A Settings group row's height and padding (`SettingsGroup`).
             content
                 .frame(height: SettingsTheme.rowMinHeight)
-                .padding(.vertical, Self.verticalPadding)
+                .padding(.vertical, 4)
             if !row.isLast {
                 SettingsTheme.separator.frame(height: 1)
             }

@@ -10,6 +10,15 @@ enum SettingsTheme {
     static let separator = Color.primary.opacity(0.07)
 
     static let rowMinHeight: CGFloat = 44
+    /// A Settings page's side margins, and the space between its groups.
+    static let pageInset: CGFloat = 18
+    static let groupSpacing: CGFloat = 16
+    /// Where AppKit puts a plain `List` row's content in the row: its table's column starts 8 pt in
+    /// and ends 9 pt short (the table's 17 pt cell spacing), while a row's background fills the row.
+    /// `SettingsListPage`'s rows take these off their insets, so their content lines up with the
+    /// background and with `SettingsPage`'s.
+    static let listCellLeading: CGFloat = 8
+    static let listCellTrailing: CGFloat = 9
     static let rowInset: CGFloat = 11
     static let cardRadius: CGFloat = 10
     static let controlRadius: CGFloat = 6
@@ -35,19 +44,98 @@ struct SettingsPage<Content: View>: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: SettingsTheme.groupSpacing) {
                 content
             }
-            .padding(.horizontal, 18)
+            .padding(.horizontal, SettingsTheme.pageInset)
             .padding(.top, 10)
             .padding(.bottom, 24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(SettingsTheme.pageBackground)
-        .font(.system(size: SettingsTheme.titleSize))
-        .toggleStyle(SettingsSwitchToggleStyle())
-        .labeledContentStyle(SettingsRowLabeledContentStyle())
-        .buttonStyle(SettingsButtonStyle())
+        .settingsPageStyle()
+    }
+}
+
+/// A Settings page that is one SwiftUI `List`, the page's only scroll view, for a page with rows
+/// that drag to reorder (`ForEach.onMove`), such as Settings › Quick Search's tabs (#553). A `List`
+/// inside `SettingsPage`'s scroll view nested two scroll views: XCUITest scrolled the inner one, and
+/// the wheel over it might not have scrolled the page. Each child is a row: give it
+/// `settingsListRow()` to sit as it would on `SettingsPage`, or `settingsListCardRow` to be a row
+/// of a group's card.
+struct SettingsListPage<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        List {
+            content
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .environment(\.defaultMinListRowHeight, 0)
+        .contentMargins(.top, 10 - SettingsTheme.groupSpacing / 2, for: .scrollContent)
+        .contentMargins(.bottom, 24, for: .scrollContent)
+        .settingsPageStyle()
+    }
+}
+
+extension View {
+    /// A Settings page's background, font, and control styles, on `SettingsPage` and `SettingsListPage`.
+    fileprivate func settingsPageStyle() -> some View {
+        background(SettingsTheme.pageBackground)
+            .font(.system(size: SettingsTheme.titleSize))
+            .toggleStyle(SettingsSwitchToggleStyle())
+            .labeledContentStyle(SettingsRowLabeledContentStyle())
+            .buttonStyle(SettingsButtonStyle())
+    }
+
+    /// A `SettingsListPage` row's insets: the page's side margins, inside the card's too for a
+    /// card row, less where AppKit already puts the row's content (`SettingsTheme.listCellLeading`).
+    private func settingsListRowInsets(top: CGFloat, bottom: CGFloat, inCard: Bool = false) -> some View {
+        let inset = SettingsTheme.pageInset + (inCard ? SettingsTheme.rowInset : 0)
+        return listRowInsets(EdgeInsets(
+            top: top,
+            leading: inset - SettingsTheme.listCellLeading,
+            bottom: bottom,
+            trailing: inset - SettingsTheme.listCellTrailing
+        ))
+    }
+
+    /// A `SettingsListPage` row laid out as `SettingsPage` lays out a child, such as a whole
+    /// `SettingsGroup`: the page's side insets, half the space between groups above and below, and
+    /// no row background or separator of the list's own. On a view of several views, such as
+    /// `CapabilityControl`, each is its own row.
+    func settingsListRow() -> some View {
+        settingsListRowInsets(top: SettingsTheme.groupSpacing / 2, bottom: SettingsTheme.groupSpacing / 2)
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+    }
+
+    /// A `SettingsListPage` row that is a group's `SettingsGroupHeader`, above its
+    /// `settingsListCardRow` rows: the space between groups above it, and the header's own below.
+    func settingsListHeaderRow() -> some View {
+        settingsListRowInsets(top: SettingsTheme.groupSpacing / 2, bottom: SettingsGroupHeader<EmptyView>.spacingBelow)
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+    }
+
+    /// A `SettingsListPage` row that is one row of a group's card, under a `SettingsGroupHeader`
+    /// row: the card's color behind it, rounded at the top of the first row and the bottom of the
+    /// last, and the card's insets around its content. The row draws the group's separator itself.
+    func settingsListCardRow(isFirst: Bool, isLast: Bool) -> some View {
+        let radius = SettingsTheme.cardRadius
+        return settingsListRowInsets(top: 0, bottom: 0, inCard: true)
+            .listRowSeparator(.hidden)
+            .listRowBackground(
+                UnevenRoundedRectangle(
+                    topLeadingRadius: isFirst ? radius : 0,
+                    bottomLeadingRadius: isLast ? radius : 0,
+                    bottomTrailingRadius: isLast ? radius : 0,
+                    topTrailingRadius: isFirst ? radius : 0,
+                    style: .continuous
+                )
+                .fill(SettingsTheme.card)
+                .padding(.horizontal, SettingsTheme.pageInset)
+            )
     }
 }
 
@@ -106,35 +194,56 @@ struct SettingsGroup<Content: View, Accessory: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SettingsGroupHeader<Accessory>.spacingBelow) {
             if title != nil || subtitle != nil {
-                HStack(alignment: .bottom, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        if let title {
-                            Text(title)
-                                .font(.system(size: SettingsTheme.titleSize, weight: .medium))
-                                .foregroundStyle(.primary.opacity(0.85))
-                                .accessibilityAddTraits(.isHeader)
-                                .accessibilityIdentifier("settings.group.\(title)")
-                        }
-                        if let subtitle {
-                            Text(subtitle)
-                                .font(.system(size: SettingsTheme.subtitleSize))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    if Accessory.self != EmptyView.self {
-                        Spacer(minLength: 0)
-                        accessory
-                            .padding(.trailing, SettingsTheme.rowInset)
-                    }
-                }
-                .padding(.leading, SettingsTheme.rowInset)
-                .padding(.top, 8)
+                SettingsGroupHeader(title, subtitle: subtitle) { accessory }
             }
             _VariadicView.Tree(DividedRows()) { content }
                 .background(SettingsTheme.card, in: RoundedRectangle(cornerRadius: SettingsTheme.cardRadius, style: .continuous))
         }
+    }
+}
+
+/// A Settings group's heading, subtitle, and trailing control, above its card: in `SettingsGroup`,
+/// or as its own row of a `SettingsListPage` above the group's `settingsListCardRow` rows.
+struct SettingsGroupHeader<Accessory: View>: View {
+    /// The space between the heading and the card below it.
+    static var spacingBelow: CGFloat { 8 }
+
+    private let title: String?
+    private let subtitle: String?
+    private let accessory: Accessory
+
+    init(_ title: String?, subtitle: String? = nil, @ViewBuilder accessory: () -> Accessory) {
+        self.title = title
+        self.subtitle = subtitle
+        self.accessory = accessory()
+    }
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                if let title {
+                    Text(title)
+                        .font(.system(size: SettingsTheme.titleSize, weight: .medium))
+                        .foregroundStyle(.primary.opacity(0.85))
+                        .accessibilityAddTraits(.isHeader)
+                        .accessibilityIdentifier("settings.group.\(title)")
+                }
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.system(size: SettingsTheme.subtitleSize))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if Accessory.self != EmptyView.self {
+                Spacer(minLength: 0)
+                accessory
+                    .padding(.trailing, SettingsTheme.rowInset)
+            }
+        }
+        .padding(.leading, SettingsTheme.rowInset)
+        .padding(.top, 8)
     }
 }
 
