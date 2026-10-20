@@ -70,7 +70,8 @@ struct TranslationGateTests {
             hidden: [], selected: .search, enabled: old.model.preferences.enabledCapabilities
         )
         #expect(!tabs.contains(.translate))
-        #expect(CommandPaletteTab.matchingCommandKey("8", in: tabs) == nil)
+        #expect(CommandPaletteTab.matchingCommandKey("8", in: tabs) == .keyboardShortcutter, "The tab after it takes its key")
+        #expect(CommandPaletteTab.matchingCommandKey("9", in: tabs) == nil)
         #expect(QuickSearchCommand.capability(.translation).destination(
             enabledCapabilities: old.model.preferences.enabledCapabilities
         ) == .settings(.translation), "Its command opens its page, which says why")
@@ -276,10 +277,10 @@ struct TranslateTabTests {
         #expect(descriptor.preferences.map(\.key) == ["myLanguage", "otherLanguage"])
         #expect(descriptor.paletteTab?.tab == .translate)
         #expect(CommandPaletteTab.translate.title == "Translate")
-        #expect(CommandPaletteTab.translate.shortcutLabel == "⌘8")
+        #expect(descriptor.paletteTab?.defaultPosition == 8)
         #expect(CommandPaletteTab.translate.primaryActionTitle == "Copy")
         #expect(CommandPaletteTab.translate.secondaryActions == [.delete()], "⌘V is the search field's; a saved translation pastes from its button")
-        #expect(CommandPaletteTab.keyboardShortcutter.shortcutLabel == "⌘9", "Hotkeys moved to stay last")
+        #expect(CapabilityDescriptor.keyboardShortcutter.paletteTab?.defaultPosition == 9, "Hotkeys moved to stay last")
         #expect(descriptor.shortcuts == [.translation])
         #expect(CapabilityShortcut.translation.title == "Open Translate")
         #expect(CapabilityShortcut.translation.defaultBinding == nil)
@@ -675,7 +676,7 @@ struct TranslateTabLanguageTests {
         palette.selectOnOpening(.translate)
         #expect(palette.handleKeyDown(fixture.commandKey(kVK_ANSI_2, "2")) == nil)
         #expect(palette.state.tab == .clipboard)
-        #expect(palette.handleKeyDown(fixture.commandKey(kVK_ANSI_8, "8")) == nil)
+        #expect(palette.handleKeyDown(fixture.commandKey(kVK_ANSI_7, "7")) == nil, "Translate is the seventh tab shown")
         #expect(palette.state.tab == .translate)
         #expect(palette.handleKeyDown(fixture.commandKey(kVK_ANSI_Comma, ",")) == nil)
         #expect(opened == [nil])
@@ -1260,7 +1261,7 @@ struct TranslationReadAloudTests {
         #expect(palette.state.tab == .clipboard)
         #expect(speaker.stops == 2, "The tab changed")
 
-        #expect(palette.handleKeyDown(fixture.commandKey(kVK_ANSI_8, "8")) == nil)
+        #expect(palette.handleKeyDown(fixture.commandKey(kVK_ANSI_7, "7")) == nil, "Translate is the seventh tab shown")
         await read()
         tab.update(query: "H")
         #expect(speaker.stops == 3, "The text changed")

@@ -65,7 +65,7 @@ enum QuickSearchCommand: Hashable, Identifiable {
     }
 
     /// The shortcut that runs it from any Command Palette tab. Only Keybumps Settings has one of its
-    /// own; a capability's row shows its tab's Command-number instead, and an action its plugin's
+    /// own; a capability's row shows its tab's tab key instead, and an action its plugin's
     /// shortcut (`rowShortcut`).
     var shortcut: String? {
         switch self {
@@ -205,14 +205,14 @@ extension QuickSearchCommand {
     }
 
     /// The keycaps its row shows: its own shortcut, an action's plugin shortcut while one is
-    /// assigned, or the Command-number of the tab it goes to while that tab is in the tab bar (the
-    /// Hotkeys tab is usually hidden, and then Command-9 does nothing).
-    func rowShortcut(enabledCapabilities: Set<Capability>, visibleTabs: [CommandPaletteTab]) -> String? {
+    /// assigned, or the tab key of the tab it goes to, its place among `shownTabs`
+    /// (`CommandPaletteTab.tabKey`), while that tab has one. A hidden tab, as the Hotkeys tab
+    /// starts, has none.
+    func rowShortcut(enabledCapabilities: Set<Capability>, shownTabs: [CommandPaletteTab]) -> String? {
         if let shortcut { return shortcut }
         if case .action(let action) = self { return action.shortcut }
-        guard case .paletteTab(let tab) = destination(enabledCapabilities: enabledCapabilities),
-              visibleTabs.contains(tab) else { return nil }
-        return tab.shortcutLabel
+        guard case .paletteTab(let tab) = destination(enabledCapabilities: enabledCapabilities) else { return nil }
+        return CommandPaletteTab.tabKey(for: tab, among: shownTabs)
     }
 }
 

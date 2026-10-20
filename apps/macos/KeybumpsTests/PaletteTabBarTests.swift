@@ -16,7 +16,7 @@ struct PaletteTabBarTests {
     }
 
     func bar(_ tabs: [CommandPaletteTab], selected: CommandPaletteTab, showsShortcuts: Bool) -> PaletteTabBar {
-        PaletteTabBar(tabs: tabs, selected: selected, showsShortcuts: showsShortcuts, select: { _ in })
+        PaletteTabBar(tabs: tabs, shown: tabs, selected: selected, showsShortcuts: showsShortcuts, select: { _ in })
     }
 
     /// The bar's padding, spacing, and brand mark: its width without tabs.

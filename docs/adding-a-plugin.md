@@ -11,12 +11,12 @@ Ship it in small PRs, in this order: the app's seams first, then the plugin, the
   - **Basics:** the title, `systemImage`, and `iconTint`; search keywords, the category, and any `PluginPreference`s.
   - **Permissions:** required permissions show `MacPermission.explanation` (`Infrastructure/SystemServices.swift`). Add the plugin to the explanation of each one it needs. Optional permissions carry their own reason. (The website entry's permission reasons come in §4.)
   - **Settings page:** its summary, and the explanation the on/off switch shows as a tooltip. New plugins draw their page from the manifest with `PluginSettingsPage`; a switch that governs the rest of the page goes under its header with `placement: .top`, and can't change while the plugin is off. Rows no declaration covers go in its slots: above the declared preferences (`abovePreferences`, as ScreenGrabs' Screenshots group), at the end of one of their groups (`groupRows`, as ScreenGrabs' recordings folder under Recordings), or last (`custom`). A declared preference that moved from a retired plugin keeps its stored key through `storageName`, as ScreenGrabs' recording preferences keep `plugin.screencast.<key>`. A page drawn by hand shows the plugin's optional permissions with `PluginPermissionsGroup`, and `PluginManifestTests` fails if a page leaves one out (#379).
-  - **Its tab in Quick Search, if any (`paletteTab`):** the module's `paletteContent` supplies the rows, drawn with `PaletteRow` under a `PaletteListHeader` (or, for a grid, inset to `PaletteRowMetrics.wellX`), so switching tabs moves nothing (#381). Each row's button is a `PaletteClickButton` that reports to the context's `click`, and the tab's `clickAction` says what one click does: `.acts` does Return's action, where a row has one obvious job, and `.selects` highlights it, where the tab shows the highlighted row's actions (#552). The descriptor's `systemImage` is the tab's icon in the tab bar, so it must differ from the other tabs'. The tab takes the next tab key, and the hidden Hotkeys tab moves to stay last. Emoji Picker took ⌘7, then Translation took ⌘8 and Hotkeys moved to ⌘9. Moving Hotkeys also changes:
-    - `KeyboardShortcutterModule`'s `commandKey`;
+  - **Its tab in Quick Search, if any (`paletteTab`):** the module's `paletteContent` supplies the rows, drawn with `PaletteRow` under a `PaletteListHeader` (or, for a grid, inset to `PaletteRowMetrics.wellX`), so switching tabs moves nothing (#381). Each row's button is a `PaletteClickButton` that reports to the context's `click`, and the tab's `clickAction` says what one click does: `.acts` does Return's action, where a row has one obvious job, and `.selects` highlights it, where the tab shows the highlighted row's actions (#552). The descriptor's `systemImage` is the tab's icon in the tab bar, so it must differ from the other tabs'. The tab takes the next place in the default order (`defaultPosition`, the order Reset Order puts back), and the hidden Hotkeys tab moves to stay last: Emoji Picker took 7, then Translation took 8 and Hotkeys moved to 9. Tab keys follow each person's order and the tabs shown, so they need nothing (#553). Moving Hotkeys also changes:
+    - `KeyboardShortcutterModule`'s `defaultPosition`;
     - the README and architecture.md tab lists, and the release notes;
-    - Shortcut Coach's `commandKey` in the website's `plugins.ts`, whose test requires unique numbers.
+    - Shortcut Coach's `commandKey` in the website's `plugins.ts`, its key in the default order, whose test requires unique numbers.
 
-    Quick Search matches one typed digit, and Hotkeys now has ⌘9, the last one: a tenth tab needs another way in.
+    Quick Search matches one typed digit, so only the first nine tabs shown have a key: with ten tabs, the tenth shown has none.
   - **Quick Search actions, if any:** `actions` lists the `PluginAction`s Quick Search offers while it's on, such as Show or Hide Keystrokes. The module runs them in `perform`, and can rename one for its state in `title(for:)` or leave it out for now in `offers`. An action's `id` never changes once shipped: it keys the action's learned usage.
   - **`isOnByDefault`:** most plugins ship on. Emoji Picker, Translation, and Keystrokes ship off. Several tests depend on this choice (§2).
   - **`minimumMacOS`:** set it when the plugin needs a newer macOS than Keybumps does, as Translation needs 15. `PluginCompatibility` then keeps it off on older Macs and Settings says why; give its macOS-only code an inert path for the older ones. When only part of a plugin needs it, gate that part through `PluginCompatibility` instead, as ScreenGrabs' recording reads `supportsRecording`, never `#available`, which a test can't fake.
@@ -37,10 +37,12 @@ Ship it in small PRs, in this order: the app's seams first, then the plugin, the
 These name plugins on purpose. Update every one. Some fail when a plugin is missing. Some fail only when it ships on (or off). The smoke lists pass without it but then don't cover it.
 
 - **Plugin lists:** `CapabilityCommandTests`, `CapabilityModuleTests`, `KeybumpsFeatureTests`, `PluginManifestTests`, `QuickSearchActionTests` (only the plugins it names may declare actions), `QuickSearchCommandTests`, `SettingsSidebarTests`, `UITestLaunchConfigurationTests`.
-- **Tab keys:** a new tab moves Hotkeys and the first unused number, which these check:
+- **Tab order:** a new tab takes a place in the default order and moves Hotkeys', which these check:
+  - `CapabilityModuleTests` and `QuickSearchTabOrderTests`, which list the default order;
   - `SnippetTests`' tab order and tab keys;
-  - `EmojiPickerTests` (Hotkeys' number);
-  - `KeybumpsFeatureTests`, which expects ⌘0 to match nothing.
+  - `EmojiPickerTests` and `TranslationTests` (Hotkeys' place);
+  - `KeybumpsFeatureTests`, which expects ⌘0 to match nothing;
+  - `CapabilityWiringSnapshotTests`' fixture, which records each tab's key in the default order.
 - **Tab layout:** `PaletteRowMetricsTests` lays out every tab and fails until a new one is in its list tabs or grid tabs; give the fixture made-up rows for it.
 - **Tab clicks:** `PaletteClickTests` lists every tab's `clickAction` and fails until a new one is in it.
 - **Upgrades:** `ScreenshotToolsTests` lists the plugins an upgrade turns on, so a plugin that ships on changes it.

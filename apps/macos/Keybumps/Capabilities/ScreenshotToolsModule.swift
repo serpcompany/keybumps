@@ -14,7 +14,7 @@ extension CapabilityDescriptor {
         paletteTab: CapabilityPaletteTab(
             tab: .screenshots,
             name: "ScreenGrabs",
-            commandKey: 3,
+            defaultPosition: 3,
             systemImage: "camera.viewfinder",
             prompt: "Search ScreenGrabs",
             primaryActionTitle: "Copy",

@@ -296,12 +296,12 @@ struct EmojiPaletteContentTests {
 @MainActor
 @Suite("Emoji Picker: the plugin")
 struct EmojiPickerPluginTests {
-    @Test("Its manifest: Writing, ⌘7, Copy and Paste, optional Accessibility, and it ships off")
+    @Test("Its manifest: Writing, seventh tab by default, Copy and Paste, optional Accessibility, and it ships off")
     func manifest() throws {
         let descriptor = CapabilityDescriptor.emojiPicker
         #expect(descriptor.category == .writing)
-        #expect(descriptor.paletteTab?.commandKey == 7)
-        #expect(CommandPaletteTab.keyboardShortcutter.shortcutLabel == "⌘9", "Hotkeys moved to make room, then again for Translate")
+        #expect(descriptor.paletteTab?.defaultPosition == 7)
+        #expect(CapabilityDescriptor.keyboardShortcutter.paletteTab?.defaultPosition == 9, "Hotkeys moved to make room, then again for Translate")
         #expect(descriptor.requiredPermissions.isEmpty)
         #expect(descriptor.optionalPermissions.map(\.permission) == [.accessibility])
         #expect(!descriptor.isOnByDefault)

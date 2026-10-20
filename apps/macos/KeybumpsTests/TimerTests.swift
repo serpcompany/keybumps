@@ -681,7 +681,7 @@ struct TimerModuleTests {
     func descriptor() {
         let descriptor = CapabilityDescriptor.timer
         #expect(descriptor.paletteTab?.tab == .timers)
-        #expect(descriptor.paletteTab?.commandKey == 6)
+        #expect(descriptor.paletteTab?.defaultPosition == 6)
         #expect(descriptor.settingsPage?.section == .timer)
         #expect(descriptor.requiredPermissions.isEmpty)
         #expect(descriptor.searchKeywords == ["timers", "countdown"])

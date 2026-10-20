@@ -12,7 +12,7 @@ extension CapabilityDescriptor {
         paletteTab: CapabilityPaletteTab(
             tab: .dictation,
             name: "Dictation",
-            commandKey: 4,
+            defaultPosition: 4,
             systemImage: "waveform",
             prompt: "Search dictation history",
             primaryActionTitle: "Copy",

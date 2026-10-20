@@ -55,8 +55,10 @@ struct CapabilityDescriptor: Identifiable {
 struct CapabilityPaletteTab {
     let tab: CommandPaletteTab
     let name: String
-    /// The Command-number that selects the tab; tabs appear in this order.
-    let commandKey: Int
+    /// The tab's place in the default order, from 1, which Settings › Quick Search's Reset Order
+    /// puts back. Its tab key is ⌘ and its place among the tabs shown (#553), so this is its key
+    /// only while every tab before it is shown and the order is the default.
+    let defaultPosition: Int
     let systemImage: String
     let prompt: String
     /// What Return does, shown first in the footer with ↵.
@@ -123,9 +125,9 @@ enum CapabilityCatalog {
         return descriptor
     }
 
-    /// Palette tabs in Command-number order.
+    /// Quick Search's tabs in the default order (`CapabilityPaletteTab.defaultPosition`).
     static var paletteTabs: [CapabilityPaletteTab] {
-        descriptors.compactMap(\.paletteTab).sorted { $0.commandKey < $1.commandKey }
+        descriptors.compactMap(\.paletteTab).sorted { $0.defaultPosition < $1.defaultPosition }
     }
 
     static func paletteTab(for tab: CommandPaletteTab) -> (owner: Capability, tab: CapabilityPaletteTab) {

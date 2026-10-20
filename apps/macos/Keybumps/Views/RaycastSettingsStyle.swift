@@ -83,35 +83,50 @@ struct SettingsHero: View {
     }
 }
 
-/// A heading outside a rounded card whose rows are separated by inset dividers. The heading's
-/// accessibility identifier is `settings.group.<title>`, so a UI test finds it whatever role macOS
-/// gives a header.
-struct SettingsGroup<Content: View>: View {
+/// A heading outside a rounded card whose rows are separated by inset dividers, with an optional
+/// control at the heading's trailing edge, such as Settings › Quick Search's Reset Order. The
+/// heading's accessibility identifier is `settings.group.<title>`, so a UI test finds it whatever
+/// role macOS gives a header.
+struct SettingsGroup<Content: View, Accessory: View>: View {
     private let title: String?
     private let subtitle: String?
     private let content: Content
+    private let accessory: Accessory
 
-    init(_ title: String? = nil, subtitle: String? = nil, @ViewBuilder content: () -> Content) {
+    init(
+        _ title: String? = nil,
+        subtitle: String? = nil,
+        @ViewBuilder content: () -> Content,
+        @ViewBuilder accessory: () -> Accessory
+    ) {
         self.title = title
         self.subtitle = subtitle
         self.content = content()
+        self.accessory = accessory()
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if title != nil || subtitle != nil {
-                VStack(alignment: .leading, spacing: 6) {
-                    if let title {
-                        Text(title)
-                            .font(.system(size: SettingsTheme.titleSize, weight: .medium))
-                            .foregroundStyle(.primary.opacity(0.85))
-                            .accessibilityAddTraits(.isHeader)
-                            .accessibilityIdentifier("settings.group.\(title)")
+                HStack(alignment: .bottom, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if let title {
+                            Text(title)
+                                .font(.system(size: SettingsTheme.titleSize, weight: .medium))
+                                .foregroundStyle(.primary.opacity(0.85))
+                                .accessibilityAddTraits(.isHeader)
+                                .accessibilityIdentifier("settings.group.\(title)")
+                        }
+                        if let subtitle {
+                            Text(subtitle)
+                                .font(.system(size: SettingsTheme.subtitleSize))
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    if let subtitle {
-                        Text(subtitle)
-                            .font(.system(size: SettingsTheme.subtitleSize))
-                            .foregroundStyle(.secondary)
+                    if Accessory.self != EmptyView.self {
+                        Spacer(minLength: 0)
+                        accessory
+                            .padding(.trailing, SettingsTheme.rowInset)
                     }
                 }
                 .padding(.leading, SettingsTheme.rowInset)
@@ -120,6 +135,12 @@ struct SettingsGroup<Content: View>: View {
             _VariadicView.Tree(DividedRows()) { content }
                 .background(SettingsTheme.card, in: RoundedRectangle(cornerRadius: SettingsTheme.cardRadius, style: .continuous))
         }
+    }
+}
+
+extension SettingsGroup where Accessory == EmptyView {
+    init(_ title: String? = nil, subtitle: String? = nil, @ViewBuilder content: () -> Content) {
+        self.init(title, subtitle: subtitle, content: content) { EmptyView() }
     }
 }
 

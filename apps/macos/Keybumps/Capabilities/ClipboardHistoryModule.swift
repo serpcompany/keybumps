@@ -11,7 +11,7 @@ extension CapabilityDescriptor {
         paletteTab: CapabilityPaletteTab(
             tab: .clipboard,
             name: "Clipboard",
-            commandKey: 2,
+            defaultPosition: 2,
             systemImage: "clipboard",
             prompt: "Search clipboard history",
             primaryActionTitle: "Copy",

@@ -248,8 +248,8 @@ final class SmokeUITests: XCTestCase {
             XCTAssertTrue(paletteField(prompt).waitForExistence(timeout: 5), "⌘\(key)")
         }
 
-        // Emoji (⌘7) and Translate (⌘8) ship off, and the Hotkeys tab (⌘9) is hidden by default: none
-        // shows, and their Command-numbers do nothing.
+        // Emoji and Translate ship off, and the Hotkeys tab is hidden by default: none shows, and with
+        // six tabs shown, ⌘7 to ⌘9 do nothing. A tab's key is its place among the tabs shown (#553).
         XCTAssertFalse(app.buttons["palette.tab.emoji"].exists)
         XCTAssertFalse(app.buttons["palette.tab.translate"].exists)
         XCTAssertFalse(app.buttons["palette.tab.keyboardShortcutter"].exists)
@@ -257,6 +257,58 @@ final class SmokeUITests: XCTestCase {
         app.typeKey("8", modifierFlags: .command)
         app.typeKey("9", modifierFlags: .command)
         XCTAssertTrue(paletteField("Search apps, files, and folders").waitForExistence(timeout: 5), "⌘7, ⌘8, and ⌘9 are ignored")
+    }
+
+    /// #553: Settings › Quick Search's arrows move a tab, and its key, the tab Quick Search opens on,
+    /// and Left and Right follow the order; Reset Order puts it back; a hidden tab's key goes to the
+    /// tab after it. Dragging a row makes the same move (`AppPreferences.moveTab(_:to:)`), which the
+    /// unit tests cover.
+    func testQuickSearchTabOrder() {
+        launch(permissions: "granted", ["-KBOpenSettings", "search"])
+        XCTAssertTrue(element("settings.detail.search").waitForExistence(timeout: 20))
+        let reset = element("settings.quickSearch.resetOrder")
+        XCTAssertTrue(reset.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitForEnabled(reset, false), "Nothing to reset in the default order")
+        let snippetsKey = element("settings.quickSearch.key.snippets")
+        XCTAssertTrue(waitForLabel(of: snippetsKey, "Tab key ⌘5"))
+        XCTAssertTrue(waitForLabel(of: element("settings.quickSearch.key.keyboardShortcutter"), "Not in the tab bar"), "The Hotkeys tab starts hidden")
+
+        // Snippets up to first.
+        let up = element("settings.quickSearch.moveUp.snippets")
+        for place in [4, 3, 2, 1] {
+            up.click()
+            XCTAssertTrue(waitForLabel(of: snippetsKey, "Tab key ⌘\(place)"), "Snippets moves up to ⌘\(place)")
+        }
+        XCTAssertTrue(waitForLabel(of: element("settings.quickSearch.key.search"), "Tab key ⌘2"))
+        XCTAssertTrue(waitForEnabled(up, false), "The first tab can't move up")
+        XCTAssertTrue(waitForEnabled(reset, true))
+
+        // Quick Search opens on the first tab shown, and its keys and Left and Right follow the order.
+        element("settings.quickSearch.open").click()
+        XCTAssertTrue(paletteField("Search snippets").waitForExistence(timeout: 10), "It opens on Snippets")
+        app.typeKey("2", modifierFlags: .command)
+        XCTAssertTrue(paletteField("Search apps, files, and folders").waitForExistence(timeout: 5), "⌘2 is the Search tab now")
+        app.typeKey(XCUIKeyboardKey.leftArrow, modifierFlags: [])
+        XCTAssertTrue(paletteField("Search snippets").waitForExistence(timeout: 5), "Left goes back to Snippets")
+        app.typeKey(XCUIKeyboardKey.rightArrow, modifierFlags: [])
+        app.typeKey(XCUIKeyboardKey.rightArrow, modifierFlags: [])
+        XCTAssertTrue(paletteField("Search clipboard history").waitForExistence(timeout: 5), "Right follows the order")
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        XCTAssertTrue(waitForNonExistence(of: paletteField("Search clipboard history")), "Escape closes Quick Search")
+
+        // Reset Order puts the keys back and turns itself off.
+        reset.click()
+        XCTAssertTrue(waitForLabel(of: snippetsKey, "Tab key ⌘5"))
+        XCTAssertTrue(waitForLabel(of: element("settings.quickSearch.key.search"), "Tab key ⌘1"))
+        XCTAssertTrue(waitForEnabled(reset, false))
+
+        // A hidden tab has no key, and the tabs after it move up; hiding one leaves the order alone.
+        let clipboardSwitch = element("settings.quickSearch.show.clipboard")
+        XCTAssertTrue(clipboardSwitch.waitForExistence(timeout: 5), "Every tab whose plugin is on has a show switch")
+        clipboardSwitch.click()
+        XCTAssertTrue(waitForLabel(of: element("settings.quickSearch.key.clipboard"), "Not in the tab bar"))
+        XCTAssertTrue(waitForLabel(of: element("settings.quickSearch.key.screenshots"), "Tab key ⌘2"), "The tabs after it move up")
+        XCTAssertTrue(waitForEnabled(reset, false), "Hiding a tab doesn't change the order")
     }
 
     func testEmojiPickerShipsOffAndTurnsOnInSettings() {

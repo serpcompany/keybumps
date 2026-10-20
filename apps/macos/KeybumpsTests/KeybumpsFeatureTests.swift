@@ -2285,9 +2285,11 @@ final class KeybumpsFeatureTests: XCTestCase {
         let state = CommandPaletteState()
         XCTAssertEqual(state.tab, .search)
         XCTAssertEqual(CommandPaletteTab.allCases, [.search, .clipboard, .screenshots, .dictation, .snippets, .timers, .emoji, .translate, .keyboardShortcutter])
-        XCTAssertEqual(CommandPaletteTab.allCases.map(\.shortcutLabel), ["⌘1", "⌘2", "⌘3", "⌘4", "⌘5", "⌘6", "⌘7", "⌘8", "⌘9"])
+        // Each tab's key is its place among the tabs shown (#553); here, every tab in the default order.
+        let all = CommandPaletteTab.allCases
+        XCTAssertEqual(all.map { CommandPaletteTab.tabKey(for: $0, among: all) }, ["⌘1", "⌘2", "⌘3", "⌘4", "⌘5", "⌘6", "⌘7", "⌘8", "⌘9"])
         XCTAssertEqual(
-            CommandPaletteTab.allCases.map(\.labelPresentation),
+            all.map { $0.labelPresentation(among: all) },
             [
                 CommandPaletteTabLabel(shortcut: "⌘1", name: "Search"),
                 CommandPaletteTabLabel(shortcut: "⌘2", name: "Clipboard"),
@@ -2301,7 +2303,7 @@ final class KeybumpsFeatureTests: XCTestCase {
             ]
         )
         XCTAssertEqual(
-            CommandPaletteTab.allCases.map { ShortcutKeycapPresentation(shortcut: $0.shortcutLabel).keys },
+            all.map { ShortcutKeycapPresentation(shortcut: CommandPaletteTab.tabKey(for: $0, among: all) ?? "").keys },
             [["⌘", "1"], ["⌘", "2"], ["⌘", "3"], ["⌘", "4"], ["⌘", "5"], ["⌘", "6"], ["⌘", "7"], ["⌘", "8"], ["⌘", "9"]]
         )
         XCTAssertEqual(CommandPaletteTab.matchingCommandKey("3"), .screenshots)

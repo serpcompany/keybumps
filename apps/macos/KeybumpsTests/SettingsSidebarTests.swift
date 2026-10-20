@@ -79,20 +79,23 @@ struct SettingsSidebarTests {
         ])
     }
 
-    @Test("A Plugins row shows the tab's tab key unless the tab is hidden, and the first shortcut and how many more")
+    @Test("A Plugins row shows its tab's key, its place among the tabs shown, or a dash while it isn't shown, and the first shortcut and how many more")
     func pluginsRowKeys() {
-        let hotkeysHidden: Set<CommandPaletteTab> = [.keyboardShortcutter]
-        #expect(PluginsTable.tabKey(for: .timer, hiddenTabs: hotkeysHidden) == "⌘6")
-        #expect(PluginsTable.tabKey(for: .windowManagement, hiddenTabs: []) == "", "No tab")
-        #expect(PluginsTable.tabKey(for: .keyboardShortcutter, hiddenTabs: hotkeysHidden) == "", "The Hotkeys tab is hidden")
-        #expect(PluginsTable.tabKey(for: .keyboardShortcutter, hiddenTabs: []) == "⌘9")
-        #expect(PluginsTable.tabKey(for: .emojiPicker, hiddenTabs: hotkeysHidden) == "⌘7")
-        #expect(PluginsTable.tabKey(for: .translation, hiddenTabs: hotkeysHidden) == "⌘8")
-        #expect(PluginsTable.tabKey(for: .keystrokes, hiddenTabs: []) == "", "No tab")
-        #expect(PluginsTable.tabKey(for: .screenshotTools, hiddenTabs: hotkeysHidden) == "⌘3")
-        // Hiding the Search tab took the place of turning Quick Search off (#553).
-        #expect(PluginsTable.tabKey(for: .quickSearch, hiddenTabs: hotkeysHidden) == "⌘1")
-        #expect(PluginsTable.tabKey(for: .quickSearch, hiddenTabs: [.search, .keyboardShortcutter]) == "", "The Search tab is hidden")
+        // The tabs of the plugins that ship on, with the Hotkeys tab hidden, as it starts.
+        let shown: [CommandPaletteTab] = [.search, .clipboard, .screenshots, .dictation, .snippets, .timers]
+        #expect(PluginsTable.tabKey(for: .timer, shownTabs: shown) == "⌘6")
+        #expect(PluginsTable.tabKey(for: .windowManagement, shownTabs: shown) == "", "No tab")
+        #expect(PluginsTable.tabKey(for: .keyboardShortcutter, shownTabs: shown) == "—", "The Hotkeys tab is hidden")
+        #expect(PluginsTable.tabKey(for: .keyboardShortcutter, shownTabs: shown + [.keyboardShortcutter]) == "⌘7")
+        #expect(PluginsTable.tabKey(for: .emojiPicker, shownTabs: shown) == "—", "Emoji ships off")
+        #expect(PluginsTable.tabKey(for: .translation, shownTabs: shown + [.translate]) == "⌘7")
+        #expect(PluginsTable.tabKey(for: .keystrokes, shownTabs: shown) == "", "No tab")
+        #expect(PluginsTable.tabKey(for: .screenshotTools, shownTabs: shown) == "⌘3")
+        // Hiding the Search tab took the place of turning Quick Search off (#553); the tabs after it move up.
+        #expect(PluginsTable.tabKey(for: .quickSearch, shownTabs: shown) == "⌘1")
+        let searchHidden = Array(shown.dropFirst())
+        #expect(PluginsTable.tabKey(for: .quickSearch, shownTabs: searchHidden) == "—", "The Search tab is hidden")
+        #expect(PluginsTable.tabKey(for: .clipboardHistory, shownTabs: searchHidden) == "⌘1")
 
         let key = ShortcutBinding(keyCode: 1, modifiers: 0, displayName: "⇧⌘2")
         // ScreenGrabs' three screenshot hotkeys and Record Screen; the recording shortcuts work only while recording.
