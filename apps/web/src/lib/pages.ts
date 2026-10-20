@@ -23,7 +23,7 @@ export const sitePages = [
     path: '/plugins/',
     title: 'Plugins',
     description:
-      'Every Keybumps plugin, official and built by Keybumps, with its Command Palette tab, shortcuts, and the macOS permissions it needs.'
+      'Every Keybumps plugin, official and built by Keybumps, with its tab in Quick Search, shortcuts, and the macOS permissions it needs.'
   },
   {
     path: '/pricing/',

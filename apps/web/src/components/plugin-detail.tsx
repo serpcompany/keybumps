@@ -8,13 +8,15 @@ import { KeybumpsAvatar } from '@/components/keybumps-avatar'
 import { PluginIcon } from '@/components/plugin-icon'
 import { linkPrefetch } from '@/lib/pages'
 import {
+  defaultTabKey,
   iconTints,
   keycaps,
   otherPlugins,
   type Plugin,
   type PluginPermission,
   pluginFor,
-  pluginPath
+  pluginPath,
+  tabShowsOnce
 } from '@/lib/plugins'
 import { MINIMUM_MACOS } from '@/lib/site'
 
@@ -229,7 +231,7 @@ export function PluginDetail({
   )
 }
 
-/** Three facts under the overview: how it opens, its palette tab, and its permissions. */
+/** Three facts under the overview: how it opens, its tab in Quick Search, and its permissions. */
 function AtAGlance({ plugin }: { plugin: Plugin }) {
   // Only shortcuts that work from any app say how the plugin opens; Cancel Dictation doesn't.
   const assigned = plugin.shortcuts.filter(shortcut => shortcut.keys && !shortcut.note)
@@ -237,6 +239,9 @@ function AtAGlance({ plugin }: { plugin: Plugin }) {
   // A plugin with shortcuts that start unassigned can be given one; one without shortcuts can't.
   const noHotkey = plugin.shortcuts.length > 0 ? 'Not set by default' : 'None'
   const tab = plugin.paletteTab
+  // A tab that isn't shown by default has no key until it shows, and then one that depends on the
+  // tabs before it, so it names none.
+  const tabKey = defaultTabKey(plugin)
   const items: { label: string; value: ReactNode }[] = [
     {
       label: assigned.length > 1 ? 'Shortcuts' : 'Shortcut',
@@ -250,11 +255,17 @@ function AtAGlance({ plugin }: { plugin: Plugin }) {
       )
     },
     {
-      label: 'Command Palette tab',
+      label: 'Tab in Quick Search',
       value: tab ? (
         <span className="glance-tab">
-          {tab.name} <Keycaps keys={`⌘${tab.commandKey}`} />
-          {tab.hiddenUnless && <span className="glance-note">once you turn it on</span>}
+          {tab.name}{' '}
+          {tabKey ? (
+            <>
+              <Keycaps keys={tabKey} /> <span className="glance-note">by default</span>
+            </>
+          ) : (
+            <span className="glance-note">{`${tabShowsOnce(plugin)}; hold ⌘ to see its key`}</span>
+          )}
         </span>
       ) : (
         'None'
@@ -300,6 +311,7 @@ function Keycaps({ keys }: { keys: string }) {
 
 function Commands({ plugin }: { plugin: Plugin }) {
   const tab = plugin.paletteTab
+  const tabKey = defaultTabKey(plugin)
   const many = plugin.shortcuts.length > 6
   // A shortcut with a note (Cancel Dictation) works only at certain times, not from any app.
   const anywhere = plugin.shortcuts.every(shortcut => !shortcut.note)
@@ -307,9 +319,9 @@ function Commands({ plugin }: { plugin: Plugin }) {
     <>
       <p>
         {tab && plugin.shortcuts.length > 0
-          ? `Open its tab in the Command Palette, or use its shortcuts${anywhere ? ' from any app' : ''}. You can change the shortcuts in Settings › ${plugin.name}.`
+          ? `Open its tab in Quick Search, or use its shortcuts${anywhere ? ' from any app' : ''}. You can change the shortcuts in Settings › ${plugin.name}.`
           : tab
-            ? 'Open its tab in the Command Palette.'
+            ? 'Open its tab in Quick Search.'
             : plugin.shortcuts.length === 1
               ? `Its shortcut works${anywhere ? ' from any app' : ' as noted below'}, and you can ${plugin.shortcuts[0].keys ? 'change' : 'set'} it in Settings › ${plugin.name}.`
               : `Its shortcuts work${anywhere ? ' from any app' : ' as noted below'}, and you can change any of them in Settings › ${plugin.name}.`}
@@ -320,12 +332,12 @@ function Commands({ plugin }: { plugin: Plugin }) {
             <span className="command-name">
               {tab.name} tab
               <span className="command-note">
-                {tab.hiddenUnless
-                  ? `Command Palette, once you turn on “${tab.hiddenUnless}”`
-                  : 'Command Palette'}
+                {tabKey
+                  ? 'In Quick Search, with its default key'
+                  : `In Quick Search, ${tabShowsOnce(plugin)}. Hold ⌘ to see its key.`}
               </span>
             </span>
-            <Keycaps keys={`⌘${tab.commandKey}`} />
+            {tabKey && <Keycaps keys={tabKey} />}
           </li>
         </ul>
       )}

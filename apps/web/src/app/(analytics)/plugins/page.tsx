@@ -7,6 +7,7 @@ import { pageMetadata } from '@/lib/metadata'
 import { linkPrefetch } from '@/lib/pages'
 import {
   commandCount,
+  defaultTabKey,
   type Plugin,
   pluginCategories,
   pluginFor,
@@ -107,6 +108,8 @@ function Hero() {
 function PluginCard({ plugin }: { plugin: Plugin }) {
   const commands = commandCount(plugin)
   const path = pluginPath(plugin.slug)
+  // A tab that isn't shown by default has no key to name (`defaultTabKey`).
+  const tabKey = defaultTabKey(plugin)
   return (
     <Link href={path} prefetch={linkPrefetch(path)} className="plugin-card">
       <div className="plugin-card-top">
@@ -125,9 +128,9 @@ function PluginCard({ plugin }: { plugin: Plugin }) {
           <Layers aria-hidden="true" size={14} />
           {commands} {commands === 1 ? 'command' : 'commands'}
         </span>
-        {plugin.paletteTab && (
-          <span title={`Its Command Palette tab, ${plugin.paletteTab.name}`}>
-            <kbd>⌘{plugin.paletteTab.commandKey}</kbd>
+        {plugin.paletteTab && tabKey && (
+          <span title={`The ${plugin.paletteTab.name} tab in Quick Search, ${tabKey} by default`}>
+            <kbd>{tabKey}</kbd>
           </span>
         )}
         <span className="meta-category">

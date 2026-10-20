@@ -9,7 +9,16 @@ import { PluginIcon } from '@/components/plugin-icon'
 import { getCurrentRelease } from '@/lib/latest-release'
 import { defaultOpenGraph } from '@/lib/metadata'
 import { linkPrefetch } from '@/lib/pages'
-import { cardShortcut, iconTints, pluginFor, pluginPath, plugins } from '@/lib/plugins'
+import {
+  cardShortcut,
+  defaultTabKey,
+  iconTints,
+  type Plugin,
+  pluginFor,
+  pluginPath,
+  plugins,
+  tabShownByDefault
+} from '@/lib/plugins'
 import { MINIMUM_MACOS, site } from '@/lib/site'
 import {
   ClipboardVisual,
@@ -54,7 +63,7 @@ const featured: readonly {
       'Copy an image file in Finder and get the image, not its icon',
       'Screenshots you take land here, ready to paste'
     ],
-    options: { label: 'Opens with', values: ['⇧⌘ Space', '⌘2 in the palette'] },
+    options: { label: 'Opens with', values: ['⇧⌘ Space', '⌘2 in Quick Search, by default'] },
     visual: <ClipboardVisual />
   },
   {
@@ -104,13 +113,16 @@ const featured: readonly {
   {
     slug: 'snippets',
     headline: 'Type it once. Never again.',
-    lede: 'Save the text you reuse and paste it from the Command Palette, or turn on keyword expansion and type a short keyword in any app.',
+    lede: 'Save the text you reuse and paste it from Quick Search, or turn on keyword expansion and type a short keyword in any app.',
     features: [
       'With keyword expansion on, keywords like ;ship expand as you type',
       'Sensitive snippets keep their text hidden and out of search',
       'Bring your snippets over from Alfred'
     ],
-    options: { label: 'Use them', values: ['⌘5 in the palette', 'Quick Search', 'Type a keyword'] },
+    options: {
+      label: 'Use them',
+      values: ['⌘5 in Quick Search, by default', 'The Search tab', 'Type a keyword']
+    },
     visual: <SnippetsVisual />
   }
 ]
@@ -182,11 +194,18 @@ const settings: readonly { title: string; text: string; control: ReactNode }[] =
   }
 ]
 
-/** The last Command-number in "Jump to a tab": the highest of the tabs shown without a setting. */
-const lastTabKey = Math.max(
-  ...plugins.flatMap(plugin =>
-    plugin.paletteTab && !plugin.paletteTab.hiddenUnless ? [plugin.paletteTab.commandKey] : []
+/**
+ * "Jump to a tab": the tabs shown by default after the Search tab, the last one's key, and the tabs
+ * that join once their plugins are turned on, which have no key to name until then.
+ */
+const tabsShownByDefault = plugins.filter(tabShownByDefault)
+const lastTabKey = defaultTabKey(tabsShownByDefault[tabsShownByDefault.length - 1])?.slice(1)
+const tabNames = (list: readonly Plugin[]) =>
+  new Intl.ListFormat('en', { type: 'conjunction' }).format(
+    list.flatMap(plugin => (plugin.paletteTab ? [plugin.paletteTab.name] : []))
   )
+const tabsOnceOn = plugins.filter(
+  plugin => plugin.paletteTab && !plugin.paletteTab.hiddenUnless && plugin.shipsOff
 )
 
 const questions = [
@@ -270,8 +289,8 @@ export default async function Home() {
           <h2>Three keys from anything</h2>
           <ol className="home-steps">
             <li>
-              <h3>Open the Command Palette</h3>
-              <p>From any app. Quick Search is the first tab.</p>
+              <h3>Open Quick Search</h3>
+              <p>From any app. It opens on the Search tab by default.</p>
               <span className="keycaps">
                 <kbd>⌘</kbd>
                 <kbd>Space</kbd>
@@ -280,8 +299,9 @@ export default async function Home() {
             <li>
               <h3>Jump to a tab</h3>
               <p>
-                Clipboard, ScreenGrabs, Dictation, Snippets, and Timers, plus Emoji and Translate
-                once you turn on their plugins.
+                {tabNames(tabsShownByDefault.slice(1))}. These are the default keys; Settings ›
+                Quick Search sets the order. {tabNames(tabsOnceOn)} join once you turn on their
+                plugins: hold ⌘ to see every tab’s key.
               </p>
               <span className="keycaps">
                 <kbd>⌘</kbd>
@@ -409,7 +429,7 @@ export default async function Home() {
         <div className="container">
           <h2>All plugins</h2>
           <p className="section-lede">
-            Every plugin shares one Command Palette and one set of settings.
+            Every plugin shares one Quick Search window and one set of settings.
           </p>
           <div className="grid">
             {plugins.map(plugin => {
