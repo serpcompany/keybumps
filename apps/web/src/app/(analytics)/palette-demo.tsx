@@ -61,7 +61,7 @@ const TABS: Tab[] = [
     rows: [
       {
         icon: '◉',
-        title: 'Standup: shipped the palette, next up is…',
+        title: 'Standup: shipped the redesign, next up is…',
         meta: '0:42'
       },
       {

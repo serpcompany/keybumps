@@ -229,7 +229,7 @@ export function PluginDetail({
   )
 }
 
-/** Three facts under the overview: how it opens, its palette tab, and its permissions. */
+/** Three facts under the overview: how it opens, its tab in Quick Search, and its permissions. */
 function AtAGlance({ plugin }: { plugin: Plugin }) {
   // Only shortcuts that work from any app say how the plugin opens; Cancel Dictation doesn't.
   const assigned = plugin.shortcuts.filter(shortcut => shortcut.keys && !shortcut.note)
@@ -250,7 +250,7 @@ function AtAGlance({ plugin }: { plugin: Plugin }) {
       )
     },
     {
-      label: 'Command Palette tab',
+      label: 'Tab in Quick Search',
       value: tab ? (
         <span className="glance-tab">
           {tab.name} <Keycaps keys={`⌘${tab.commandKey}`} />{' '}
@@ -308,9 +308,9 @@ function Commands({ plugin }: { plugin: Plugin }) {
     <>
       <p>
         {tab && plugin.shortcuts.length > 0
-          ? `Open its tab in the Command Palette, or use its shortcuts${anywhere ? ' from any app' : ''}. You can change the shortcuts in Settings › ${plugin.name}.`
+          ? `Open its tab in Quick Search, or use its shortcuts${anywhere ? ' from any app' : ''}. You can change the shortcuts in Settings › ${plugin.name}.`
           : tab
-            ? 'Open its tab in the Command Palette.'
+            ? 'Open its tab in Quick Search.'
             : plugin.shortcuts.length === 1
               ? `Its shortcut works${anywhere ? ' from any app' : ' as noted below'}, and you can ${plugin.shortcuts[0].keys ? 'change' : 'set'} it in Settings › ${plugin.name}.`
               : `Its shortcuts work${anywhere ? ' from any app' : ' as noted below'}, and you can change any of them in Settings › ${plugin.name}.`}
@@ -322,8 +322,8 @@ function Commands({ plugin }: { plugin: Plugin }) {
               {tab.name} tab
               <span className="command-note">
                 {tab.hiddenUnless
-                  ? `Command Palette, once you turn on “${tab.hiddenUnless}”`
-                  : 'Command Palette, key by default'}
+                  ? `In Quick Search, once you show it in ${tab.hiddenUnless}`
+                  : 'In Quick Search, with its default key'}
               </span>
             </span>
             <Keycaps keys={`⌘${tab.commandKey}`} />

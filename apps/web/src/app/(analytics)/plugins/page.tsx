@@ -127,7 +127,7 @@ function PluginCard({ plugin }: { plugin: Plugin }) {
         </span>
         {plugin.paletteTab && (
           <span
-            title={`Its Command Palette tab, ${plugin.paletteTab.name}, ⌘${plugin.paletteTab.commandKey} by default`}
+            title={`The ${plugin.paletteTab.name} tab in Quick Search, ⌘${plugin.paletteTab.commandKey} by default`}
           >
             <kbd>⌘{plugin.paletteTab.commandKey}</kbd>
           </span>

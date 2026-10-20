@@ -74,10 +74,10 @@ describe('cardShortcut', () => {
     )
   })
 
-  it('falls back to the Command Palette tab when no hotkey is assigned', () => {
+  it('falls back to its tab in Quick Search when no hotkey is assigned', () => {
     expect(cardShortcut(pluginFor('snippets'))).toEqual({
       keys: '⌘5',
-      label: 'Its Command Palette tab, Snippets'
+      label: 'The Snippets tab in Quick Search, by default'
     })
   })
 
@@ -462,7 +462,7 @@ describe('plugin page at a glance', () => {
     )
   })
 
-  it('says when a Command Palette tab is hidden until turned on', () => {
+  it('says when a tab in Quick Search is hidden until turned on', () => {
     expect(glance('shortcut-coach')).toContain('once you turn it on')
     expect(glance('clipboard-history')).not.toContain('once you turn it on')
   })

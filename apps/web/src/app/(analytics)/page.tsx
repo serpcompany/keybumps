@@ -54,7 +54,7 @@ const featured: readonly {
       'Copy an image file in Finder and get the image, not its icon',
       'Screenshots you take land here, ready to paste'
     ],
-    options: { label: 'Opens with', values: ['⇧⌘ Space', '⌘2 in the palette by default'] },
+    options: { label: 'Opens with', values: ['⇧⌘ Space', '⌘2 in Quick Search, by default'] },
     visual: <ClipboardVisual />
   },
   {
@@ -104,7 +104,7 @@ const featured: readonly {
   {
     slug: 'snippets',
     headline: 'Type it once. Never again.',
-    lede: 'Save the text you reuse and paste it from the Command Palette, or turn on keyword expansion and type a short keyword in any app.',
+    lede: 'Save the text you reuse and paste it from Quick Search, or turn on keyword expansion and type a short keyword in any app.',
     features: [
       'With keyword expansion on, keywords like ;ship expand as you type',
       'Sensitive snippets keep their text hidden and out of search',
@@ -112,7 +112,7 @@ const featured: readonly {
     ],
     options: {
       label: 'Use them',
-      values: ['⌘5 in the palette by default', 'Quick Search', 'Type a keyword']
+      values: ['⌘5 in Quick Search, by default', 'The Search tab', 'Type a keyword']
     },
     visual: <SnippetsVisual />
   }
@@ -185,7 +185,7 @@ const settings: readonly { title: string; text: string; control: ReactNode }[] =
   }
 ]
 
-/** The last Command-number in "Jump to a tab": the highest of the tabs shown without a setting. */
+/** The last tab key in "Jump to a tab": the highest of the tabs shown without a setting. */
 const lastTabKey = Math.max(
   ...plugins.flatMap(plugin =>
     plugin.paletteTab && !plugin.paletteTab.hiddenUnless ? [plugin.paletteTab.commandKey] : []
@@ -273,8 +273,8 @@ export default async function Home() {
           <h2>Three keys from anything</h2>
           <ol className="home-steps">
             <li>
-              <h3>Open the Command Palette</h3>
-              <p>From any app. Quick Search is the first tab.</p>
+              <h3>Open Quick Search</h3>
+              <p>From any app. It opens on the Search tab.</p>
               <span className="keycaps">
                 <kbd>⌘</kbd>
                 <kbd>Space</kbd>
@@ -413,7 +413,7 @@ export default async function Home() {
         <div className="container">
           <h2>All plugins</h2>
           <p className="section-lede">
-            Every plugin shares one Command Palette and one set of settings.
+            Every plugin shares one Quick Search window and one set of settings.
           </p>
           <div className="grid">
             {plugins.map(plugin => {

@@ -120,11 +120,11 @@ export type Plugin = {
    * src/lib/changelog.ts.
    */
   formerNames?: readonly string[]
-  /** Its Command Palette tab and the Command-number that selects it, if it has one. */
+  /** Its tab in Quick Search and that tab's default tab key, if it has one. */
   paletteTab: {
     name: string
     commandKey: number
-    /** The tab is hidden until a setting on the plugin's page shows it. */
+    /** Where the tab's show switch is: it's hidden until that shows it. */
     hiddenUnless?: string
   } | null
   /** Its shortcuts, in the order its Settings page lists them. */
@@ -177,7 +177,7 @@ export const plugins: readonly Plugin[] = [
     isDefault: true,
     overview: [
       'Quick Search opens the apps, files, and folders on your Mac from the keyboard. Press ⌘ Space, type a few letters, and press Return to open the result.',
-      'It is the first tab of the Command Palette. Besides apps, files, and folders, it finds your snippets by keyword, name, or a word in their text, and typing a plugin’s name, such as “dictation” or “snippets”, takes you straight to it.'
+      'Its Search tab comes first in Quick Search by default. Besides apps, files, and folders, it finds your snippets by keyword, name, or a word in their text, and typing a plugin’s name, such as “dictation” or “snippets”, takes you straight to it.'
     ],
     features: [
       'Open apps, files, and folders without leaving the keyboard',
@@ -232,7 +232,7 @@ export const plugins: readonly Plugin[] = [
     requires: [],
     isDefault: true,
     overview: [
-      'Clipboard History keeps the text and images you copy, so you can use them again. Press ⇧⌘ Space to open the Clipboard tab of the Command Palette, search for an item, and press Return to copy it or ⌘V to paste it into the app you were using.',
+      'Clipboard History keeps the text and images you copy, so you can use them again. Press ⇧⌘ Space to open Quick Search on the Clipboard tab, search for an item, and press Return to copy it or ⌘V to paste it into the app you were using.',
       'Each item shows the app it was copied from, and for a web page the site’s domain, whenever macOS can tell. Screenshots you take with ScreenGrabs land here too, ready to paste.'
     ],
     features: [
@@ -365,7 +365,7 @@ export const plugins: readonly Plugin[] = [
         keys: '⇧⌘4'
       },
       {
-        text: 'Open the Command Palette and press ⌘3 by default for the ScreenGrabs tab, which lists your screenshots and recordings. ⌘Return marks a screenshot up or opens a recording.',
+        text: 'Open Quick Search and press ⌘3 (by default) for the ScreenGrabs tab, which lists your screenshots and recordings. ⌘Return marks a screenshot up or opens a recording.',
         keys: '⌘3'
       },
       {
@@ -455,7 +455,7 @@ export const plugins: readonly Plugin[] = [
     isDefault: true,
     overview: [
       'Dictation turns speech into text in any app. Press ⌥ Space to start recording and press it again to stop: Keybumps transcribes the recording on this Mac and inserts the text where your cursor was.',
-      'Transcribe with Apple Speech, built into macOS, or with a Whisper model you download. Every recording and its transcript stays in Dictation History, the Command Palette’s Dictation tab, where you can search, play, and copy them.'
+      'Transcribe with Apple Speech, built into macOS, or with a Whisper model you download. Every recording and its transcript stays in Dictation History, Quick Search’s Dictation tab, where you can search, play, and copy them.'
     ],
     features: [
       'Start and stop with ⌥ Space; Escape cancels while it records or transcribes',
@@ -484,7 +484,7 @@ export const plugins: readonly Plugin[] = [
       },
       {
         q: 'Can I find something I said before?',
-        a: 'Yes. Dictation History, the Dictation tab of the Command Palette, keeps each recording and its text to search, play back, copy, and paste.'
+        a: 'Yes. Dictation History, the Dictation tab of Quick Search, keeps each recording and its text to search, play back, copy, and paste.'
       },
       { q: 'Can I cancel a dictation?', a: 'Press Escape while it’s recording or writing.' },
       {
@@ -591,7 +591,7 @@ export const plugins: readonly Plugin[] = [
     paletteTab: {
       name: 'Hotkeys',
       commandKey: 9,
-      hiddenUnless: 'Show Hotkeys tab in the Command Palette'
+      hiddenUnless: 'Settings › Quick Search'
     },
     shortcuts: [],
     permissions: [
@@ -610,7 +610,7 @@ export const plugins: readonly Plugin[] = [
     isDefault: true,
     overview: [
       'Shortcut Coach notices when you do something by hand that has a keyboard shortcut, such as choosing a menu command with the mouse, and shows you the shortcut. The tip drops down from the notch with the app’s icon, the action, and its keys.',
-      'Each action it notices goes into its history, which you can view, filter, and clear in the Command Palette’s Hotkeys tab once you turn the tab on.'
+      'Each action it notices goes into its history, which you can view, filter, and clear in Quick Search’s Hotkeys tab once you show the tab in Settings › Quick Search.'
     ],
     features: [
       'Recognizes supported actions you do by hand that have a shortcut',
@@ -643,7 +643,7 @@ export const plugins: readonly Plugin[] = [
     slug: 'snippets',
     capability: 'snippets',
     name: 'Snippets',
-    summary: 'Save text you reuse, then copy or paste it from the Command Palette.',
+    summary: 'Save text you reuse, then copy or paste it from Quick Search.',
     category: 'Writing',
     systemImage: 'text.quote',
     tint: 'green',
@@ -666,22 +666,22 @@ export const plugins: readonly Plugin[] = [
     requires: [],
     isDefault: true,
     overview: [
-      'Snippets keeps text you reuse, each with a name and an optional keyword such as ;ship. Open the Snippets tab of the Command Palette, then press Return to copy a snippet or ⌘V to paste it into the app you’re using.',
+      'Snippets keeps text you reuse, each with a name and an optional keyword such as ;ship. Open the Snippets tab of Quick Search, then press Return to copy a snippet or ⌘V to paste it into the app you’re using.',
       'Turn on keyword expansion, and typing a keyword in any app replaces it with its snippet. Mark a snippet sensitive to keep its text in your Mac’s Keychain and out of sight.'
     ],
     features: [
       'Save text with a name and an optional keyword, such as ;ship',
       'Return or ⌘C copies a snippet, ⌘V pastes it into the app you’re using, ⌘E edits it, and Delete (⌫) removes it',
       'Expand keywords as you type in any app, then get your clipboard back; never in password fields or in Keybumps itself',
-      'Sensitive snippets keep their text hidden in the Command Palette and Settings, out of search, and in the Keychain; their keyword and name still find them',
-      'Quick Search finds snippets by keyword, name, or a word in their text',
+      'Sensitive snippets keep their text hidden in Quick Search and Settings, out of search, and in the Keychain; their keyword and name still find them',
+      'The Search tab finds snippets by keyword, name, or a word in their text',
       'Import an Alfred snippets export',
       'Sort snippets by column, and select several to delete them or mark them sensitive together'
     ],
     howTo: [
       { text: 'Save text you reuse with a name and, if you like, a keyword such as ;ship.' },
       {
-        text: 'Open the Command Palette and press ⌘5 by default for the Snippets tab.',
+        text: 'Open Quick Search and press ⌘5 (by default) for the Snippets tab.',
         keys: '⌘5'
       },
       {
@@ -696,7 +696,7 @@ export const plugins: readonly Plugin[] = [
       },
       {
         q: 'What is a sensitive snippet?',
-        a: 'One whose text stays hidden in the Command Palette and Settings and out of search.'
+        a: 'One whose text stays hidden in Quick Search and Settings and out of search.'
       },
       {
         q: 'Can I bring my snippets from Alfred?',
@@ -722,7 +722,7 @@ export const plugins: readonly Plugin[] = [
     requires: [],
     isDefault: false,
     overview: [
-      'Timer counts down from a duration you type. Open the Timers tab of the Command Palette, type 5m, 1h30m, or tea 25, and press Return.',
+      'Timer counts down from a duration you type. Open the Timers tab of Quick Search, type 5m, 1h30m, or tea 25, and press Return.',
       'While a timer runs, the soonest one counts down beside the Keybumps icon in the menu bar. When it ends, an alarm stays on screen and rings until you click Stop or Repeat, or open the Timers tab. Timer is the first plugin added to Keybumps.'
     ],
     features: [
@@ -736,7 +736,7 @@ export const plugins: readonly Plugin[] = [
       'Turn off the ringing, the menu bar countdown, or the menu list in Settings'
     ],
     howTo: [
-      { text: 'Open the Command Palette and press ⌘6 by default for the Timers tab.', keys: '⌘6' },
+      { text: 'Open Quick Search and press ⌘6 (by default) for the Timers tab.', keys: '⌘6' },
       { text: 'Type a duration, such as 5m, 1h30m, or tea 25, and press Return.', keys: '↩' },
       { text: 'Watch it count down in the menu bar. When it ends, click Stop or Repeat.' }
     ],
@@ -778,7 +778,7 @@ export const plugins: readonly Plugin[] = [
     requires: [],
     isDefault: false,
     overview: [
-      'Emoji Picker finds any emoji by name and puts it where you’re typing. Open the Emoji tab of the Command Palette with ⌘7 by default and browse, or type a name, a keyword, or a :shortcode: such as thumbs, +1, or :joy:.',
+      'Emoji Picker finds any emoji by name and puts it where you’re typing. Open the Emoji tab of Quick Search (⌘7 by default) and browse, or type a name, a keyword, or a :shortcode: such as thumbs, +1, or :joy:.',
       'Return copies the emoji, and ⌘V pastes it into the app you were using, then puts your clipboard back. It ships turned off: turn it on in Settings › Plugins.'
     ],
     features: [
@@ -791,7 +791,7 @@ export const plugins: readonly Plugin[] = [
     ],
     howTo: [
       { text: 'Turn it on in Settings › Plugins.' },
-      { text: 'Open the Command Palette and press ⌘7 by default for the Emoji tab.', keys: '⌘7' },
+      { text: 'Open Quick Search and press ⌘7 (by default) for the Emoji tab.', keys: '⌘7' },
       {
         text: 'Type a name, a keyword, or a :shortcode:, then press Return to copy it or ⌘V to paste it.',
         keys: '↩'
@@ -835,7 +835,7 @@ export const plugins: readonly Plugin[] = [
     isDefault: false,
     minimumMacOS: '15',
     overview: [
-      'Understand text in another language and answer in it, without switching apps. Open the Translate tab of the Command Palette with ⌘8 by default, then type or paste: it translates as you type. Text in your language goes to your other language, and anything else comes back to yours.',
+      'Understand text in another language and answer in it, without switching apps. Open the Translate tab of Quick Search (⌘8 by default), then type or paste: it translates as you type. Text in your language goes to your other language, and anything else comes back to yours.',
       'Press Return to save the translation, or ⌘Return to save it and paste it into the app you were using. With the field empty, the tab lists your last 50 saved translations to copy, paste, or hear read aloud. Translation needs macOS 15 or later and ships turned off: turn it on in Settings › Plugins.'
     ],
     features: [
@@ -853,7 +853,7 @@ export const plugins: readonly Plugin[] = [
     howTo: [
       { text: 'Turn it on in Settings › Plugins. It needs macOS 15 or later.' },
       {
-        text: 'Open the Command Palette, press ⌘8 by default for the Translate tab, and type or paste your text.',
+        text: 'Open Quick Search, press ⌘8 (by default) for the Translate tab, and type or paste your text.',
         keys: '⌘8'
       },
       {
@@ -988,7 +988,7 @@ export function otherPlugins(slug: string, count = 3): Plugin[] {
 
 /**
  * The key a home page card shows, with a label saying what kind it is: its first default hotkey,
- * which works from any app, or else the Command-number of its Command Palette tab. Null when it has
+ * which works from any app, or else the default tab key of its tab in Quick Search. Null when it has
  * neither, or its tab is hidden until a setting shows it.
  */
 export function cardShortcut(plugin: Plugin): { keys: string; label: string } | null {
@@ -1001,7 +1001,7 @@ export function cardShortcut(plugin: Plugin): { keys: string; label: string } | 
   }
   const tab = plugin.paletteTab
   if (!tab || tab.hiddenUnless) return null
-  return { keys: `⌘${tab.commandKey}`, label: `Its Command Palette tab, ${tab.name}` }
+  return { keys: `⌘${tab.commandKey}`, label: `The ${tab.name} tab in Quick Search, by default` }
 }
 
 /** Its commands: its palette tab, if it has one, and its shortcuts. */
