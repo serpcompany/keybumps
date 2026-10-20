@@ -11,13 +11,12 @@ enum PluginsTable {
             }
     }
 
-    /// A plugin's tab key, whether or not the plugin is on, except while its tab's show switch in
-    /// Settings › Quick Search keeps it out of the tab bar (#553), as the Hotkeys tab starts.
-    /// `hiddenTabs` is `CommandPaletteTab.hiddenFromTabBar`, so a tab shown anyway as the only one
-    /// left keeps its key.
-    static func tabKey(for descriptor: CapabilityDescriptor, hiddenTabs: Set<CommandPaletteTab>) -> String {
-        guard let tab = descriptor.paletteTab?.tab, !hiddenTabs.contains(tab) else { return "" }
-        return tab.shortcutLabel
+    /// A plugin's tab key: its tab's place among `shownTabs` (`CommandPaletteTab.tabKey`, #553), a
+    /// dash for a tab without one, hidden in Settings › Quick Search or with its plugin off, as
+    /// Settings › Quick Search shows it, and nothing for a plugin without a tab.
+    static func tabKey(for descriptor: CapabilityDescriptor, shownTabs: [CommandPaletteTab]) -> String {
+        guard let tab = descriptor.paletteTab?.tab else { return "" }
+        return CommandPaletteTab.tabKey(for: tab, among: shownTabs) ?? "—"
     }
 
     /// A plugin's first assigned shortcut, and how many more it has, such as "⇧⌘2 +2".
@@ -104,13 +103,12 @@ private struct PluginsListRow: View {
                                 .foregroundStyle(.red)
                                 .accessibilityLabel("Needs attention")
                         }
-                        // A hidden tab that shows anyway, as the only one left, keeps its key.
-                        let tabKey = PluginsTable.tabKey(for: descriptor, hiddenTabs: model.preferences.paletteTabsHiddenFromTabBar)
+                        let tabKey = PluginsTable.tabKey(for: descriptor, shownTabs: model.preferences.shownPaletteTabs)
                         Text(tabKey)
                             .foregroundStyle(.secondary)
                             .frame(width: 36, alignment: .trailing)
-                            .help("Its tab key in Quick Search")
-                            .accessibilityLabel(tabKey.isEmpty ? "" : "Tab key \(tabKey)")
+                            .help(tabKey == "—" ? "Not in Quick Search's tab bar" : "Its tab key in Quick Search")
+                            .accessibilityLabel(tabKey.isEmpty ? "" : tabKey == "—" ? "Not in the tab bar" : "Tab key \(tabKey)")
                         let shortcut = PluginsTable.shortcutText(for: descriptor) { model.preferences.capabilityShortcut(for: $0) }
                         Text(shortcut)
                             .foregroundStyle(.secondary)

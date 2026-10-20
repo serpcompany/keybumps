@@ -131,7 +131,7 @@ struct QuickSearchTabsTests {
         #expect(!preferences.showsTab(.search), "It's saved hidden")
         #expect(preferences.visiblePaletteTabs(selected: .search) == [.search])
         #expect(preferences.paletteOpeningTab == .search, "The menu bar and the Dock still open a tab")
-        #expect(preferences.paletteTabsHiddenFromTabBar == [.keyboardShortcutter])
+        #expect(preferences.shownPaletteTabs == [.search])
         let row = QuickSearchTabList.rows(hidden: preferences.hiddenTabs, enabled: preferences.enabledCapabilities, compatibility: Self.mac15)
             .first { $0.tab == .search }
         #expect(row?.isShown == true)
@@ -246,25 +246,26 @@ struct QuickSearchTabsTests {
         #expect(left.first == .clipboard)
     }
 
-    @Test("A tab saved hidden is out of the tab bar, unless it shows anyway as the only tab, and Settings › Plugins shows its key as it is")
-    func hiddenFromTabBar() {
-        #expect(CommandPaletteTab.hiddenFromTabBar(hidden: [.search, .keyboardShortcutter], enabled: Self.everything, compatibility: Self.mac15) == [.search, .keyboardShortcutter])
-        let onlyTab = CommandPaletteTab.hiddenFromTabBar(hidden: [.search, .keyboardShortcutter], enabled: [.quickSearch], compatibility: Self.mac15)
-        #expect(onlyTab == [.keyboardShortcutter], "The Search tab shows as the only tab")
-        #expect(PluginsTable.tabKey(for: .quickSearch, hiddenTabs: onlyTab) == "⌘1")
-        #expect(PluginsTable.tabKey(for: .keyboardShortcutter, hiddenTabs: onlyTab) == "")
-
+    @Test("Settings › Plugins shows a tab's key as the tab bar has it: a dash while it's hidden or its plugin is off, and nothing for a plugin without a tab")
+    func pluginsTabKey() {
         let preferences = AppPreferences(defaults: InMemoryDefaults(), compatibility: Self.mac15)
+        preferences.enabledCapabilities = Self.everything
         preferences.setShowsTab(.search, false)
-        #expect(preferences.paletteTabsHiddenFromTabBar == [.search, .keyboardShortcutter])
-        #expect(PluginsTable.tabKey(for: .quickSearch, hiddenTabs: preferences.paletteTabsHiddenFromTabBar) == "")
+        let shown = preferences.shownPaletteTabs
+        #expect(shown.first == .clipboard)
+        #expect(PluginsTable.tabKey(for: .quickSearch, shownTabs: shown) == "—")
+        #expect(PluginsTable.tabKey(for: .keyboardShortcutter, shownTabs: shown) == "—", "The Hotkeys tab starts hidden")
+        #expect(PluginsTable.tabKey(for: .clipboardHistory, shownTabs: shown) == "⌘1", "Keys never skip a hidden tab")
+        #expect(PluginsTable.tabKey(for: .windowManagement, shownTabs: shown) == "")
+
         preferences.enabledCapabilities = [.quickSearch]
-        #expect(PluginsTable.tabKey(for: .quickSearch, hiddenTabs: preferences.paletteTabsHiddenFromTabBar) == "⌘1")
+        #expect(PluginsTable.tabKey(for: .quickSearch, shownTabs: preferences.shownPaletteTabs) == "⌘1", "The Search tab shows anyway as the only tab")
+        #expect(PluginsTable.tabKey(for: .clipboardHistory, shownTabs: preferences.shownPaletteTabs) == "—", "Its plugin is off")
     }
 
     // MARK: Settings › Quick Search's tab list
 
-    @Test("The tab list shows every tab in tab-key order, its tab key while shown, and show switches on the Search and Hotkeys tabs")
+    @Test("The tab list shows every tab in the default order, its tab key while shown, and a show switch on each tab whose plugin is on")
     func tabListRows() {
         let rows = QuickSearchTabList.rows(
             hidden: [.keyboardShortcutter],
@@ -273,7 +274,7 @@ struct QuickSearchTabsTests {
         )
         #expect(rows.map(\.tab) == CommandPaletteTab.allCases)
         #expect(rows.map(\.tabKey) == ["⌘1", "⌘2", "⌘3", "⌘4", "⌘5", "—", "—", "—", "—"])
-        #expect(rows.filter(\.hasShowSwitch).map(\.tab) == [.search, .keyboardShortcutter])
+        #expect(rows.filter(\.hasShowSwitch).map(\.tab) == [.search, .clipboard, .screenshots, .dictation, .snippets, .keyboardShortcutter])
         #expect(rows.allSatisfy { !$0.isOnlyShownTab })
 
         let hotkeys = rows.first { $0.tab == .keyboardShortcutter }
@@ -330,7 +331,7 @@ struct QuickSearchTabsTests {
 @Suite("Quick Search takes ⌘Space from Spotlight after the update")
 struct QuickSearchSpotlightAfterUpdateTests {
     final class FakeSpotlightResolver: SpotlightShortcutConflictResolving {
-        let statusResult: SpotlightShortcutConflictStatus
+        var statusResult: SpotlightShortcutConflictStatus
         let resolution: SpotlightShortcutResolution
         private(set) var checks: [ShortcutBinding] = []
         private(set) var disables: [ShortcutBinding] = []
@@ -456,5 +457,66 @@ struct QuickSearchSpotlightAfterUpdateTests {
 
         #expect(resolver.disables.isEmpty)
         #expect(!defaults.bool(forKey: "takesCommandSpaceFromSpotlightOnLaunch"))
+    }
+
+    @Test("While Locked, the flag waits, and runs once after a license is activated")
+    func lockedWaitsForLicense() async {
+        defer { try? FileManager.default.removeItem(at: root) }
+        let defaults = Self.quickSearchOffInstall()
+        let resolver = FakeSpotlightResolver(status: .conflict)
+        let licensing = FixedLicenseController(state: .unlicensed)
+        let harness = WiringHarness(
+            enabled: CapabilityCatalog.defaultCapabilities, missing: nil, root: root,
+            defaults: defaults, licensing: licensing, spotlightShortcutResolver: resolver
+        )
+        harness.model.start()
+
+        #expect(resolver.checks.isEmpty, "⌘Space would open nothing while Locked")
+        #expect(defaults.bool(forKey: "takesCommandSpaceFromSpotlightOnLaunch"), "It waits for a license")
+
+        await licensing.activate(key: "KEYBUMPS-TEST")
+        #expect(resolver.disables == [DefaultShortcut.quickSearch])
+        #expect(!defaults.bool(forKey: "takesCommandSpaceFromSpotlightOnLaunch"))
+        #expect(harness.shortcuts()["quickSearch"] != nil, "⌘Space registers after Spotlight lets it go")
+
+        await licensing.deactivate()
+        await licensing.activate(key: "KEYBUMPS-TEST")
+        #expect(resolver.checks.count == 1, "It runs once")
+        #expect(resolver.disables.count == 1)
+    }
+
+    @Test("Where Spotlight's shortcuts can't be read, the flag is used up and nothing changes")
+    func unreadableUsesUpTheFlag() {
+        defer { try? FileManager.default.removeItem(at: root) }
+        let defaults = Self.quickSearchOffInstall()
+        let resolver = FakeSpotlightResolver(status: .unavailable(manualRecovery: "Spotlight's shortcuts can't be read."))
+        let harness = launch(defaults, resolver: resolver)
+
+        #expect(resolver.checks == [DefaultShortcut.quickSearch])
+        #expect(resolver.disables.isEmpty)
+        #expect(!defaults.bool(forKey: "takesCommandSpaceFromSpotlightOnLaunch"), "It isn't tried again on the next launch")
+        #expect(harness.model.quickSearchShortcutConflictStatus == .noConflict)
+        #expect(harness.model.quickSearchSpotlightRecovery == nil)
+    }
+
+    @Test("Where Spotlight's shortcuts can't be read on Check Again, the note from the failure stays")
+    func checkAgainUnreadableKeepsTheNote() {
+        defer { try? FileManager.default.removeItem(at: root) }
+        let defaults = Self.quickSearchOffInstall()
+        let guidance = "Open System Settings and turn off Spotlight's shortcut."
+        let resolver = FakeSpotlightResolver(status: .conflict, resolution: .failed(manualRecovery: guidance))
+        let harness = launch(defaults, resolver: resolver)
+        #expect(harness.model.quickSearchSpotlightRecovery == guidance)
+
+        resolver.statusResult = .unavailable(manualRecovery: "Spotlight's shortcuts can't be read.")
+        harness.model.checkQuickSearchSpotlightAgain()
+        #expect(resolver.checks.count == 2)
+        #expect(resolver.disables.count == 1)
+        #expect(harness.model.quickSearchShortcutConflictStatus == .unavailable(manualRecovery: guidance))
+        #expect(harness.model.quickSearchSpotlightRecovery == guidance)
+
+        resolver.statusResult = .noConflict
+        harness.model.checkQuickSearchSpotlightAgain()
+        #expect(harness.model.quickSearchSpotlightRecovery == nil, "Once Spotlight lets ⌘Space go, the note goes")
     }
 }

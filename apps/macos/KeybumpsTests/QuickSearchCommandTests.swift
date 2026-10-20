@@ -14,7 +14,7 @@ struct QuickSearchCommandTests {
         #expect(settings.title == "Keybumps Settings")
         #expect(settings.kindLabel == "Command")
         #expect(ShortcutKeycapPresentation(shortcut: try #require(settings.shortcut)).keys == ["⌘", ","])
-        #expect(settings.rowShortcut(enabledCapabilities: [], visibleTabs: []) == "⌘,")
+        #expect(settings.rowShortcut(enabledCapabilities: [], shownTabs: []) == "⌘,")
     }
 
     @Test(

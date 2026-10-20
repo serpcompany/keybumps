@@ -504,8 +504,8 @@ private final class QuietHotKeys: GlobalHotKeyRegistering {
 }
 
 @MainActor
-private extension AppModel {
-    /// An app model whose global shortcuts register nowhere.
+extension AppModel {
+    /// An app model whose global shortcuts register nowhere, for laying out Settings pages.
     static func forShortcutTests(preferences: AppPreferences) -> AppModel {
         AppModel(
             preferences: preferences,

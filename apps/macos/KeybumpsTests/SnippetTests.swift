@@ -874,13 +874,13 @@ struct SnippetPaletteTests {
         #expect(NSPasteboard.contentsOptions(concealed: false) == [])
     }
 
-    @Test("Snippets takes ⌘5, and the hidden-by-default Hotkeys tab stays last, after Timers, Emoji, and Translate")
+    @Test("Snippets is fifth by default, and the hidden-by-default Hotkeys tab stays last, after Timers, Emoji, and Translate")
     func tabOrdering() {
         #expect(CommandPaletteTab.allCases.suffix(5) == [.snippets, .timers, .emoji, .translate, .keyboardShortcutter])
-        #expect(CommandPaletteTab.snippets.shortcutLabel == "⌘5")
-        #expect(CommandPaletteTab.keyboardShortcutter.shortcutLabel == "⌘9")
+        #expect(CommandPaletteTab.tabKey(for: .snippets, among: CommandPaletteTab.defaultOrder) == "⌘5")
+        #expect(CommandPaletteTab.tabKey(for: .keyboardShortcutter, among: CommandPaletteTab.defaultOrder) == "⌘9")
         let visible = CommandPaletteTab.visibleTabs(hidden: [.keyboardShortcutter], selected: .search, enabled: Set(Capability.allCases))
-        #expect(visible.map(\.shortcutLabel) == ["⌘1", "⌘2", "⌘3", "⌘4", "⌘5", "⌘6", "⌘7", "⌘8"], "No gap in the visible tabs")
+        #expect(visible.map { CommandPaletteTab.tabKey(for: $0, among: visible) } == ["⌘1", "⌘2", "⌘3", "⌘4", "⌘5", "⌘6", "⌘7", "⌘8"], "No gap in the visible tabs")
         #expect(CommandPaletteTab.matchingCommandKey("5", in: visible) == .snippets)
         #expect(CommandPaletteTab.matchingCommandKey("9", in: visible) == nil)
         #expect(CommandPaletteTab.visibleTabs(hidden: [], selected: .search, enabled: Set(Capability.allCases)).last == .keyboardShortcutter)
@@ -1106,7 +1106,7 @@ struct SnippetPaletteKeyTests {
         #expect(module.attentionCount(denied) == 0)
     }
 
-    @Test("⌘5 selects Snippets; ⌘8 and ⌘9 do nothing while Translation is off and the Hotkeys tab is hidden")
+    @Test("⌘5 selects Snippets, the fifth tab shown; ⌘8 and ⌘9 do nothing while Translation is off and the Hotkeys tab is hidden")
     func tabKeys() {
         let fixture = PaletteFixture()
         defer { fixture.tearDown() }

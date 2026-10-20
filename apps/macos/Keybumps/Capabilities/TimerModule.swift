@@ -12,7 +12,7 @@ extension CapabilityDescriptor {
         paletteTab: CapabilityPaletteTab(
             tab: .timers,
             name: "Timers",
-            commandKey: 6,
+            defaultPosition: 6,
             systemImage: "timer",
             prompt: "Start a timer: 5m, 1h30m, tea 25",
             primaryActionTitle: "Start",

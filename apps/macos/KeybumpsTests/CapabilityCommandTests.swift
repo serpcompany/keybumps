@@ -410,27 +410,27 @@ struct CapabilityCommandTests {
                         == (tab.map { .paletteTab($0) } ?? .settings(capability.descriptor.settingsPage?.section)),
                     "\(state)"
                 )
-                #expect(command.rowShortcut(enabledCapabilities: enabled, visibleTabs: tabs) == tab?.shortcutLabel, "\(state)")
+                #expect(command.rowShortcut(enabledCapabilities: enabled, shownTabs: tabs) == tab.flatMap { CommandPaletteTab.tabKey(for: $0, among: tabs) }, "\(state)")
             }
         }
     }
 
-    @Test("Rows show the tab's Command-number only when Return goes to a tab in the tab bar")
+    @Test("Rows show the tab's key only when Return goes to a tab in the tab bar")
     func rowShortcuts() {
         let tabs = CommandPaletteTab.visibleTabs(hidden: [.keyboardShortcutter], selected: .search, enabled: Set(Capability.allCases))
         let tabsWithHotkeys = CommandPaletteTab.visibleTabs(hidden: [], selected: .search, enabled: Set(Capability.allCases))
-        #expect(clipboard.rowShortcut(enabledCapabilities: allCapabilities, visibleTabs: tabs) == "⌘2")
-        #expect(screenshots.rowShortcut(enabledCapabilities: allCapabilities, visibleTabs: tabs) == "⌘3")
-        #expect(dictation.rowShortcut(enabledCapabilities: allCapabilities, visibleTabs: tabs) == "⌘4")
-        #expect(snippets.rowShortcut(enabledCapabilities: allCapabilities, visibleTabs: tabs) == "⌘5")
-        #expect(timer.rowShortcut(enabledCapabilities: allCapabilities, visibleTabs: tabs) == "⌘6")
-        #expect(emoji.rowShortcut(enabledCapabilities: allCapabilities, visibleTabs: tabs) == "⌘7")
-        #expect(translation.rowShortcut(enabledCapabilities: allCapabilities, visibleTabs: tabs) == "⌘8")
-        #expect(coach.rowShortcut(enabledCapabilities: allCapabilities, visibleTabs: tabs) == nil, "The Hotkeys tab is hidden, so ⌘9 does nothing")
-        #expect(coach.rowShortcut(enabledCapabilities: allCapabilities, visibleTabs: tabsWithHotkeys) == "⌘9")
-        #expect(windows.rowShortcut(enabledCapabilities: allCapabilities, visibleTabs: tabs) == nil)
-        #expect(keystrokes.rowShortcut(enabledCapabilities: allCapabilities, visibleTabs: tabs) == nil, "No tab")
-        #expect(dictation.rowShortcut(enabledCapabilities: [], visibleTabs: tabs) == nil, "Off, it opens Settings instead")
+        #expect(clipboard.rowShortcut(enabledCapabilities: allCapabilities, shownTabs: tabs) == "⌘2")
+        #expect(screenshots.rowShortcut(enabledCapabilities: allCapabilities, shownTabs: tabs) == "⌘3")
+        #expect(dictation.rowShortcut(enabledCapabilities: allCapabilities, shownTabs: tabs) == "⌘4")
+        #expect(snippets.rowShortcut(enabledCapabilities: allCapabilities, shownTabs: tabs) == "⌘5")
+        #expect(timer.rowShortcut(enabledCapabilities: allCapabilities, shownTabs: tabs) == "⌘6")
+        #expect(emoji.rowShortcut(enabledCapabilities: allCapabilities, shownTabs: tabs) == "⌘7")
+        #expect(translation.rowShortcut(enabledCapabilities: allCapabilities, shownTabs: tabs) == "⌘8")
+        #expect(coach.rowShortcut(enabledCapabilities: allCapabilities, shownTabs: tabs) == nil, "The Hotkeys tab is hidden, so it has no key")
+        #expect(coach.rowShortcut(enabledCapabilities: allCapabilities, shownTabs: tabsWithHotkeys) == "⌘9")
+        #expect(windows.rowShortcut(enabledCapabilities: allCapabilities, shownTabs: tabs) == nil)
+        #expect(keystrokes.rowShortcut(enabledCapabilities: allCapabilities, shownTabs: tabs) == nil, "No tab")
+        #expect(dictation.rowShortcut(enabledCapabilities: [], shownTabs: tabs) == nil, "Off, it opens Settings instead")
     }
 
     @Test("Tooltips and VoiceOver hints say where Return goes")

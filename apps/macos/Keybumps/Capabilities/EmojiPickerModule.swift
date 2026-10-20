@@ -11,7 +11,7 @@ extension CapabilityDescriptor {
         paletteTab: CapabilityPaletteTab(
             tab: .emoji,
             name: "Emoji",
-            commandKey: 7,
+            defaultPosition: 7,
             systemImage: "face.smiling",
             prompt: "Search emoji by name, keyword, or :shortcode:",
             primaryActionTitle: "Copy",

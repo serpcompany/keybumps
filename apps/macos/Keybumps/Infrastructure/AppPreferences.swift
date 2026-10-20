@@ -26,6 +26,9 @@ final class AppPreferences {
         static let showsHotkeysTab = "showsHotkeysTab"
         /// The other tabs hidden in Settings › Quick Search, by `CommandPaletteTab` raw value (#553).
         static let quickSearchHiddenTabs = "quickSearchHiddenTabs"
+        /// The tab order set in Settings › Quick Search, by `CommandPaletteTab` raw value (#553).
+        /// Absent while the tabs are in the default order.
+        static let quickSearchTabOrder = "quickSearchTabOrder"
         /// Whether the one-time step that hides the Search tab where Quick Search was off has run
         /// (#553): Quick Search can't be turned off any more, and hiding its tab replaced that.
         static let didMoveQuickSearchSwitchToSearchTab = "didMoveQuickSearchSwitchToSearchTab"
@@ -139,6 +142,52 @@ final class AppPreferences {
     private func persistHiddenTabs() {
         defaults.set(!hiddenTabs.contains(.keyboardShortcutter), forKey: Key.showsHotkeysTab)
         defaults.set(hiddenTabs.subtracting([.keyboardShortcutter]).map(\.rawValue).sorted(), forKey: Key.quickSearchHiddenTabs)
+    }
+
+    /// Every Quick Search tab, in the order Settings › Quick Search lists them, which the tab bar,
+    /// the tab keys, and Left and Right follow (#553): the saved order, then any tab it leaves
+    /// out, such as one a later version adds, in the default order (`CommandPaletteTab.ordered`).
+    /// Nothing is saved while it's the default order, so a later default reaches anyone who never
+    /// reordered. Which tabs show is `hiddenTabs`, apart from this.
+    private(set) var tabOrder: [CommandPaletteTab] {
+        didSet { persistTabOrder() }
+    }
+
+    /// Whether the tabs are in the default order, where Reset Order has nothing to do.
+    var isDefaultTabOrder: Bool { tabOrder == CommandPaletteTab.defaultOrder }
+
+    /// Moves `tab` `offset` places in the order, stopping at either end, as Settings › Quick
+    /// Search's move buttons do.
+    func moveTab(_ tab: CommandPaletteTab, by offset: Int) {
+        guard let index = tabOrder.firstIndex(of: tab) else { return }
+        let place = min(max(index + offset, 0), tabOrder.count - 1)
+        moveTabs(fromOffsets: [index], toOffset: place > index ? place + 1 : place)
+    }
+
+    /// Moves the tabs at `offsets` in the order to just before the tab at `destination`, as
+    /// Settings › Quick Search's list reports a dragged row (`ForEach.onMove`). Both count places
+    /// in the order before the move, so `destination` is `tabOrder.count` for the end. Offsets
+    /// outside the order move nothing.
+    func moveTabs(fromOffsets offsets: IndexSet, toOffset destination: Int) {
+        guard !offsets.isEmpty, offsets.allSatisfy(tabOrder.indices.contains),
+              (0...tabOrder.count).contains(destination) else { return }
+        let moving = offsets.map { tabOrder[$0] }
+        var order = tabOrder.enumerated().filter { !offsets.contains($0.offset) }.map(\.element)
+        order.insert(contentsOf: moving, at: destination - offsets.count(in: 0..<destination))
+        if order != tabOrder { tabOrder = order }
+    }
+
+    /// Puts the tabs back in the default order. Which tabs show stays as it is.
+    func resetTabOrder() {
+        tabOrder = CommandPaletteTab.defaultOrder
+    }
+
+    private func persistTabOrder() {
+        if isDefaultTabOrder {
+            defaults.removeObject(forKey: Key.quickSearchTabOrder)
+        } else {
+            defaults.set(tabOrder.map(\.rawValue), forKey: Key.quickSearchTabOrder)
+        }
     }
 
     /// Whether the next launch turns Spotlight's ⌘Space off, once, as first-time setup does: set by
@@ -386,6 +435,9 @@ final class AppPreferences {
         let stored = defaults.array(forKey: Key.enabledCapabilities) as? [String]
         // Before Quick Search is saved on below: where it was off, the Search tab starts hidden.
         hiddenTabs = Self.loadHiddenTabs(in: defaults, storedCapabilities: stored)
+        tabOrder = CommandPaletteTab.ordered(
+            (defaults.stringArray(forKey: Key.quickSearchTabOrder) ?? []).compactMap(CommandPaletteTab.init(rawValue:))
+        )
         takesCommandSpaceFromSpotlightOnLaunch = defaults.bool(forKey: Key.takesCommandSpaceFromSpotlightOnLaunch)
         let initial = Self.initialCapabilities(
             stored: stored,

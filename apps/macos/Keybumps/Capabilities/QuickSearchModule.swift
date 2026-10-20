@@ -11,7 +11,7 @@ extension CapabilityDescriptor {
         paletteTab: CapabilityPaletteTab(
             tab: .search,
             name: "Search",
-            commandKey: 1,
+            defaultPosition: 1,
             systemImage: "magnifyingglass",
             prompt: "Search apps, files, and folders",
             primaryActionTitle: "Open",

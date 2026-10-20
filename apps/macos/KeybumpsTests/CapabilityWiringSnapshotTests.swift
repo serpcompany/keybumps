@@ -55,6 +55,7 @@ struct CapabilityWiringSnapshot: Codable {
     struct PaletteTab: Codable {
         let tab: String
         let label: String
+        /// Its tab key in the default order with every tab shown (#553): ⌘ and its `defaultPosition`.
         let commandKey: String
         let matchedByCommandKey: String?
         let systemImage: String
@@ -113,11 +114,12 @@ enum WiringRecorder {
 
         let snapshot = CapabilityWiringSnapshot(
             paletteTabs: CommandPaletteTab.allCases.map { tab in
-                let key = String(tab.shortcutLabel.last ?? " ")
+                let label = tab.labelPresentation(among: CommandPaletteTab.defaultOrder)
+                let key = String(label.shortcut?.last ?? " ")
                 return .init(
                     tab: tab.rawValue,
-                    label: tab.labelPresentation.name,
-                    commandKey: tab.labelPresentation.shortcut,
+                    label: label.name,
+                    commandKey: label.shortcut ?? "",
                     matchedByCommandKey: CommandPaletteTab.matchingCommandKey(key)?.rawValue,
                     systemImage: tab.systemImage,
                     prompt: tab.prompt,

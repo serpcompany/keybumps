@@ -11,7 +11,7 @@ extension CapabilityDescriptor {
         paletteTab: CapabilityPaletteTab(
             tab: .translate,
             name: "Translate",
-            commandKey: 8,
+            defaultPosition: 8,
             systemImage: "translate",
             prompt: "Type or paste text to translate",
             primaryActionTitle: "Copy",

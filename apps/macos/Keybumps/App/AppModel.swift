@@ -607,18 +607,25 @@ final class AppModel {
 
     /// Turns Spotlight's shortcut off where it uses Quick Search's keys, leaving everything as it is
     /// otherwise. If it can't, Settings › Quick Search shows first-time setup's manual-recovery
-    /// note, whose Check Again runs this again.
+    /// note, whose Check Again runs this again. Where Spotlight's shortcuts can't be read, nothing
+    /// is known to have changed, so nothing does: a note from an earlier failure stays.
     func takeCommandSpaceFromSpotlight() {
-        guard let binding = preferences.capabilityShortcut(for: .quickSearch),
-              spotlightShortcutResolver.status(for: binding) == .conflict else {
+        guard let binding = preferences.capabilityShortcut(for: .quickSearch) else {
             quickSearchShortcutConflictStatus = .noConflict
             return
         }
-        switch spotlightShortcutResolver.disableIfConflicting(binding) {
-        case .resolved, .noLongerConflicting:
+        switch spotlightShortcutResolver.status(for: binding) {
+        case .noConflict:
             quickSearchShortcutConflictStatus = .noConflict
-        case .failed(let manualRecovery):
-            quickSearchShortcutConflictStatus = .unavailable(manualRecovery: manualRecovery)
+        case .unavailable:
+            return
+        case .conflict:
+            switch spotlightShortcutResolver.disableIfConflicting(binding) {
+            case .resolved, .noLongerConflicting:
+                quickSearchShortcutConflictStatus = .noConflict
+            case .failed(let manualRecovery):
+                quickSearchShortcutConflictStatus = .unavailable(manualRecovery: manualRecovery)
+            }
         }
     }
 

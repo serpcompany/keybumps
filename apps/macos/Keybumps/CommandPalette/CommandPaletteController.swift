@@ -16,15 +16,35 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    /// Tabs in Command-number order, as their owning modules register them.
+    /// Tabs in the default order, as their owning modules register them (`defaultPosition`).
     static var allCases: [CommandPaletteTab] { CapabilityCatalog.paletteTabs.map(\.tab) }
+
+    /// The order Settings › Quick Search's Reset Order puts the tabs back in (#553).
+    static var defaultOrder: [CommandPaletteTab] { allCases }
+
+    /// Every tab, in `order`: the tabs it names first, each once, then any it leaves out, such as a
+    /// tab added after the order was saved, in the default order (#553).
+    static func ordered(_ order: [CommandPaletteTab]) -> [CommandPaletteTab] {
+        let tabs = allCases
+        var placed = Set<CommandPaletteTab>()
+        let named = order.filter { tabs.contains($0) && placed.insert($0).inserted }
+        return named + tabs.filter { !placed.contains($0) }
+    }
 
     private var registration: CapabilityPaletteTab { CapabilityCatalog.paletteTab(for: self).tab }
     /// The module that owns the tab.
     var owner: Capability { CapabilityCatalog.paletteTab(for: self).owner }
     var title: String { registration.name }
     var systemImage: String { registration.systemImage }
-    var shortcutLabel: String { "⌘\(registration.commandKey)" }
+
+    /// A tab's tab key: ⌘ and its place among `shown`, the tabs in the tab bar while no hidden tab
+    /// is open (`shownTabs`), so ⌘1 is the first shown tab and ⌘2 the second, as in Safari (#553).
+    /// Keys never skip a tab, so a tab that isn't shown, hidden or with its plugin off, has none,
+    /// and nor does one past the ninth.
+    static func tabKey(for tab: CommandPaletteTab, among shown: [CommandPaletteTab]) -> String? {
+        guard let index = shown.firstIndex(of: tab), index < 9 else { return nil }
+        return "⌘\(index + 1)"
+    }
 
     /// The tabs `CommandPaletteController` draws itself. Every other tab's rows come from its
     /// module (`CapabilityPaletteContent`).
@@ -37,55 +57,55 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
     /// (`listsRecordings`, #494) shows without its data source wherever its plugin records
     /// (`PluginCompatibility.supportsRecording`), so on macOS 14 the ScreenGrabs tab still needs
     /// Clipboard History. The Search tab is always among them: Quick Search is always on (#553).
-    static func availableTabs(enabled: Set<Capability>, compatibility: PluginCompatibility = .current) -> [CommandPaletteTab] {
-        allCases.filter { tab in
+    /// They come in `order` (`ordered`), the order Settings › Quick Search saves.
+    static func availableTabs(
+        enabled: Set<Capability>,
+        compatibility: PluginCompatibility = .current,
+        order: [CommandPaletteTab] = defaultOrder
+    ) -> [CommandPaletteTab] {
+        ordered(order).filter { tab in
             enabled.contains(tab.owner)
                 && ((tab.dataSource.map(enabled.contains) ?? true) || (tab.listsRecordings && compatibility.supportsRecording))
         }
     }
 
-    /// The tabs in the tab bar while no hidden tab is open: the available ones whose show switches in
-    /// Settings › Quick Search are on (#553). One always stays: where every available tab is hidden,
-    /// such as the Search tab hidden and every other tab's plugin off, the Search tab shows.
+    /// The tabs in the tab bar while no hidden tab is open, in `order`: the available ones whose show
+    /// switches in Settings › Quick Search are on (#553). Their places give the tab keys (`tabKey`).
+    /// One always stays: where every available tab is hidden, such as the Search tab hidden and
+    /// every other tab's plugin off, the Search tab shows.
     static func shownTabs(
         hidden: Set<CommandPaletteTab>,
         enabled: Set<Capability>,
-        compatibility: PluginCompatibility = .current
+        compatibility: PluginCompatibility = .current,
+        order: [CommandPaletteTab] = defaultOrder
     ) -> [CommandPaletteTab] {
-        let shown = availableTabs(enabled: enabled, compatibility: compatibility).filter { !hidden.contains($0) }
+        let shown = availableTabs(enabled: enabled, compatibility: compatibility, order: order).filter { !hidden.contains($0) }
         return shown.isEmpty ? [.search] : shown
     }
 
-    /// The tabs their show switches keep out of the tab bar: those saved hidden, less one that
-    /// shows anyway as the only tab left (`shownTabs`). Settings › Plugins leaves out their tab keys.
-    static func hiddenFromTabBar(
-        hidden: Set<CommandPaletteTab>,
-        enabled: Set<Capability>,
-        compatibility: PluginCompatibility = .current
-    ) -> Set<CommandPaletteTab> {
-        hidden.subtracting(shownTabs(hidden: hidden, enabled: enabled, compatibility: compatibility))
-    }
-
-    /// The tabs in the tab bar: the shown ones, and the tab on screen, which always stays, such as
-    /// the hidden Hotkeys tab opened by Shortcut Coach's capability command. Command-numbers stay fixed.
+    /// The tabs in the tab bar, in `order`, which Left and Right follow: the shown ones, and the tab
+    /// on screen, which always stays, such as the hidden Hotkeys tab opened by Shortcut Coach's
+    /// capability command. That hidden tab has no tab key, so the shown tabs keep theirs.
     static func visibleTabs(
         hidden: Set<CommandPaletteTab>,
         selected: CommandPaletteTab,
         enabled: Set<Capability>,
-        compatibility: PluginCompatibility = .current
+        compatibility: PluginCompatibility = .current,
+        order: [CommandPaletteTab] = defaultOrder
     ) -> [CommandPaletteTab] {
-        let shown = shownTabs(hidden: hidden, enabled: enabled, compatibility: compatibility)
-        return allCases.filter { $0 == selected || shown.contains($0) }
+        let shown = shownTabs(hidden: hidden, enabled: enabled, compatibility: compatibility, order: order)
+        return ordered(order).filter { $0 == selected || shown.contains($0) }
     }
 
-    /// The tab ⌘Space opens Quick Search on: the first shown tab, so the Search tab unless Settings ›
-    /// Quick Search hides it (#553).
+    /// The tab ⌘Space opens Quick Search on: the first shown tab in `order`, so the Search tab unless
+    /// Settings › Quick Search hides it or moves another tab first (#553).
     static func openingTab(
         hidden: Set<CommandPaletteTab>,
         enabled: Set<Capability>,
-        compatibility: PluginCompatibility = .current
+        compatibility: PluginCompatibility = .current,
+        order: [CommandPaletteTab] = defaultOrder
     ) -> CommandPaletteTab {
-        shownTabs(hidden: hidden, enabled: enabled, compatibility: compatibility).first ?? .search
+        shownTabs(hidden: hidden, enabled: enabled, compatibility: compatibility, order: order).first ?? .search
     }
 
     /// Another plugin whose data the tab lists, such as Clipboard History for ScreenGrabs' screenshots.
@@ -94,8 +114,12 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
     /// Whether the tab also lists its plugin's own recordings, which need no data source.
     var listsRecordings: Bool { registration.listsRecordings }
 
-    static func matchingCommandKey(_ characters: String?, in tabs: [CommandPaletteTab] = allCases) -> CommandPaletteTab? {
-        tabs.first { characters == String($0.registration.commandKey) }
+    /// The tab a Command-number selects: the one at that place among `shown` (`tabKey`), so ⌘1 is
+    /// the first shown tab. Nil for any other key, and for a number past the last shown tab.
+    static func matchingCommandKey(_ characters: String?, in shown: [CommandPaletteTab] = defaultOrder) -> CommandPaletteTab? {
+        guard let characters, characters.count == 1, let number = Int(characters), (1...9).contains(number),
+              shown.indices.contains(number - 1) else { return nil }
+        return shown[number - 1]
     }
 
     /// The tab Left or Right switches to: the one beside `tab` in the tab bar, stopping at either end.
@@ -104,8 +128,9 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
         return tabs[index + offset]
     }
 
-    var labelPresentation: CommandPaletteTabLabel {
-        CommandPaletteTabLabel(shortcut: shortcutLabel, name: title)
+    /// Its name and its tab key among `shown` (`tabKey`), as the tab bar shows them.
+    func labelPresentation(among shown: [CommandPaletteTab]) -> CommandPaletteTabLabel {
+        CommandPaletteTabLabel(shortcut: Self.tabKey(for: self, among: shown), name: title)
     }
 
     var primaryActionTitle: String? { registration.primaryActionTitle }
@@ -118,24 +143,28 @@ enum CommandPaletteTab: String, CaseIterable, Identifiable {
 }
 
 extension AppPreferences {
-    /// The tabs their show switches keep out of the tab bar (`CommandPaletteTab.hiddenFromTabBar`).
-    var paletteTabsHiddenFromTabBar: Set<CommandPaletteTab> {
-        CommandPaletteTab.hiddenFromTabBar(hidden: hiddenTabs, enabled: enabledCapabilities, compatibility: compatibility)
+    /// The tabs in the tab bar while no hidden tab is open, in the saved order, whose places give
+    /// the tab keys (`CommandPaletteTab.shownTabs`).
+    var shownPaletteTabs: [CommandPaletteTab] {
+        CommandPaletteTab.shownTabs(hidden: hiddenTabs, enabled: enabledCapabilities, compatibility: compatibility, order: tabOrder)
     }
 
     /// The tabs in Quick Search's tab bar while it's on `selected` (`CommandPaletteTab.visibleTabs`).
     func visiblePaletteTabs(selected: CommandPaletteTab) -> [CommandPaletteTab] {
-        CommandPaletteTab.visibleTabs(hidden: hiddenTabs, selected: selected, enabled: enabledCapabilities, compatibility: compatibility)
+        CommandPaletteTab.visibleTabs(
+            hidden: hiddenTabs, selected: selected, enabled: enabledCapabilities, compatibility: compatibility, order: tabOrder
+        )
     }
 
     /// The tab ⌘Space opens Quick Search on (`CommandPaletteTab.openingTab`).
     var paletteOpeningTab: CommandPaletteTab {
-        CommandPaletteTab.openingTab(hidden: hiddenTabs, enabled: enabledCapabilities, compatibility: compatibility)
+        CommandPaletteTab.openingTab(hidden: hiddenTabs, enabled: enabledCapabilities, compatibility: compatibility, order: tabOrder)
     }
 }
 
 struct CommandPaletteTabLabel: Equatable {
-    let shortcut: String
+    /// Its tab key, nil for a tab without one, such as a hidden tab that's open.
+    let shortcut: String?
     let name: String
 }
 
@@ -847,7 +876,7 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         state.keyWasPressed()
 
         if Self.isCommandKey(event) {
-            if let tab = CommandPaletteTab.matchingCommandKey(event.charactersIgnoringModifiers, in: visibleTabs) {
+            if let tab = CommandPaletteTab.matchingCommandKey(event.charactersIgnoringModifiers, in: preferences.shownPaletteTabs) {
                 selectTab(tab)
                 return nil
             }
@@ -1117,7 +1146,8 @@ final class CommandPaletteController: NSObject, NSWindowDelegate {
         }
     }
 
-    /// The tabs in the tab bar, which Command-number and Left and Right switch between.
+    /// The tabs in the tab bar, in the saved order, which Left and Right switch between.
+    /// Command-numbers go by the shown tabs (`AppPreferences.shownPaletteTabs`).
     private var visibleTabs: [CommandPaletteTab] {
         preferences.visiblePaletteTabs(selected: state.tab)
     }
@@ -1866,6 +1896,7 @@ private struct CommandPaletteView: View {
             )
             PaletteTabBar(
                 tabs: preferences.visiblePaletteTabs(selected: state.tab),
+                shown: preferences.shownPaletteTabs,
                 selected: state.tab,
                 showsShortcuts: state.isCommandHeld,
                 select: selectTab
@@ -1961,7 +1992,7 @@ private struct CommandPaletteView: View {
                 selection: state.selection,
                 query: search.query,
                 enabledCapabilities: preferences.enabledCapabilities,
-                visibleTabs: preferences.visiblePaletteTabs(selected: state.tab),
+                shownTabs: preferences.shownPaletteTabs,
                 recentItems: recentSearchItems,
                 select: { state.selection = $0 },
                 open: activateSearchResult,
@@ -2048,11 +2079,15 @@ private struct CommandPaletteView: View {
 }
 
 /// The palette's tabs as icons, Raycast-style (#182): the open tab also shows its name, and the
-/// ⌘-numbers show only while ⌘ is held. If even that doesn't fit, the name goes too, so the bar can
-/// never widen the palette past its window, which cut off its rounded corners once eight tabs had
-/// names.
+/// tab keys (⌘ and each tab's place among the shown tabs, #553) show only while ⌘ is held. If even
+/// that doesn't fit, the name goes too, so the bar can never widen the palette past its window,
+/// which cut off its rounded corners once eight tabs had names.
 struct PaletteTabBar: View {
+    /// The tabs in the bar, in the saved order (`CommandPaletteTab.visibleTabs`).
     let tabs: [CommandPaletteTab]
+    /// The shown tabs, whose places give the tab keys (`CommandPaletteTab.tabKey`). A hidden tab
+    /// that's open isn't among them, so it has no key.
+    let shown: [CommandPaletteTab]
     let selected: CommandPaletteTab
     /// Whether ⌘ is held, which shows each tab's ⌘-number.
     var showsShortcuts = false
@@ -2090,13 +2125,13 @@ struct PaletteTabBar: View {
     }
 
     private func tabButton(_ tab: CommandPaletteTab, showsName: Bool) -> some View {
-        let label = tab.labelPresentation
+        let label = tab.labelPresentation(among: shown)
         return Button {
             select(tab)
         } label: {
             HStack(spacing: 6) {
-                if showsShortcuts {
-                    PaletteKeycaps(shortcut: label.shortcut)
+                if showsShortcuts, let shortcut = label.shortcut {
+                    PaletteKeycaps(shortcut: shortcut)
                 }
                 Image(systemName: tab.systemImage)
                     .font(.system(size: 14, weight: .medium))
@@ -2120,9 +2155,9 @@ struct PaletteTabBar: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("\(label.name) (\(label.shortcut))")
+        .help(label.shortcut.map { "\(label.name) (\($0))" } ?? label.name)
         .accessibilityLabel(label.name)
-        .accessibilityHint(KeyboardShortcutRegistry.accessibilityCopy(for: label.shortcut))
+        .accessibilityHint(label.shortcut.map(KeyboardShortcutRegistry.accessibilityCopy(for:)) ?? "")
         .accessibilityAddTraits(selected == tab ? .isSelected : [])
         .accessibilityIdentifier("palette.tab.\(tab.rawValue)")
     }
@@ -2175,7 +2210,8 @@ private struct SearchResultsView: View {
     let query: String
     /// Where each command goes, and what its row shows, depend on these.
     let enabledCapabilities: Set<Capability>
-    let visibleTabs: [CommandPaletteTab]
+    /// The shown tabs, whose places give a command's tab key (`QuickSearchCommand.rowShortcut`).
+    let shownTabs: [CommandPaletteTab]
     let recentItems: [RecentItem]
     /// A click highlights the row, then opens or runs it (`PaletteClickAction.acts`).
     let select: (Int) -> Void
@@ -2257,7 +2293,7 @@ private struct SearchResultsView: View {
                                         command: command,
                                         shortcut: command.rowShortcut(
                                             enabledCapabilities: enabledCapabilities,
-                                            visibleTabs: visibleTabs
+                                            shownTabs: shownTabs
                                         ),
                                         isTurnedOff: command.isTurnedOff(enabledCapabilities: enabledCapabilities)
                                     )

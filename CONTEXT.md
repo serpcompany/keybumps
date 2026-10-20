@@ -27,11 +27,11 @@ The internal, first-party unit that implements one Capability for the app shell.
 _Avoid_: Extension
 
 **Quick Search**:
-The single floating, keyboard-first window whose tabs present the capabilities' searchable content: the Search tab first, then the other plugins' tabs. ⌘Space (Open Quick Search) opens it on its first shown tab, the Search tab unless that's hidden, and a plugin's own shortcut on that plugin's tab, such as ⇧⌘Space on the Clipboard tab. Settings › Quick Search is the window's page, and the page of the plugin with the same name, which owns ⌘Space and the Search tab. That plugin is always on, with no switch (#553). The page lists every tab with its tab key while it's in the tab bar, and a show switch on the Search and Hotkeys tabs that takes the tab out of the tab bar; one tab always stays shown. Its code keeps the former name, Command Palette (`CommandPaletteController`, `CommandPaletteTab`, `palette` in other types' names, its accessibility identifiers, and `-KBOpenPalette`; ADR 0012). One click on a row does what Return does, except in the tabs that show the highlighted row's actions (Dictation, Translate, and ScreenGrabs), where it highlights the row and a double-click does what Return does, and in the Hotkeys tab, whose rows have no Return action, where it only highlights. Moving the pointer over a row highlights it, as in Raycast, except in those four tabs: there the highlight, and with it the detail, the footer, and the keys, follows only clicks and keys, and the row under the pointer is only outlined, so the pointer crossing a row on its way to the detail's buttons never changes which row they act on.
+The single floating, keyboard-first window whose tabs present the capabilities' searchable content: the Search tab first, then the other plugins' tabs, unless Settings › Quick Search orders them otherwise. ⌘Space (Open Quick Search) opens it on its first shown tab, the Search tab unless that's hidden or another tab is moved before it, and a plugin's own shortcut on that plugin's tab, such as ⇧⌘Space on the Clipboard tab. Settings › Quick Search is the window's page, and the page of the plugin with the same name, which owns ⌘Space and the Search tab. That plugin is always on, with no switch (#553). The page lists every tab in order with its tab key while it's in the tab bar, a show switch on each tab whose plugin is on that takes the tab out of the tab bar (one tab always stays shown), and Reset Order; dragging a row or its arrows reorders the tabs. Its code keeps the former name, Command Palette (`CommandPaletteController`, `CommandPaletteTab`, `palette` in other types' names, its accessibility identifiers, and `-KBOpenPalette`; ADR 0012). One click on a row does what Return does, except in the tabs that show the highlighted row's actions (Dictation, Translate, and ScreenGrabs), where it highlights the row and a double-click does what Return does, and in the Hotkeys tab, whose rows have no Return action, where it only highlights. Moving the pointer over a row highlights it, as in Raycast, except in those four tabs: there the highlight, and with it the detail, the footer, and the keys, follows only clicks and keys, and the row under the pointer is only outlined, so the pointer crossing a row on its way to the detail's buttons never changes which row they act on.
 _Avoid_: Command Palette (its former name), palette, launcher, Alfred clone, Raycast clone; and panel in what people read (in code, the window is an `NSPanel`)
 
 **Tab key**:
-The key that shows one of Quick Search's tabs: ⌘ and the tab's number, from ⌘1 for the Search tab to ⌘9 for the Hotkeys tab. Each tab keeps its own while its plugin is off or the tab is hidden. The tab bar shows them while ⌘ is held, Settings › Plugins lists each plugin's, the Search and Hotkeys tabs' only while they're shown, and Settings › Quick Search each tab's while it's in the tab bar. In code, a tab's `commandKey`.
+The key that shows one of Quick Search's tabs: ⌘ and the tab's place among the tabs shown, in Settings › Quick Search's order, so ⌘1 is the first tab shown (#553). A hidden tab, or one whose plugin is off, has none, and the tabs after it move up. The tab bar shows them while ⌘ is held, and Settings › Quick Search and Settings › Plugins list each tab's, or a dash. In code, `CommandPaletteTab.tabKey`; a tab's place in the default order, which Reset Order puts back, is its `defaultPosition`.
 _Avoid_: Command-number, tab shortcut
 
 **Notch notice**:
@@ -69,7 +69,7 @@ _Avoid_: Feedback, bug report, ticket
 ### Capabilities
 
 **Search tab**:
-Quick Search's first tab (⌘1): finding and opening local applications, files, and folders, finding snippets by keyword, name, or text and emoji by name (while Emoji Picker shows them there), and running Quick Search commands. It belongs to the Quick Search plugin, which is always on. Its show switch in Settings › Quick Search hides it, which took the place of turning Quick Search off: an install that had Quick Search off starts with the tab hidden, and ⌘Space stays Quick Search's, taken from Spotlight once on the first launch after the update as first-time setup does (#553). While it's hidden, ⌘Space opens Quick Search on the first shown tab. In code, `CommandPaletteTab.search`, and the `QuickSearch` types (`QuickSearchModel`, `QuickSearchRanking`) are this tab's.
+Quick Search's first tab by default: finding and opening local applications, files, and folders, finding snippets by keyword, name, or text and emoji by name (while Emoji Picker shows them there), and running Quick Search commands. It belongs to the Quick Search plugin, which is always on. Its show switch in Settings › Quick Search hides it, which took the place of turning Quick Search off: an install that had Quick Search off starts with the tab hidden, and ⌘Space stays Quick Search's, taken from Spotlight once on the first launch after the update as first-time setup does (#553). While it's hidden, ⌘Space opens Quick Search on the first tab shown. In code, `CommandPaletteTab.search`, and the `QuickSearch` types (`QuickSearchModel`, `QuickSearchRanking`) are this tab's.
 _Avoid_: Quick Search tab, web search, workflow launcher
 
 **Quick Search command**:
@@ -125,7 +125,7 @@ Recognition of actions the user did by hand that have a keyboard shortcut, with 
 _Avoid_: Keyboard Shortcutter (former name; code types still use it), Shortcut Coaching, Keylume app
 
 **Hotkeys**:
-The name of Quick Search's tab for Shortcut Coach history (⌘9), hidden unless its show switch in Settings › Quick Search shows it; everywhere else, including its capability command, it is called Shortcut Coach.
+The name of Quick Search's tab for Shortcut Coach history, hidden unless its show switch in Settings › Quick Search shows it; everywhere else, including its capability command, it is called Shortcut Coach.
 
 **ScreenGrabs**:
 Taking screenshots and recordings of the screen, and marking screenshots up (ADR 0010). It replaced Screenshot Tools and Screencast, and ships on. Recording needs macOS 15; on an older Mac, ScreenGrabs takes screenshots only and says "Recording needs macOS 15". Its stored ID is still `screenshotTools`; its screenshot code is in `ScreenshotTools/` and its recording code, whose types keep Screencast's name, in `Screencast/`.
@@ -143,7 +143,7 @@ _Avoid_: Snap
 Where ScreenGrabs' hotkeys and the Screenshot Editor save screenshots: the folder chosen in Settings › ScreenGrabs, or, until one is, the folder macOS saves screenshots to (else the Desktop), following macOS's setting. A chosen folder that's gone or can't be written to stays chosen, and screenshots go to the default until it's back.
 
 **ScreenGrabs tab**:
-Quick Search's tab (⌘3) showing Clipboard History's newest 50 screenshot items and every recording in the recordings index, newest first (#494). Recordings show with Clipboard History off, and the header says why screenshots don't; on macOS 14 it shows screenshots only. Its grid has two columns, with the highlighted screengrab in full beside it, as in the Dictation tab (#552): its picture, a button for each of its actions with the keys that do the same, its name, and its information (Dimensions, Taken, and Size, or a recording's Length, Displays, Taken, and Size); until Down or a click highlights one, it says how to show one there. A click highlights a screengrab; a double-click or Return copies it, and a ⌘-click edits it. Clearing or deleting a screenshot in the Clipboard tab keeps it here; only this tab's Clear All or Delete, or 50 newer screenshots, remove it. Delete on a recording asks, then moves its folder to the Trash; Clear All leaves recordings. A recording moved or deleted outside Keybumps stays, marked "Moved or deleted", until it's removed.
+Quick Search's tab showing Clipboard History's newest 50 screenshot items and every recording in the recordings index, newest first (#494). Recordings show with Clipboard History off, and the header says why screenshots don't; on macOS 14 it shows screenshots only. Its grid has two columns, with the highlighted screengrab in full beside it, as in the Dictation tab (#552): its picture, a button for each of its actions with the keys that do the same, its name, and its information (Dimensions, Taken, and Size, or a recording's Length, Displays, Taken, and Size); until Down or a click highlights one, it says how to show one there. A click highlights a screengrab; a double-click or Return copies it, and a ⌘-click edits it. Clearing or deleting a screenshot in the Clipboard tab keeps it here; only this tab's Clear All or Delete, or 50 newer screenshots, remove it. Delete on a recording asks, then moves its folder to the Trash; Clear All leaves recordings. A recording moved or deleted outside Keybumps stays, marked "Moved or deleted", until it's removed.
 _Avoid_: Screenshots tab (its former name), screenshot library, gallery
 
 **Screenshot Editor**:
@@ -171,7 +171,7 @@ A snippet whose text is hidden in Quick Search and Settings, left out of search,
 _Avoid_: Secret, password snippet
 
 **Snippets tab**:
-Quick Search's tab (⌘5) that lists snippets. Return or ⌘C copies one, ⌘V pastes it into the app in front, and ⌘E edits it.
+Quick Search's tab that lists snippets. Return or ⌘C copies one, ⌘V pastes it into the app in front, and ⌘E edits it.
 _Avoid_: Snippet library, snippet manager
 
 **Timer**:
@@ -183,7 +183,7 @@ The card that stays at the top of the screen when a timer ends, ringing unless s
 _Avoid_: Notification, banner, popup
 
 **Timers tab**:
-Quick Search's tab (⌘6) where you type a duration such as `5m` or `tea 25` to start a timer, and pause, restart, or delete the timers listed under it. A click on a row does what Return does.
+Quick Search's tab where you type a duration such as `5m` or `tea 25` to start a timer, and pause, restart, or delete the timers listed under it. A click on a row does what Return does.
 _Avoid_: Timer list, timer manager
 
 **Emoji Picker**:
@@ -191,7 +191,7 @@ Finding an emoji by its name, a keyword, or its `:shortcode:`, then copying it o
 _Avoid_: Emoji keyboard, character viewer
 
 **Emoji tab**:
-Quick Search's tab (⌘7) for the Emoji Picker: a grid of recent emoji and Unicode's groups to browse, or a ranked list once you type. A click, Return, or ⌘C copies; ⌘V pastes and puts the clipboard back.
+Quick Search's tab for the Emoji Picker: a grid of recent emoji and Unicode's groups to browse, or a ranked list once you type. A click, Return, or ⌘C copies; ⌘V pastes and puts the clipboard back.
 _Avoid_: Emoji grid, emoji search
 
 **Recent emoji**:
@@ -203,7 +203,7 @@ Translating text between your two languages on this Mac, with Apple's Translatio
 _Avoid_: Translator, Translate (the tab's name)
 
 **Translate tab**:
-Quick Search's tab (⌘8) for Translation: what you type or paste in the search field, translated as you type. Return saves the translation to recent translations and clears the field; ⌘Return saves it and pastes it, then puts the clipboard back. ⌘V pastes into the field, as in any text field. ⌘T or the swap button translates the text the other way, and the target language in the header is a menu for picking another; either lasts until the text changes. A target picked for text detected in my language also becomes Other language. With the field empty, it lists recent translations.
+Quick Search's tab for Translation: what you type or paste in the search field, translated as you type. Return saves the translation to recent translations and clears the field; ⌘Return saves it and pastes it, then puts the clipboard back. ⌘V pastes into the field, as in any text field. ⌘T or the swap button translates the text the other way, and the target language in the header is a menu for picking another; either lasts until the text changes. A target picked for text detected in my language also becomes Other language. With the field empty, it lists recent translations.
 _Avoid_: Translation window, translator
 
 **Recent translations**:
@@ -224,7 +224,7 @@ _Avoid_: Keycast, overlay, HUD, bezel (one of its two styles)
 
 **Recording**:
 A video ScreenGrabs made of an area, a window, or the screens, with the microphone and the Mac's sound (ADR 0009), kept on this Mac in a folder of its own in the recordings folder until the person deletes it, or sends it to a destination and has the copy deleted; a recording of every screen holds one video per display. Record Screen (⇧⌘5, or Quick Search) starts one. A screenshot isn't one.
-_Avoid_: Capture (Screencast's word, which also meant screenshots), screencast, video (one display's file), screen recording (macOS's permission; only the ⌘3 tile's name says "Screen Recording <date>", as macOS names its own recordings), Dictation's audio
+_Avoid_: Capture (Screencast's word, which also meant screenshots), screencast, video (one display's file), screen recording (macOS's permission; only a ScreenGrabs tab tile's name says "Screen Recording <date>", as macOS names its own recordings), Dictation's audio
 
 **Recordings folder**:
 Where recordings are saved, each in a folder of its own: the folder chosen in Settings › ScreenGrabs, apart from the Screenshots folder, or, until one is, the folder macOS saves screenshots to (else the Desktop). A chosen folder that's gone or can't be written to falls back the same way. Recordings saved before #504 stay in `~/Documents/Keybumps/captures` (`ProductPaths.captures`), still listed.

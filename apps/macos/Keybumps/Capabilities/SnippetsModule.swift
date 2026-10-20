@@ -13,7 +13,7 @@ extension CapabilityDescriptor {
         paletteTab: CapabilityPaletteTab(
             tab: .snippets,
             name: "Snippets",
-            commandKey: 5,
+            defaultPosition: 5,
             systemImage: "text.quote",
             prompt: "Search snippets",
             primaryActionTitle: "Copy",

@@ -134,15 +134,16 @@ struct CapabilityModuleTests {
         #expect(harness.model.recentTranslations.records.map(\.sourceText) == ["Hello"])
     }
 
-    @Test("A plugin that's off has no tab in the bar, and its Command-number does nothing, unless its tab is on screen")
+    @Test("A plugin that's off has no tab in the bar, unless its tab is on screen, and the tabs after it take the next keys")
     func offPluginsHaveNoTab() {
         let enabled = Set(Capability.allCases).subtracting([.emojiPicker, .clipboardHistory])
         // On macOS 14, where ScreenGrabs can't record, its tab lists only Clipboard History's screenshots.
         let macOS14 = PluginCompatibility(macOSMajorVersion: 14)
         let tabs = CommandPaletteTab.visibleTabs(hidden: [.keyboardShortcutter], selected: .search, enabled: enabled, compatibility: macOS14)
         #expect(tabs == [.search, .dictation, .snippets, .timers, .translate], "ScreenGrabs lists Clipboard History, so it goes too")
-        #expect(CommandPaletteTab.matchingCommandKey("7", in: tabs) == nil)
-        #expect(CommandPaletteTab.matchingCommandKey("6", in: tabs) == .timers, "Numbers stay fixed")
+        #expect(CommandPaletteTab.matchingCommandKey("2", in: tabs) == .dictation, "Keys never skip a tab")
+        #expect(CommandPaletteTab.matchingCommandKey("4", in: tabs) == .timers)
+        #expect(CommandPaletteTab.matchingCommandKey("6", in: tabs) == nil, "Five tabs, five keys")
         #expect(CommandPaletteTab.visibleTabs(hidden: [.keyboardShortcutter], selected: .emoji, enabled: enabled).contains(.emoji))
         // Where it records, its recordings keep it in the bar (#494).
         let recording = CommandPaletteTab.visibleTabs(
@@ -168,7 +169,7 @@ struct CapabilityModuleTests {
     @Test("Palette tabs and Settings pages come from their owning modules")
     func sharedSurfacesComeFromModules() {
         let tabs = CapabilityCatalog.paletteTabs
-        #expect(tabs.map(\.commandKey) == [1, 2, 3, 4, 5, 6, 7, 8, 9])
+        #expect(tabs.map(\.defaultPosition) == [1, 2, 3, 4, 5, 6, 7, 8, 9])
         #expect(Set(tabs.map(\.tab)).count == tabs.count)
         for rawValue in ["search", "clipboard", "dictation", "keyboardShortcutter", "screenshots", "snippets", "timers", "emoji", "translate"] {
             #expect(CommandPaletteTab(rawValue: rawValue).map(CommandPaletteTab.allCases.contains) == true)
