@@ -323,7 +323,7 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(waitForText(of: searchKey, "Tab key ⌘1"))
 
         // Up: Snippets dropped on the top of the Search row goes first.
-        snippetsKey.press(
+        snippetsKey.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(
             forDuration: 0.5,
             thenDragTo: element("settings.quickSearch.tab.search").coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.15))
         )
@@ -332,7 +332,7 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(waitForEnabled(element("settings.quickSearch.resetOrder"), true))
 
         // Down: Snippets dropped on the bottom of the Clipboard row lands below it.
-        snippetsKey.press(
+        snippetsKey.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(
             forDuration: 0.5,
             thenDragTo: element("settings.quickSearch.tab.clipboard").coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85))
         )
