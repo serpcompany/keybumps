@@ -227,6 +227,36 @@ struct QuickSearchTabOrderTests {
         #expect(palette.openingTab == .snippets)
     }
 
+    @Test("In the palette, an open hidden tab takes no ⌘-number, and Left and Right reach the tabs beside it")
+    func paletteKeysSkipAnOpenHiddenTab() {
+        let fixture = OrderPaletteFixture()
+        defer { fixture.tearDown() }
+        // The Hotkeys tab starts hidden. Placed before Clipboard History, it's open in the tab bar
+        // there, as when its capability command opens it, between the Search and Clipboard tabs.
+        fixture.preferences.moveTab(.keyboardShortcutter, to: .clipboard)
+        #expect(fixture.preferences.visiblePaletteTabs(selected: .keyboardShortcutter)
+            == [.search, .keyboardShortcutter, .clipboard, .screenshots, .dictation, .snippets, .timers])
+        let palette = fixture.palette
+
+        palette.selectOnOpening(.keyboardShortcutter)
+        #expect(palette.handleKeyDown(Self.key(kVK_ANSI_3, "3", modifiers: .command)) == nil)
+        #expect(palette.state.tab == .screenshots, "⌘3 is the third tab shown, not counting the open Hotkeys tab")
+        #expect(!fixture.preferences.visiblePaletteTabs(selected: palette.state.tab).contains(.keyboardShortcutter),
+                "Once you leave it, the Hotkeys tab is out of the tab bar")
+
+        palette.selectOnOpening(.keyboardShortcutter)
+        #expect(palette.handleKeyDown(Self.key(kVK_ANSI_2, "2", modifiers: .command)) == nil)
+        #expect(palette.state.tab == .clipboard, "⌘2 is the second tab shown")
+
+        palette.selectOnOpening(.keyboardShortcutter)
+        #expect(palette.handleKeyDown(Self.key(kVK_LeftArrow)) == nil)
+        #expect(palette.state.tab == .search, "Left reaches the tab before it in the order")
+
+        palette.selectOnOpening(.keyboardShortcutter)
+        #expect(palette.handleKeyDown(Self.key(kVK_RightArrow)) == nil)
+        #expect(palette.state.tab == .clipboard, "Right reaches the tab after it in the order")
+    }
+
     static func key(_ keyCode: Int, _ characters: String = "", modifiers: NSEvent.ModifierFlags = []) -> NSEvent {
         let isArrow = [kVK_LeftArrow, kVK_RightArrow, kVK_DownArrow, kVK_UpArrow].contains(keyCode)
         return NSEvent.keyEvent(

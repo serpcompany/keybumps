@@ -269,17 +269,18 @@ final class SmokeUITests: XCTestCase {
         let reset = element("settings.quickSearch.resetOrder")
         XCTAssertTrue(reset.waitForExistence(timeout: 5))
         XCTAssertTrue(waitForEnabled(reset, false), "Nothing to reset in the default order")
+        // A tab key is static text, so macOS reports its accessibility label as its value.
         let snippetsKey = element("settings.quickSearch.key.snippets")
-        XCTAssertTrue(waitForLabel(of: snippetsKey, "Tab key ⌘5"))
-        XCTAssertTrue(waitForLabel(of: element("settings.quickSearch.key.keyboardShortcutter"), "Not in the tab bar"), "The Hotkeys tab starts hidden")
+        XCTAssertTrue(waitForText(of: snippetsKey, "Tab key ⌘5"))
+        XCTAssertTrue(waitForText(of: element("settings.quickSearch.key.keyboardShortcutter"), "Not in the tab bar"), "The Hotkeys tab starts hidden")
 
         // Snippets up to first.
         let up = element("settings.quickSearch.moveUp.snippets")
         for place in [4, 3, 2, 1] {
             up.click()
-            XCTAssertTrue(waitForLabel(of: snippetsKey, "Tab key ⌘\(place)"), "Snippets moves up to ⌘\(place)")
+            XCTAssertTrue(waitForText(of: snippetsKey, "Tab key ⌘\(place)"), "Snippets moves up to ⌘\(place)")
         }
-        XCTAssertTrue(waitForLabel(of: element("settings.quickSearch.key.search"), "Tab key ⌘2"))
+        XCTAssertTrue(waitForText(of: element("settings.quickSearch.key.search"), "Tab key ⌘2"))
         XCTAssertTrue(waitForEnabled(up, false), "The first tab can't move up")
         XCTAssertTrue(waitForEnabled(reset, true))
 
@@ -298,16 +299,16 @@ final class SmokeUITests: XCTestCase {
 
         // Reset Order puts the keys back and turns itself off.
         reset.click()
-        XCTAssertTrue(waitForLabel(of: snippetsKey, "Tab key ⌘5"))
-        XCTAssertTrue(waitForLabel(of: element("settings.quickSearch.key.search"), "Tab key ⌘1"))
+        XCTAssertTrue(waitForText(of: snippetsKey, "Tab key ⌘5"))
+        XCTAssertTrue(waitForText(of: element("settings.quickSearch.key.search"), "Tab key ⌘1"))
         XCTAssertTrue(waitForEnabled(reset, false))
 
         // A hidden tab has no key, and the tabs after it move up; hiding one leaves the order alone.
         let clipboardSwitch = element("settings.quickSearch.show.clipboard")
         XCTAssertTrue(clipboardSwitch.waitForExistence(timeout: 5), "Every tab whose plugin is on has a show switch")
         clipboardSwitch.click()
-        XCTAssertTrue(waitForLabel(of: element("settings.quickSearch.key.clipboard"), "Not in the tab bar"))
-        XCTAssertTrue(waitForLabel(of: element("settings.quickSearch.key.screenshots"), "Tab key ⌘2"), "The tabs after it move up")
+        XCTAssertTrue(waitForText(of: element("settings.quickSearch.key.clipboard"), "Not in the tab bar"))
+        XCTAssertTrue(waitForText(of: element("settings.quickSearch.key.screenshots"), "Tab key ⌘2"), "The tabs after it move up")
         XCTAssertTrue(waitForEnabled(reset, false), "Hiding a tab doesn't change the order")
     }
 

@@ -1,6 +1,6 @@
 # 0012: The window is Quick Search, and its first tab is the Search tab
 
-Status: Accepted (2026-10-19). Tracked by #553. Supersedes `CONTEXT.md`'s Command Palette term and its "_Avoid_: Quick Search panel"; see "Superseded".
+Status: Accepted (2026-10-19). Tracked by #553. Supersedes `CONTEXT.md`'s Command Palette term and its "_Avoid_: Quick Search panel"; see "Superseded". Amended 2026-10-20 (#553 PR 3, #592): decision 3's keys go by place among the tabs shown, in Settings › Quick Search's order, so ⌘1 is the first tab shown; a hidden tab, or one whose plugin is off, has no key (`CommandPaletteTab.tabKey`).
 
 ## Context
 
