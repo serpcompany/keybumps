@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.3-beta.30](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.29...v0.0.3-beta.30) (2026-10-20)
+
+
+### Features
+
+* **quick-search:** reorder tabs in Settings › Quick Search, and tab keys follow the order ([#592](https://github.com/serpcompany/keybumps/issues/592)) ([e126dee](https://github.com/serpcompany/keybumps/commit/e126dee7520c986d46c91216eb9ac9575ef7caa8))
+* **quick-search:** Settings › Quick Search is the window's page, where the Search and Hotkeys tabs show or hide ([#590](https://github.com/serpcompany/keybumps/issues/590)) ([e8ffb54](https://github.com/serpcompany/keybumps/commit/e8ffb5403dc862d913465200b275c468f2ecf345))
+* **quick-search:** the Command Palette is now Quick Search, its first tab the Search tab ([#581](https://github.com/serpcompany/keybumps/issues/581)) ([2f4a152](https://github.com/serpcompany/keybumps/commit/2f4a152851cfa73909238b3bfa9f6da2925cce7f))
+
 ## [0.0.3-beta.29](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.28...v0.0.3-beta.29) (2026-10-19)
 
 
