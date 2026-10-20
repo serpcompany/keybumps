@@ -253,7 +253,8 @@ function AtAGlance({ plugin }: { plugin: Plugin }) {
       label: 'Command Palette tab',
       value: tab ? (
         <span className="glance-tab">
-          {tab.name} <Keycaps keys={`⌘${tab.commandKey}`} />
+          {tab.name} <Keycaps keys={`⌘${tab.commandKey}`} />{' '}
+          <span className="glance-note">by default</span>
           {tab.hiddenUnless && <span className="glance-note">once you turn it on</span>}
         </span>
       ) : (
@@ -322,7 +323,7 @@ function Commands({ plugin }: { plugin: Plugin }) {
               <span className="command-note">
                 {tab.hiddenUnless
                   ? `Command Palette, once you turn on “${tab.hiddenUnless}”`
-                  : 'Command Palette'}
+                  : 'Command Palette, key by default'}
               </span>
             </span>
             <Keycaps keys={`⌘${tab.commandKey}`} />

@@ -54,7 +54,7 @@ const featured: readonly {
       'Copy an image file in Finder and get the image, not its icon',
       'Screenshots you take land here, ready to paste'
     ],
-    options: { label: 'Opens with', values: ['⇧⌘ Space', '⌘2 in the palette'] },
+    options: { label: 'Opens with', values: ['⇧⌘ Space', '⌘2 in the palette by default'] },
     visual: <ClipboardVisual />
   },
   {
@@ -110,7 +110,10 @@ const featured: readonly {
       'Sensitive snippets keep their text hidden and out of search',
       'Bring your snippets over from Alfred'
     ],
-    options: { label: 'Use them', values: ['⌘5 in the palette', 'Quick Search', 'Type a keyword'] },
+    options: {
+      label: 'Use them',
+      values: ['⌘5 in the palette by default', 'Quick Search', 'Type a keyword']
+    },
     visual: <SnippetsVisual />
   }
 ]
@@ -281,7 +284,8 @@ export default async function Home() {
               <h3>Jump to a tab</h3>
               <p>
                 Clipboard, ScreenGrabs, Dictation, Snippets, and Timers, plus Emoji and Translate
-                once you turn on their plugins.
+                once you turn on their plugins. These are the default keys; Settings › Quick Search
+                sets the order.
               </p>
               <span className="keycaps">
                 <kbd>⌘</kbd>

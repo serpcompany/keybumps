@@ -126,7 +126,9 @@ function PluginCard({ plugin }: { plugin: Plugin }) {
           {commands} {commands === 1 ? 'command' : 'commands'}
         </span>
         {plugin.paletteTab && (
-          <span title={`Its Command Palette tab, ${plugin.paletteTab.name}`}>
+          <span
+            title={`Its Command Palette tab, ${plugin.paletteTab.name}, ⌘${plugin.paletteTab.commandKey} by default`}
+          >
             <kbd>⌘{plugin.paletteTab.commandKey}</kbd>
           </span>
         )}

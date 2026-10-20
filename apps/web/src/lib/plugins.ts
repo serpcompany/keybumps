@@ -365,7 +365,7 @@ export const plugins: readonly Plugin[] = [
         keys: '⇧⌘4'
       },
       {
-        text: 'Open the Command Palette and press ⌘3 for the ScreenGrabs tab, which lists your screenshots and recordings. ⌘Return marks a screenshot up or opens a recording.',
+        text: 'Open the Command Palette and press ⌘3 by default for the ScreenGrabs tab, which lists your screenshots and recordings. ⌘Return marks a screenshot up or opens a recording.',
         keys: '⌘3'
       },
       {
@@ -401,7 +401,7 @@ export const plugins: readonly Plugin[] = [
       },
       {
         q: 'Where do I find my recordings?',
-        a: 'In the ScreenGrabs tab (⌘3), beside your screenshots, newest first: every recording, wherever it’s saved. Return copies one, ⌘E (or ⌘Return) opens it in the recording window, and with the search field empty, Space plays it in Quick Look. Delete asks, then moves it to the Trash.'
+        a: 'In the ScreenGrabs tab (⌘3 by default), beside your screenshots, newest first: every recording, wherever it’s saved. Return copies one, ⌘E (or ⌘Return) opens it in the recording window, and with the search field empty, Space plays it in Quick Look. Delete asks, then moves it to the Trash.'
       }
     ],
     keeps: [
@@ -680,7 +680,10 @@ export const plugins: readonly Plugin[] = [
     ],
     howTo: [
       { text: 'Save text you reuse with a name and, if you like, a keyword such as ;ship.' },
-      { text: 'Open the Command Palette and press ⌘5 for the Snippets tab.', keys: '⌘5' },
+      {
+        text: 'Open the Command Palette and press ⌘5 by default for the Snippets tab.',
+        keys: '⌘5'
+      },
       {
         text: 'Press Return to copy a snippet, or ⌘V to paste it into the app you’re using.',
         keys: '↩'
@@ -733,7 +736,7 @@ export const plugins: readonly Plugin[] = [
       'Turn off the ringing, the menu bar countdown, or the menu list in Settings'
     ],
     howTo: [
-      { text: 'Open the Command Palette and press ⌘6 for the Timers tab.', keys: '⌘6' },
+      { text: 'Open the Command Palette and press ⌘6 by default for the Timers tab.', keys: '⌘6' },
       { text: 'Type a duration, such as 5m, 1h30m, or tea 25, and press Return.', keys: '↩' },
       { text: 'Watch it count down in the menu bar. When it ends, click Stop or Repeat.' }
     ],
@@ -775,7 +778,7 @@ export const plugins: readonly Plugin[] = [
     requires: [],
     isDefault: false,
     overview: [
-      'Emoji Picker finds any emoji by name and puts it where you’re typing. Open the Emoji tab of the Command Palette with ⌘7 and browse, or type a name, a keyword, or a :shortcode: such as thumbs, +1, or :joy:.',
+      'Emoji Picker finds any emoji by name and puts it where you’re typing. Open the Emoji tab of the Command Palette with ⌘7 by default and browse, or type a name, a keyword, or a :shortcode: such as thumbs, +1, or :joy:.',
       'Return copies the emoji, and ⌘V pastes it into the app you were using, then puts your clipboard back. It ships turned off: turn it on in Settings › Plugins.'
     ],
     features: [
@@ -788,7 +791,7 @@ export const plugins: readonly Plugin[] = [
     ],
     howTo: [
       { text: 'Turn it on in Settings › Plugins.' },
-      { text: 'Open the Command Palette and press ⌘7 for the Emoji tab.', keys: '⌘7' },
+      { text: 'Open the Command Palette and press ⌘7 by default for the Emoji tab.', keys: '⌘7' },
       {
         text: 'Type a name, a keyword, or a :shortcode:, then press Return to copy it or ⌘V to paste it.',
         keys: '↩'
@@ -832,7 +835,7 @@ export const plugins: readonly Plugin[] = [
     isDefault: false,
     minimumMacOS: '15',
     overview: [
-      'Understand text in another language and answer in it, without switching apps. Open the Translate tab of the Command Palette with ⌘8, then type or paste: it translates as you type. Text in your language goes to your other language, and anything else comes back to yours.',
+      'Understand text in another language and answer in it, without switching apps. Open the Translate tab of the Command Palette with ⌘8 by default, then type or paste: it translates as you type. Text in your language goes to your other language, and anything else comes back to yours.',
       'Press Return to save the translation, or ⌘Return to save it and paste it into the app you were using. With the field empty, the tab lists your last 50 saved translations to copy, paste, or hear read aloud. Translation needs macOS 15 or later and ships turned off: turn it on in Settings › Plugins.'
     ],
     features: [
@@ -850,7 +853,7 @@ export const plugins: readonly Plugin[] = [
     howTo: [
       { text: 'Turn it on in Settings › Plugins. It needs macOS 15 or later.' },
       {
-        text: 'Open the Command Palette, press ⌘8 for the Translate tab, and type or paste your text.',
+        text: 'Open the Command Palette, press ⌘8 by default for the Translate tab, and type or paste your text.',
         keys: '⌘8'
       },
       {
