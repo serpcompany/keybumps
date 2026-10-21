@@ -7,16 +7,30 @@ import { describe, expect, it } from 'vitest'
 // PR that doesn't touch its files. So each workflow runs on all PRs and groups: its `changes` job
 // decides whether the slow job runs, and a last gate job, which carries the required check's name,
 // passes only if the suite passed or was skipped because the change touches none of its files (SERP
-// ci-workflows: "Skip docs-only changes inside the workflow").
+// ci-workflows: "Skip docs-only changes inside the workflow"). Release Keybumps calls the two Mac
+// test workflows (`release`), which also decide from a release's tested commit (#615).
 const workflows = [
   {
     file: 'keybumps-unit-tests.yml',
     job: 'unit',
     gate: 'unit-tests',
-    check: 'Unit tests (KeybumpsTests)'
+    check: 'Unit tests (KeybumpsTests)',
+    release: true
   },
-  { file: 'keybumps-ui-tests.yml', job: 'ui', gate: 'ui-tests', check: 'UI tests (with retries)' },
-  { file: 'web.yml', job: 'check', gate: 'website-check', check: 'Website check (pnpm check)' }
+  {
+    file: 'keybumps-ui-tests.yml',
+    job: 'ui',
+    gate: 'ui-tests',
+    check: 'UI tests (with retries)',
+    release: true
+  },
+  {
+    file: 'web.yml',
+    job: 'check',
+    gate: 'website-check',
+    check: 'Website check (pnpm check)',
+    release: false
+  }
 ]
 
 const read = (name: string) =>
@@ -24,6 +38,9 @@ const read = (name: string) =>
     fileURLToPath(new URL(`../../../../.github/workflows/${name}`, import.meta.url)),
     'utf8'
   )
+
+/** A workflow expression, `${{ … }}`, as the file spells it. */
+const expression = (inner: string) => `\${{ ${inner} }}`
 
 /** One job's text, from its `  <id>:` line to the next job's. */
 function job(workflow: string, id: string): string {
@@ -33,7 +50,7 @@ function job(workflow: string, id: string): string {
   return next === -1 ? workflow.slice(start) : workflow.slice(start, start + 1 + next)
 }
 
-describe.each(workflows)('$file', ({ file, job: slow, gate, check }) => {
+describe.each(workflows)('$file', ({ file, job: slow, gate, check, release }) => {
   const workflow = read(file)
   const trigger = workflow.slice(workflow.indexOf('\non:\n'), workflow.indexOf('\npermissions:'))
 
@@ -47,10 +64,11 @@ describe.each(workflows)('$file', ({ file, job: slow, gate, check }) => {
     expect(trigger).toContain('merge_group:\n    types: [checks_requested]')
   })
 
-  it('decides only on pull requests and merge queue groups, in a changes job, whether the slow job runs', () => {
+  it('decides only on pull requests and merge queue groups (and releases with a tested commit), in a changes job, whether the slow job runs', () => {
     const changes = job(workflow, 'changes')
+    const fromRelease = release ? " || inputs.tested_base != ''" : ''
     expect(changes).toContain(
-      "if: github.event_name == 'pull_request' || github.event_name == 'merge_group'"
+      `if: github.event_name == 'pull_request' || github.event_name == 'merge_group'${fromRelease}\n`
     )
     // In the queue the diff starts at main, not at the group's base_sha (the commit of the entry
     // ahead): otherwise a docs-only PR's group would skip a suite that an app-code PR ahead of it,
@@ -59,9 +77,19 @@ describe.each(workflows)('$file', ({ file, job: slow, gate, check }) => {
       /BASE: \$\{\{ github\.event\.pull_request\.base\.sha \|\| github\.event\.merge_group\.base_ref \}\}/
     )
     expect(changes).not.toContain('merge_group.base_sha')
-    expect(changes).toMatch(
-      /HEAD_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.event\.merge_group\.head_sha \}\}/
+    expect(changes).toContain(
+      `HEAD_SHA: \${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha${release ? ' || github.sha' : ''} }}\n`
     )
+    // Only Release Keybumps passes a tested commit; an empty one runs the suite.
+    if (release) {
+      expect(changes).toContain(`TESTED_BASE: ${expression('inputs.tested_base')}\n`)
+      expect(trigger).toContain('  workflow_call:\n    inputs:\n')
+      expect(trigger).toMatch(
+        / {6}tested_base:\n {8}required: false\n {8}type: string\n {8}default: ""\n/
+      )
+    } else {
+      expect(workflow).not.toContain('tested_base')
+    }
     expect(changes).toContain('run: .github/scripts/pr-touches.sh ')
     const suite = job(workflow, slow)
     expect(suite).toMatch(/^ {4}needs: changes$/m)
@@ -110,6 +138,16 @@ it("runs the website check on every workflow file, since the site's tests read t
   }
 })
 
+it('runs the website check on every script in .github/scripts, since the site runs their tests', () => {
+  const pattern = new RegExp(read('web.yml').match(/pr-touches\.sh '([^']+)'/)?.[1] ?? '$^')
+  const dir = fileURLToPath(new URL('../../../../.github/scripts/', import.meta.url))
+  const files = readdirSync(dir).filter(file => file.endsWith('.sh'))
+  expect(files).toContain('last-tested.sh')
+  for (const file of files) {
+    expect(pattern.test(`.github/scripts/${file}`), file).toBe(true)
+  }
+})
+
 it('gives no other job a required check name, which could report it without running the suite', () => {
   const required = workflows.map(({ check }) => check)
   const dir = fileURLToPath(new URL('../../../../.github/workflows/', import.meta.url))
@@ -120,4 +158,72 @@ it('gives no other job a required check name, which could report it without runn
       expect(name, `${file} has a job named "${name}"`).toBe(own)
     }
   }
+})
+
+// Release Keybumps runs the unit and UI suites before it builds, but each only if the files it covers
+// changed since a commit where it passed, normally in the merge queue (owner, 2026-10-21, #615). The
+// lookup (.github/scripts/last-tested.sh, tested in last-tested.test.ts) must never stop a release,
+// and only the test workflows' own gates decide a skip.
+describe('release.yml', () => {
+  const release = read('release.yml')
+  const tested = job(release, 'tested')
+  const steps = tested.split('      - name: ').slice(1)
+  const suites = [
+    { id: 'unit-tests', file: 'keybumps-unit-tests.yml', output: 'unit', slow: 'unit' },
+    { id: 'ui-tests', file: 'keybumps-ui-tests.yml', output: 'ui', slow: 'ui' }
+  ]
+
+  // A branch's commits can carry pull request runs, which tested the branch merged into main.
+  it('looks up tested commits only from main, with read permissions only, and never fails', () => {
+    expect(tested).toContain("if: github.ref == 'refs/heads/main'\n")
+    expect(tested).toMatch(/^ {4}continue-on-error: true$/m)
+    expect(tested).toMatch(/^ {4}permissions:\n {6}contents: read\n {6}checks: read\n {4}outputs:/m)
+    expect(steps).toHaveLength(3)
+    for (const step of steps) expect(step).toMatch(/^ {8}continue-on-error: true$/m)
+    expect(steps[0]).toMatch(
+      /persist-credentials: false\n {10}sparse-checkout: \.github\/scripts\n/
+    )
+  })
+
+  it.each(suites)(
+    "passes $file the commit where its suite's exact job name last passed",
+    ({ id, file, output, slow }) => {
+      const name = job(read(file), slow).match(/^ {4}name: (.+)$/m)?.[1]
+      expect(name).toBeDefined()
+      const step = steps.find(text => text.includes(`id: ${output}\n`))
+      expect(step).toContain(`HEAD_SHA: ${expression('github.sha')}\n`)
+      expect(step).toContain(`run: .github/scripts/last-tested.sh '${name}'\n`)
+      expect(tested).toContain(`${output}: \${{ steps.${output}.outputs.sha }}\n`)
+      const caller = job(release, id)
+      expect(caller).toContain(`uses: ./.github/workflows/${file}\n`)
+      expect(caller).toContain(`tested_base: \${{ needs.tested.outputs.${output} }}\n`)
+    }
+  )
+
+  it.each(suites)('runs $file even if the lookup failed or was skipped', ({ id }) => {
+    const caller = job(release, id)
+    expect(caller).toMatch(/^ {4}needs: tested$/m)
+    expect(caller).toContain(`if: ${expression('!cancelled()')}\n`)
+  })
+
+  // A job's default condition also needs every job before its needs to have succeeded, so without
+  // these a failed or skipped lookup would skip the build and production.
+  it('builds and publishes only after both suites pass or skip on purpose, whatever the lookup did', () => {
+    const build = job(release, 'build')
+    expect(build).toMatch(/^ {4}needs: \[unit-tests, ui-tests\]$/m)
+    expect(build).toContain(
+      `if: ${expression("!cancelled() && needs.unit-tests.result == 'success' && needs.ui-tests.result == 'success'")}\n`
+    )
+    const production = job(release, 'production')
+    expect(production).toMatch(/^ {4}needs: build$/m)
+    expect(production).toContain(
+      `if: ${expression("!cancelled() && inputs.publish && needs.build.result == 'success'")}\n`
+    )
+  })
+
+  // A called workflow can't have more permissions than its caller grants.
+  it('gets the check runs permission from release-please, and nothing broader', () => {
+    const caller = job(read('release-please.yml'), 'release')
+    expect(caller).toMatch(/^ {4}permissions:\n {6}contents: read\n {6}checks: read\n {4}uses: /m)
+  })
 })

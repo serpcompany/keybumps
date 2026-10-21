@@ -1,15 +1,23 @@
 name: Keybumps unit tests
 
 # Runs on every pull request and in the merge queue (its unit job only when the change touches
-# app code or the release notes the tests read), as the first gate of Release Keybumps, and
-# manually from Actions. No nightly schedule. The `changes` job's pattern names apps/macos/
-# directly, as the guard test reads it; keep it in step with APP_DIR.
+# app code or the release notes the tests read), as the first gate of Release Keybumps (its unit job
+# only when those files changed since the suite last passed, #615), and manually from Actions. No
+# nightly schedule. The `changes` job's pattern names apps/macos/ directly, as the guard test reads
+# it; keep it in step with APP_DIR.
 on:
   pull_request:
     branches: [main]
   merge_group:
     types: [checks_requested]
   workflow_call:
+    inputs:
+      # From Release Keybumps: the newest commit where this suite passed
+      # (.github/scripts/last-tested.sh). Empty runs the suite.
+      tested_base:
+        required: false
+        type: string
+        default: ""
   workflow_dispatch:
 
 permissions:
@@ -32,9 +40,9 @@ jobs:
   # This job decides whether the slow job below runs (.github/scripts/pr-touches.sh).
   changes:
     name: Changed paths
-    # Only pull requests and merge queue groups choose; every other event (the release gate,
-    # a manual run) runs the suite.
-    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    # Only pull requests, merge queue groups, and a release with a tested commit choose; every
+    # other event (a manual run, a release with none) runs the suite.
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group' || inputs.tested_base != ''
     runs-on: ubuntu-latest
     timeout-minutes: 5
     defaults:
@@ -56,7 +64,9 @@ jobs:
           # In the queue, main itself, not the group's base_sha (the entry ahead's commit, if
           # any), so the diff also covers every queued PR ahead that hasn't merged yet.
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_ref }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
+          # A release's tested commit, which the script diffs from in BASE's place.
+          TESTED_BASE: ${{ inputs.tested_base }}
         run: .github/scripts/pr-touches.sh '^(apps/macos/|docs/releases/v[^/]*\.md$|\.github/workflows/keybumps-unit-tests\.yml$|\.github/scripts/pr-touches\.sh$)'
 
   unit:
