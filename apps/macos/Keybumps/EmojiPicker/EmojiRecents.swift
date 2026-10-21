@@ -6,7 +6,7 @@ import Foundation
 @MainActor
 @Observable
 final class EmojiRecents {
-    static let fileName = "emoji-recent.json"
+    nonisolated static let fileName = "emoji-recent.json"
     static let limit = 24
 
     private(set) var glyphs: [String]
@@ -21,7 +21,7 @@ final class EmojiRecents {
     }
 
     static func makeDefault() -> EmojiRecents {
-        EmojiRecents(storageURL: ProductPaths.keybumps().keybumpsFolder.appendingPathComponent(fileName))
+        EmojiRecents(storageURL: ProductPaths.keybumps().inUse(.emojiRecents))
     }
 
     /// Moves an emoji to the front, keeping the newest `limit`.

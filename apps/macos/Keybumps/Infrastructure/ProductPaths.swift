@@ -1,16 +1,15 @@
 import Foundation
 
-/// Where Keybumps keeps its files (ADR 0013). Every plugin that keeps history keeps it in its own
+/// Where Keybumps keeps its files (ADR 0013). Every plugin that saves files keeps them in its own
 /// folder in the Keybumps folder, `~/Library/Application Support/Keybumps`, which never syncs.
 struct ProductPaths: Equatable {
-    /// The Keybumps folder, `~/Library/Application Support/Keybumps`: each plugin's folder, and at
-    /// its top level the app's own state (emoji, Search's recents and usage, timers) and `DictationModels/`.
+    /// The Keybumps folder, `~/Library/Application Support/Keybumps`: a folder for each plugin that
+    /// saves files, and nothing else at its top level.
     let keybumpsFolder: URL
     /// `~/Documents/Keybumps`, where Dictation History (`recordings/`) and ScreenGrabs' recordings
     /// before #504 (`captures/`) were kept until #602. Nothing writes there now: the one-time move
     /// (`KeybumpsFolderMove`) empties it, and removes it once it's empty.
     let oldDocumentsFolder: URL
-    let dictationModels: URL
     let translatedSpeechTemporary: URL
     /// Keybumps's caches, such as recordings' poster frames: `~/Library/Caches/Keybumps`.
     let caches: URL
@@ -18,10 +17,20 @@ struct ProductPaths: Equatable {
     /// (`inUse(_:)`). Empty under the unit-test host and in UI test mode.
     var leftInOldPlace: Set<KeybumpsFolderItem> = []
 
-    /// Dictation History, one folder per dictation, and `last-dictation.txt`.
+    /// Dictation's folder: `recordings/`, `models/`, and `last-dictation.txt`.
     var dictation: URL { folder("dictation") }
+    /// Dictation History, one folder per dictation.
+    var dictationRecordings: URL { dictation.appendingPathComponent("recordings", isDirectory: true) }
+    /// Dictation's downloaded models, a folder per engine (`DictationModelManager`).
+    var dictationModels: URL { dictation.appendingPathComponent("models", isDirectory: true) }
     /// `clipboard-history.json`, and each image's copy in `media/`.
     var clipboardHistory: URL { folder("clipboard_history") }
+    /// Emoji Picker's recent emoji, `emoji-recent.json`.
+    var emojiPicker: URL { folder("emoji_picker") }
+    /// Quick Search's Recent Items and learned usage, `recent-items.json` and `application-usage.json`.
+    var quickSearch: URL { folder("quick_search") }
+    /// The Timers tab's countdowns, `timers.json`.
+    var timers: URL { folder("timers") }
     var translations: URL { folder("translations") }
     var snippets: URL { folder("snippets") }
     /// Shortcut Coach's history, `coaching-events.json`.
@@ -93,7 +102,6 @@ struct ProductPaths: Equatable {
         return ProductPaths(
             keybumpsFolder: keybumpsFolder,
             oldDocumentsFolder: documentsRoot.appendingPathComponent(productDirectoryName, isDirectory: true),
-            dictationModels: keybumpsFolder.appendingPathComponent("DictationModels", isDirectory: true),
             translatedSpeechTemporary: temporaryRoot
                 .appendingPathComponent(productDirectoryName, isDirectory: true)
                 .appendingPathComponent("TranslatedAudio", isDirectory: true),

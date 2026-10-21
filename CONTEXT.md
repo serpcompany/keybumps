@@ -51,7 +51,7 @@ The Keybumps window where capabilities are turned on and configured. Quick Searc
 _Avoid_: Preferences, Settings panel
 
 **Keybumps folder**:
-Where Keybumps keeps what it saves on this Mac, `~/Library/Application Support/Keybumps`, a folder that never syncs (ADR 0013). Each plugin that keeps history has its own folder in it: `dictation/`, `clipboard_history/`, `translations/`, `snippets/`, `shortcut_coach/`, and `screengrabs/`. Settings › General shows it with Show in Finder, and each of those plugins' pages shows its own folder. Caches and temporary files are elsewhere, and ScreenGrabs' Screenshots and Recordings folders are the person's own.
+Where Keybumps keeps what it saves on this Mac, `~/Library/Application Support/Keybumps`, a folder that never syncs (ADR 0013). Each plugin that saves files has its own folder in it, and nothing else is at its top level: `clipboard_history/`, `dictation/`, `emoji_picker/`, `quick_search/`, `screengrabs/`, `shortcut_coach/`, `snippets/`, `timers/`, and `translations/`. Settings › General shows it with Show in Finder; plugins' pages don't. Caches and temporary files are elsewhere, and ScreenGrabs' Screenshots and Recordings folders are the person's own.
 _Avoid_: Data folder, library folder, `~/Documents/Keybumps` (where Dictation History was kept before #602); Application Support (macOS's folder that holds it)
 
 **What's New**:
@@ -117,7 +117,7 @@ Dictation's language, in Settings › Dictation: **Automatic**, the default, or 
 _Avoid_: Input language, auto-detect setting
 
 **Dictation History**:
-The local archive of completed Dictation recordings and their transcripts, one folder each (`output.wav` and `meta.json`) in the Keybumps folder's `dictation/`.
+The local archive of completed Dictation recordings and their transcripts, one folder each (`output.wav` and `meta.json`) in the Keybumps folder's `dictation/recordings/`.
 _Avoid_: Cloud transcript
 
 **Window Manager**:

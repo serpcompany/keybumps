@@ -1,6 +1,6 @@
 # 0010: Screenshots and recordings are one plugin, ScreenGrabs, and both are found again in the ⌘3 tab
 
-Status: Accepted (2026-10-17) when the owner merges it. Tracked by #488, part of the epic #482, which holds the plan. Supersedes parts of [0006](0006-capabilities-as-plugins.md) and [0009](0009-screencast-records-and-sends-captures.md); see "Superseded". Partly superseded by [0013](0013-the-keybumps-folder.md) (2026-10-21, #602): decision 5's `~/Documents/Keybumps/captures` and `~/Documents/Keybumps/recordings` moved into the Keybumps folder, as `screengrabs/recordings/` and `dictation/`.
+Status: Accepted (2026-10-17) when the owner merges it. Tracked by #488, part of the epic #482, which holds the plan. Supersedes parts of [0006](0006-capabilities-as-plugins.md) and [0009](0009-screencast-records-and-sends-captures.md); see "Superseded". Partly superseded by [0013](0013-the-keybumps-folder.md) (2026-10-21, #602): decision 5's `~/Documents/Keybumps/captures` and `~/Documents/Keybumps/recordings` moved into the Keybumps folder, as `screengrabs/recordings/` and `dictation/recordings/`.
 
 ## Context
 

@@ -169,7 +169,10 @@ struct UnitTestDataIsolationTests {
         #expect(paths.screengrabsRecordings == support.appendingPathComponent("screengrabs/recordings", isDirectory: true))
         #expect(paths.oldPlace(of: .dictationHistory) == documents.appendingPathComponent("recordings", isDirectory: true))
         #expect(paths.oldPlace(of: .recordings) == documents.appendingPathComponent("captures", isDirectory: true))
-        #expect(paths.dictationModels == support.appendingPathComponent("DictationModels", isDirectory: true))
+        #expect(paths.dictationRecordings == support.appendingPathComponent("dictation/recordings", isDirectory: true))
+        #expect(paths.dictationModels == support.appendingPathComponent("dictation/models", isDirectory: true))
+        #expect(paths.oldPlace(of: .dictationModels) == support.appendingPathComponent("DictationModels", isDirectory: true))
+        #expect(paths.place(of: .applicationUsage) == support.appendingPathComponent("quick_search/application-usage.json"))
         #expect(paths.translatedSpeechTemporary == FileManager.default.temporaryDirectory
             .appendingPathComponent("Keybumps", isDirectory: true)
             .appendingPathComponent("TranslatedAudio", isDirectory: true))
@@ -232,7 +235,6 @@ struct UnitTestDataIsolationTests {
             return ProductPaths(
                 keybumpsFolder: support,
                 oldDocumentsFolder: documents,
-                dictationModels: support.appendingPathComponent("DictationModels", isDirectory: true),
                 translatedSpeechTemporary: root("tmp").appendingPathComponent("Keybumps", isDirectory: true)
                     .appendingPathComponent("TranslatedAudio", isDirectory: true),
                 caches: root("Caches").appendingPathComponent("Keybumps", isDirectory: true)

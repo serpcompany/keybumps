@@ -24,7 +24,6 @@ struct KeybumpsFolderMoveTests {
             keybumpsFolder: keybumps,
             oldDocumentsFolder: root.appendingPathComponent("Documents", isDirectory: true)
                 .appendingPathComponent("Keybumps", isDirectory: true),
-            dictationModels: keybumps.appendingPathComponent("DictationModels", isDirectory: true),
             translatedSpeechTemporary: root.appendingPathComponent("tmp", isDirectory: true),
             caches: root.appendingPathComponent("Caches", isDirectory: true)
         )
@@ -81,10 +80,14 @@ struct KeybumpsFolderMoveTests {
             to: paths.oldPlace(of: .screencastRepositories)
         )
 
-        // What stays at the top level.
-        let staying = ["emoji-recent.json", "timers.json", "recent-items.json", "application-usage.json"]
-            .map { paths.keybumpsFolder.appendingPathComponent($0) } + [paths.dictationModels.appendingPathComponent("made-up-model.bin")]
-        for file in staying { try write("made-up \(file.lastPathComponent)", to: file) }
+        // What was at the top of the Keybumps folder: Dictation's models, recent emoji, Quick
+        // Search's Recent Items and learned usage, and timers.
+        let model = try installedModel(.whisperCppTurbo, in: paths.oldPlace(of: .dictationModels))
+        EmojiRecents(storageURL: paths.oldPlace(of: .emojiRecents)).use("😀")
+        let app = QuickSearchResult(url: URL(fileURLWithPath: "/System/Applications/Dictionary.app"), kind: .application)
+        RecentItemStore(storageURL: paths.oldPlace(of: .recentItems)).record(app)
+        ApplicationUsageStore(storageURL: paths.oldPlace(of: .applicationUsage)).record(app)
+        try write("made-up timers", to: paths.oldPlace(of: .timers))
 
         let report = KeybumpsFolderMove(paths: paths, defaults: defaults).run()
 
@@ -101,8 +104,14 @@ struct KeybumpsFolderMoveTests {
         #expect(text(at: paths.snippets.appendingPathComponent(unreadableSnippets)) == "made-up unreadable snippets")
         #expect(text(at: paths.inUse(.lastDictation)) == "made-up last dictation")
         #expect(text(at: paths.inUse(.coachingEvents)) == "[]")
-        for file in staying { #expect(text(at: file) == "made-up \(file.lastPathComponent)") }
+        #expect(text(at: paths.inUse(.timers)) == "made-up timers")
         #expect(!exists(paths.oldDocumentsFolder), "Documents/Keybumps is removed once it's empty")
+        // Nothing is left loose at the top: each plugin that saves files has its own folder.
+        #expect(try names(in: paths.keybumpsFolder) == [
+            "clipboard_history", "dictation", "emoji_picker", "quick_search", "screengrabs",
+            "shortcut_coach", "snippets", "timers", "translations",
+        ])
+        #expect(try names(in: paths.dictation) == ["last-dictation.txt", "models", "recordings"])
         #expect(documentsMoved(defaults))
 
         // Each store reads its new folder.
@@ -128,6 +137,12 @@ struct KeybumpsFolderMoveTests {
         #expect(RecentTranslations(storageURL: paths.inUse(.recentTranslations)).records.map(\.translatedText) == ["made-up translation"])
         #expect(SnippetStore(storageURL: paths.inUse(.snippets), secrets: InMemorySnippetSecretStore()).snippets.map(\.name) == ["Made-up"])
         #expect(ScreencastRepositoryMemory(storageURL: paths.inUse(.screencastRepositories)).stored.websites["example.com"] == repository)
+        #expect(EmojiRecents(storageURL: paths.inUse(.emojiRecents)).glyphs == ["😀"])
+        #expect(RecentItemStore(storageURL: paths.inUse(.recentItems)).items.map(\.result) == [app])
+        #expect(ApplicationUsageStore(storageURL: paths.inUse(.applicationUsage)).record(for: app.url)?.launchCount == 1)
+        let models = DictationModelManager(modelsRoot: paths.inUse(.dictationModels), downloader: NoModelDownloader())
+        #expect(models.state(for: .whisperCppTurbo) == .installed, "model-location.txt names the model's new folder")
+        #expect(models.installedModelFolder(for: .whisperCppTurbo)?.path == paths.dictationModels.appendingPathComponent(model).path)
 
         // The index names the recording's new folder, is still readable only by the person, and
         // ScreenGrabs remembers the new folder, not Documents.
@@ -170,10 +185,10 @@ struct KeybumpsFolderMoveTests {
         try write("made-up a.png", to: paths.place(of: .clipboardMedia).appendingPathComponent("a.png"))
         try dictation(at: 1_790_000_000, in: paths.oldPlace(of: .dictationHistory))
         try dictation(at: 1_790_000_100, in: paths.oldPlace(of: .dictationHistory))
-        try FileManager.default.createDirectory(at: paths.dictation, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: paths.dictationRecordings, withIntermediateDirectories: true)
         try FileManager.default.moveItem(
             at: paths.oldPlace(of: .dictationHistory).appendingPathComponent("1790000000", isDirectory: true),
-            to: paths.dictation.appendingPathComponent("1790000000", isDirectory: true)
+            to: paths.dictationRecordings.appendingPathComponent("1790000000", isDirectory: true)
         )
 
         let report = KeybumpsFolderMove(paths: paths, defaults: defaults).run()
@@ -507,19 +522,120 @@ struct KeybumpsFolderMoveTests {
         #expect(try Data(contentsOf: paths.place(of: .snippets)) == snippetsBytes)
     }
 
-    // MARK: Settings
+    // MARK: Dictation's models
 
-    @Test("Settings shows each plugin's folder where its files are this launch")
-    func rowsShowTheFolderInUse() {
-        var paths = self.paths
-        #expect(KeybumpsFolderRow.folder(for: .snippets, in: paths).path == paths.snippets.path)
-        #expect(KeybumpsFolderRow.folder(for: .dictation, in: paths).path == paths.dictation.path)
-        #expect(KeybumpsFolderRow.folder(for: nil, in: paths).path == paths.keybumpsFolder.path)
+    @Test("Dictation's models move whole: an installed model is still installed, and a download cut short moves along and is still not installed")
+    func modelsMoveWhole() throws {
+        defer { tearDown() }
+        let paths = self.paths
+        let old = paths.oldPlace(of: .dictationModels)
+        let model = try installedModel(.whisperCppTurbo, in: old)
+        // whisper.cpp quit while checking its download, and WhisperKit while downloading: neither
+        // wrote model-location.txt.
+        let partialFile = "\(WhisperCppModel.turbo.fileName).partial"
+        try write("made-up half a model", to: old.appendingPathComponent("whisperCppTurbo/\(partialFile)"))
+        let partialFolder = "whisperMediumEnglish/models/argmaxinc/whisperkit-coreml/openai_whisper-medium.en/AudioEncoder.mlmodelc/weights"
+        try write("made-up half a model", to: old.appendingPathComponent(partialFolder))
+        let before = DictationModelManager(modelsRoot: old, downloader: NoModelDownloader())
+        try #require(before.state(for: .whisperCppTurbo) == .installed)
+        try #require(before.state(for: .whisperMediumEnglish) == .notInstalled)
 
-        paths.leftInOldPlace = [.snippets, .dictationHistory]
-        #expect(KeybumpsFolderRow.folder(for: .snippets, in: paths).path == paths.keybumpsFolder.path)
-        #expect(KeybumpsFolderRow.folder(for: .dictation, in: paths).path == paths.oldPlace(of: .dictationHistory).path)
-        #expect(KeybumpsFolderRow.folder(for: .translation, in: paths).path == paths.translations.path)
+        let report = KeybumpsFolderMove(paths: paths, defaults: defaults).run()
+
+        #expect(report.failures == 0)
+        #expect(report.conflicts == 0)
+        #expect(report.moved == 1, "one rename")
+        #expect(!exists(old))
+        #expect(paths.inUse(.dictationModels) == paths.dictationModels)
+        #expect(text(at: paths.dictationModels.appendingPathComponent("whisperCppTurbo/\(partialFile)")) == "made-up half a model")
+        #expect(text(at: paths.dictationModels.appendingPathComponent(partialFolder)) == "made-up half a model")
+        let after = DictationModelManager(modelsRoot: paths.inUse(.dictationModels), downloader: NoModelDownloader())
+        #expect(after.state(for: .whisperCppTurbo) == .installed)
+        #expect(after.installedModelFolder(for: .whisperCppTurbo)?.path == paths.dictationModels.appendingPathComponent(model).path)
+        #expect(after.state(for: .whisperMediumEnglish) == .notInstalled, "a download cut short is never installed")
+        #expect(after.state(for: .whisperTurboCompressed) == .notInstalled)
+
+        // The next launch changes nothing.
+        let location = DictationModelManager.locationFile(for: .whisperCppTurbo, in: paths.dictationModels)
+        let locationBytes = try Data(contentsOf: location)
+        #expect(KeybumpsFolderMove(paths: paths, defaults: defaults).run() == KeybumpsFolderMove.Report())
+        #expect(try Data(contentsOf: location) == locationBytes)
+    }
+
+    @Test("Models that can't move stay installed in their old place, where Dictation reads them this launch")
+    func modelsThatCantMoveStayInUse() throws {
+        defer { tearDown() }
+        let paths = self.paths
+        let old = paths.oldPlace(of: .dictationModels)
+        let model = try installedModel(.whisperCppTurbo, in: old)
+        // A file where Dictation's folder goes, so its folder can't be made.
+        try write("made-up blocker", to: URL(fileURLWithPath: paths.dictation.path))
+
+        let report = KeybumpsFolderMove(paths: paths, defaults: defaults).run()
+
+        #expect(report.leftInOldPlace.contains(.dictationModels))
+        var thisLaunch = paths
+        thisLaunch.leftInOldPlace = report.leftInOldPlace
+        #expect(thisLaunch.inUse(.dictationModels) == old)
+        let models = DictationModelManager(modelsRoot: thisLaunch.inUse(.dictationModels), downloader: NoModelDownloader())
+        #expect(models.installedModelFolder(for: .whisperCppTurbo)?.path == old.appendingPathComponent(model).path)
+    }
+
+    // MARK: Merging
+
+    @Test("What's already in a plugin's folder is merged with what moves, and a file that differs is never overwritten")
+    func mergesIntoExistingFolders() throws {
+        defer { tearDown() }
+        let paths = self.paths
+        // An older build ran after the move, downloaded a second model, and saved its own recents.
+        let first = try installedModel(.whisperCppTurbo, in: paths.dictationModels)
+        let second = try installedModel(.whisperMediumEnglish, in: paths.oldPlace(of: .dictationModels))
+        try write("made-up newer recent items", to: paths.place(of: .recentItems))
+        try write("made-up older recent items", to: paths.oldPlace(of: .recentItems))
+        try write("made-up usage", to: paths.oldPlace(of: .applicationUsage))
+        try write("made-up emoji", to: paths.place(of: .emojiRecents))
+        try write("made-up emoji", to: paths.oldPlace(of: .emojiRecents))
+
+        let report = KeybumpsFolderMove(paths: paths, defaults: defaults).run()
+
+        #expect(report.failures == 0)
+        #expect(report.conflicts == 1)
+        #expect(!exists(paths.oldPlace(of: .dictationModels)))
+        let models = DictationModelManager(modelsRoot: paths.inUse(.dictationModels), downloader: NoModelDownloader())
+        #expect(models.installedModelFolder(for: .whisperCppTurbo)?.path == paths.dictationModels.appendingPathComponent(first).path)
+        #expect(models.installedModelFolder(for: .whisperMediumEnglish)?.path == paths.dictationModels.appendingPathComponent(second).path)
+        #expect(text(at: paths.place(of: .recentItems)) == "made-up newer recent items")
+        #expect(text(at: paths.oldPlace(of: .recentItems)) == "made-up older recent items", "never overwritten")
+        #expect(paths.inUse(.recentItems) == paths.place(of: .recentItems))
+        #expect(text(at: paths.place(of: .applicationUsage)) == "made-up usage", "joins quick_search/")
+        #expect(!exists(paths.oldPlace(of: .emojiRecents)), "identical, so removed")
+        #expect(text(at: paths.place(of: .emojiRecents)) == "made-up emoji")
+    }
+
+    @Test("Dictations at the top of dictation/, where this change's first candidates kept them, move into recordings/")
+    func firstCandidatesDictationsMove() throws {
+        defer { tearDown() }
+        let paths = self.paths
+        try FileManager.default.createDirectory(at: paths.keybumpsFolder, withIntermediateDirectories: true)
+        defaults.set(Date(), forKey: KeybumpsFolderMove.documentsMovedKey)
+        try dictation(at: 1_790_000_000, in: paths.dictation)
+        try dictation(at: 1_790_000_000, in: paths.dictation)
+        try dictation(at: 1_790_000_100, in: paths.dictationRecordings)
+        try write("made-up last dictation", to: paths.place(of: .lastDictation))
+        try write("made-up notes", to: paths.dictation.appendingPathComponent("made-up notes/notes.txt"))
+
+        let report = KeybumpsFolderMove(paths: paths, defaults: defaults).run()
+
+        #expect(report.failures == 0)
+        #expect(report.conflicts == 0)
+        #expect(!report.looksInDocuments)
+        #expect(try names(in: paths.dictation) == ["last-dictation.txt", "made-up notes", "recordings"], "only dictations move")
+        let history = DictationHistoryService(recordingsDirectoryURL: paths.inUse(.dictationHistory), appVersion: "0.0.0")
+        #expect(history.entries.map(\.id) == ["1790000100", "1790000000-2", "1790000000"])
+        #expect(KeybumpsFolderMove.isDictationFolderName("1790000000-2"))
+        #expect(!KeybumpsFolderMove.isDictationFolderName("models"))
+        #expect(!KeybumpsFolderMove.isDictationFolderName("1790000000-"))
+        #expect(!KeybumpsFolderMove.isDictationFolderName(".1790000000.keybumps-moving"))
     }
 
     // MARK: Helpers
@@ -534,6 +650,16 @@ struct KeybumpsFolderMoveTests {
 
     private func documentsMoved(_ defaults: UserDefaults) -> Bool {
         KeybumpsFolderMove.documentsMoved(in: defaults) != nil
+    }
+
+    /// A whisper.cpp or WhisperKit model as `DictationModelManager` installs one, with made-up
+    /// files, in `modelsRoot`. Its folder, relative to `modelsRoot`.
+    private func installedModel(_ engine: DictationTranscriptionEngine, in modelsRoot: URL) throws -> String {
+        let relative = "\(engine.rawValue)/made-up-\(engine.rawValue)"
+        let folder = modelsRoot.appendingPathComponent(relative, isDirectory: true)
+        for file in engine.requiredModelFiles { try write("made-up model", to: folder.appendingPathComponent(file)) }
+        try write(folder.path, to: DictationModelManager.locationFile(for: engine, in: modelsRoot))
+        return relative
     }
 
     private func tearDown() {
@@ -613,5 +739,13 @@ private final class FaultyFileManager: FileManager {
             throw CocoaError(.fileWriteNoPermission)
         }
         try super.removeItem(at: url)
+    }
+}
+
+/// Never called: these tests only read what's installed.
+@MainActor
+private struct NoModelDownloader: DictationModelDownloading {
+    func downloadModel(identifier: String, to downloadBase: URL, progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
+        throw CancellationError()
     }
 }

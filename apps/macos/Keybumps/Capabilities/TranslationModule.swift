@@ -147,7 +147,6 @@ private struct RecentTranslationsSettings: View {
                     subtitle: "Return in the Translate tab saves a translation. The last \(RecentTranslations.limit) are kept on this Mac."
                 )
             }
-            KeybumpsFolderRow(.translation)
         }
         .alert("Clear recent translations?", isPresented: $confirmsClear) {
             Button("Clear", role: .destructive) { recents.clear() }

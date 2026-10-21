@@ -10,7 +10,7 @@ ScreenGrabs also records the screen as a video, on macOS 15 or later, with your 
 
 Clipboard writes Keybumps makes for you stay out of Clipboard History: Dictation insertion, transcript copies from the Dictation tab, copies from the Snippets, Emoji, and Translate tabs and of emoji in the Search tab, ⌘V pastes, keyword expansion, the copy made when a paste can't go through, and putting your clipboard back afterwards. A copy you make yourself, in any app, is normal clipboard activity.
 
-Each completed dictation is stored locally under `~/Library/Application Support/Keybumps/dictation/<timestamp>/`, in the Keybumps folder ([ADR 0013](docs/adr/0013-the-keybumps-folder.md)), with `meta.json` transcript metadata and playable `output.wav` audio. The dedicated Dictation History screen supports search, playback, copy, Finder reveal, and deletion.
+Each completed dictation is stored locally under `~/Library/Application Support/Keybumps/dictation/recordings/<timestamp>/`, in the Keybumps folder ([ADR 0013](docs/adr/0013-the-keybumps-folder.md)), with `meta.json` transcript metadata and playable `output.wav` audio. The dedicated Dictation History screen supports search, playback, copy, Finder reveal, and deletion.
 
 On macOS 15 or newer, each expanded history card can open Keybumps's on-device translation panel for immediate target-language selection, translated-text copying, and optional spoken playback using an installed macOS voice without changing the original transcript.
 

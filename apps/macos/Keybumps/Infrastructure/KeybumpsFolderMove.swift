@@ -6,10 +6,18 @@ import OSLog
 /// Keybumps folder, in the order it moves them. Its old place and its place now are
 /// `ProductPaths.oldPlace(of:)` and `ProductPaths.place(of:)`.
 enum KeybumpsFolderItem: String, CaseIterable, Sendable {
-    /// Dictation History's folders. First, so the whole folder moves in one rename before
-    /// `last-dictation.txt` makes `dictation/`.
+    /// Dictation History's folders, from `~/Documents/Keybumps/recordings`.
     case dictationHistory
     case lastDictation
+    /// The downloaded models, about 4 GB, from `DictationModels/` at the top of the Keybumps folder.
+    /// A download cut short moves with them and is still not installed: `model-location.txt` is
+    /// written only once a model has downloaded and checked out (`DictationModelManager`), and the
+    /// move rewrites the folder it names (`rewritePaths`).
+    case dictationModels
+    case emojiRecents
+    case recentItems
+    case applicationUsage
+    case timers
     case clipboardMedia
     case clipboardHistory
     case recentTranslations
@@ -33,6 +41,11 @@ extension ProductPaths {
         switch item {
         case .dictationHistory: oldDocumentsFolder.appendingPathComponent("recordings", isDirectory: true)
         case .lastDictation: keybumpsFolder.appendingPathComponent(DictationService.recoveryFileName)
+        case .dictationModels: keybumpsFolder.appendingPathComponent("DictationModels", isDirectory: true)
+        case .emojiRecents: keybumpsFolder.appendingPathComponent(EmojiRecents.fileName)
+        case .recentItems: keybumpsFolder.appendingPathComponent(RecentItemStore.fileName)
+        case .applicationUsage: keybumpsFolder.appendingPathComponent(ApplicationUsageStore.fileName)
+        case .timers: keybumpsFolder.appendingPathComponent(TimerStore.fileName)
         case .clipboardMedia: keybumpsFolder.appendingPathComponent("clipboard-media", isDirectory: true)
         case .clipboardHistory: keybumpsFolder.appendingPathComponent(ClipboardHistoryService.fileName)
         case .recentTranslations: keybumpsFolder.appendingPathComponent(RecentTranslations.fileName)
@@ -48,8 +61,13 @@ extension ProductPaths {
     /// Where `item` is kept in the Keybumps folder.
     func place(of item: KeybumpsFolderItem) -> URL {
         switch item {
-        case .dictationHistory: dictation
+        case .dictationHistory: dictationRecordings
         case .lastDictation: dictation.appendingPathComponent(DictationService.recoveryFileName)
+        case .dictationModels: dictationModels
+        case .emojiRecents: emojiPicker.appendingPathComponent(EmojiRecents.fileName)
+        case .recentItems: quickSearch.appendingPathComponent(RecentItemStore.fileName)
+        case .applicationUsage: quickSearch.appendingPathComponent(ApplicationUsageStore.fileName)
+        case .timers: timers.appendingPathComponent(TimerStore.fileName)
         case .clipboardMedia: clipboardHistory.appendingPathComponent("media", isDirectory: true)
         case .clipboardHistory: clipboardHistory.appendingPathComponent(ClipboardHistoryService.fileName)
         case .recentTranslations: translations.appendingPathComponent(RecentTranslations.fileName)
@@ -86,9 +104,12 @@ extension ProductPaths {
 /// - **A folder chosen** in Settings › ScreenGrabs, or one inside it, isn't moved: an old place that
 ///   is, or holds, a chosen folder stays, read there, and is looked at again each launch. Nor is
 ///   a chosen `~/Documents/Keybumps` removed once it's empty.
-/// - **Paths:** Clipboard History and the recordings index store absolute paths, and ScreenGrabs
-///   remembers the folders it recorded into (`RecordingFolderMemory`); one into a folder that moved
-///   is rewritten once its file is in the new place (`rewritePaths`).
+/// - **Paths:** Clipboard History, the recordings index, and each Dictation model's
+///   `model-location.txt` store absolute paths, and ScreenGrabs remembers the folders it recorded
+///   into (`RecordingFolderMemory`); one into a folder that moved is rewritten once its file is in
+///   the new place (`rewritePaths`).
+/// - **This change's first candidates** kept each dictation at the top of `dictation/`; they move
+///   into `dictation/recordings/` (`moveDictationsFromTheFirstCandidates`).
 /// - **`~/Documents/Keybumps`** is looked in only on a Mac that ran an earlier build: while
 ///   `documentsMovedKey` isn't set and the Keybumps folder exists or `AppPreferences.ranBefore`,
 ///   and again once it's set whenever a file outside Documents is in its old place and newer than
@@ -163,6 +184,7 @@ struct KeybumpsFolderMove {
             }
             if item.isInDocuments { documentsFailures += report.failures - failuresBefore }
         }
+        moveDictationsFromTheFirstCandidates(&report)
         let failuresBefore = report.failures
         rewritePaths(&report)
         if report.looksInDocuments {
@@ -331,6 +353,26 @@ struct KeybumpsFolderMove {
         }
     }
 
+    /// This change's first candidates kept each dictation at the top of `dictation/`, which now holds
+    /// `recordings/` and `models/` too: a folder there named as a dictation is (`1790000000`, or
+    /// `1790000000-2`) moves into `recordings/`. Not a released layout, so a failure is only logged,
+    /// and the next launch tries again.
+    private func moveDictationsFromTheFirstCandidates(_ report: inout Report) {
+        guard let names = try? fileManager.contentsOfDirectory(atPath: paths.dictation.path) else { return }
+        for name in names.sorted() where Self.isDictationFolderName(name) {
+            let folder = paths.dictation.appendingPathComponent(name, isDirectory: true)
+            guard entry(folder) == .folder else { continue }
+            move(folder, to: paths.dictationRecordings.appendingPathComponent(name, isDirectory: true), item: .dictationHistory, &report)
+        }
+    }
+
+    /// A Dictation History folder's name: its time in seconds, and `-2`, `-3`… after a second one
+    /// that second (`DictationHistoryService.prepareRecording`).
+    static func isDictationFolderName(_ name: String) -> Bool {
+        let parts = name.split(separator: "-", omittingEmptySubsequences: false)
+        return (1...2).contains(parts.count) && parts.allSatisfy { !$0.isEmpty && $0.allSatisfy { ("0"..."9").contains($0) } }
+    }
+
     private func moveUnreadableSnippetCopies(_ report: inout Report) {
         guard let names = try? fileManager.contentsOfDirectory(atPath: paths.keybumpsFolder.path) else { return }
         for name in names.sorted() where SnippetStore.isUnreadableCopyName(name) {
@@ -370,12 +412,16 @@ struct KeybumpsFolderMove {
 
     // MARK: Paths
 
-    /// Clipboard History's image copies and screenshot sources, the recordings index's folders, and
-    /// the folders ScreenGrabs remembers recording into are absolute paths. One under a folder that
-    /// moved is rewritten to the same place in the new folder once it's gone from the old one and is
-    /// there. A file that can't be read, or a later build's index, is left as it is.
+    /// Clipboard History's image copies and screenshot sources, the recordings index's folders, the
+    /// folders ScreenGrabs remembers recording into, and each Dictation model's folder are absolute
+    /// paths. One under a folder that moved is rewritten to the same place in the new folder once
+    /// it's gone from the old one and is there. A file that can't be read, or a later build's index,
+    /// is left as it is.
     private func rewritePaths(_ report: inout Report) {
-        var moves: [(old: String, new: String)] = [(paths.oldPlace(of: .clipboardMedia).path, paths.place(of: .clipboardMedia).path)]
+        var moves: [(old: String, new: String)] = [
+            (paths.oldPlace(of: .clipboardMedia).path, paths.place(of: .clipboardMedia).path),
+            (paths.oldPlace(of: .dictationModels).path, paths.place(of: .dictationModels).path),
+        ]
         if report.looksInDocuments { moves.append((paths.oldPlace(of: .recordings).path, paths.place(of: .recordings).path)) }
         var inUse = paths
         inUse.leftInOldPlace = report.leftInOldPlace
@@ -417,6 +463,19 @@ struct KeybumpsFolderMove {
                 write(file, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes], to: index, item: .recordingsIndex, &report) {
                     try PrivateFile.write($0, to: $1)
                 }
+            }
+        }
+
+        // Else the model reads as not installed, and Dictation goes back to Apple Speech.
+        for engine in DictationTranscriptionEngine.allCases where engine.requiresDownload {
+            let file = DictationModelManager.locationFile(for: engine, in: inUse.inUse(.dictationModels))
+            guard let stored = try? String(contentsOf: file, encoding: .utf8),
+                  let moved = rewritten(stored.trimmingCharacters(in: .whitespacesAndNewlines), moves) else { continue }
+            do {
+                // As `DictationModelManager` writes it.
+                try moved.write(to: file, atomically: true, encoding: .utf8)
+            } catch {
+                fail(.rewrite, .dictationModels, code: (error as NSError).code, &report)
             }
         }
 

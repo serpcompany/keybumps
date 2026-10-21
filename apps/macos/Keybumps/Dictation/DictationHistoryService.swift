@@ -100,7 +100,7 @@ final class DictationHistoryService {
             options: [.skipsHiddenFiles]
         )) ?? []
 
-        // `last-dictation.txt` shares the Dictation folder (ADR 0013): only folders are dictations.
+        // Only folders are dictations.
         entries = directories.filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
             .compactMap(loadOrRecoverEntry).sorted { left, right in
             if left.capturedAt == right.capturedAt { return left.id > right.id }
