@@ -137,7 +137,9 @@ enum ScreengrabFiles {
 /// read as each one is copied. It's the person's: deleting or moving it, such as by clearing the
 /// Desktop, never touches the history, and nothing Keybumps keeps points to it. A screenshot's file
 /// keeps its name; a recording's folder (`<timestamp>/`) is copied whole, as it was saved there
-/// before #605.
+/// before #605. A partial copy Keybumps left there when it quit mid-copy is removed just before the
+/// next copy, not at launch, so that folder is read only as ScreenGrabs copies into it, never on a
+/// Mac that doesn't use ScreenGrabs (#611).
 struct ScreengrabCopies {
     var folder: () -> URL
     var fileManager: FileManager = .default
@@ -151,6 +153,8 @@ struct ScreengrabCopies {
         var isFolder: ObjCBool = false
         guard fileManager.fileExists(atPath: screengrab.path, isDirectory: &isFolder) else { return nil }
         let names = isFolder.boolValue ? ScreengrabFiles.recordingFolderNames(like: screengrab) : ScreengrabFiles.fileNames(like: screengrab)
+        // Every copy is made on the main actor, start to finish, so none is under way here now.
+        ScreengrabFiles.removePartialCopies(in: folder, fileManager: fileManager)
         return ScreengrabFiles.copy(screengrab, into: folder, naming: names, fileManager: fileManager)
     }
 }

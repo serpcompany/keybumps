@@ -290,6 +290,7 @@ final class WiringHarness {
     /// Mac recording it; `defaults` holds what was saved before launch. It's licensed unless
     /// `licensing` says otherwise. The screenshot folder can be read unless `screenshotReader` says
     /// otherwise, and Spotlight's shortcut never conflicts unless `spotlightShortcutResolver` says so.
+    /// ScreenGrabs' copies go where `screengrabCopies` says, else where the app puts them.
     init(
         enabled: Set<Capability>,
         missing: MacPermission?,
@@ -301,7 +302,8 @@ final class WiringHarness {
         screenshotCapturer: ScreenshotCapturer? = nil,
         licensing: (any LicenseControlling)? = nil,
         screenshotReader: any ScreenshotDirectoryReading = FakeScreenshotDirectoryReader(granted: true),
-        spotlightShortcutResolver: any SpotlightShortcutConflictResolving = InertSpotlightShortcutResolver()
+        spotlightShortcutResolver: any SpotlightShortcutConflictResolving = InertSpotlightShortcutResolver(),
+        screengrabCopies: ScreengrabCopies? = nil
     ) {
         let id = UUID().uuidString
         let directory = root.appendingPathComponent(id, isDirectory: true)
@@ -371,7 +373,8 @@ final class WiringHarness {
             screenshotTools: screenshotTools,
             dictationIndicator: SilentDictationIndicator(),
             dictationFileManager: SandboxedFileManager(root: directory),
-            screenshotCapturer: screenshotCapturer
+            screenshotCapturer: screenshotCapturer,
+            screengrabCopies: screengrabCopies
         )
         _ = log.drain()
         lastShortcuts = shortcuts()
