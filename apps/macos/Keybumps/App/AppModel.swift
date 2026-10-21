@@ -1116,9 +1116,6 @@ final class AppModel {
     }
     /// Shows the sample tip in the notch without adding it to history.
     func showSampleTip() { coachTips.showCoach(NotchCoachPresentation(event: .sample)) }
-    func openPermissionSettings(_ permission: MacPermission) {
-        permissions.openSettings(permission)
-    }
     func setShowInDockAndSwitcher(_ show: Bool) { preferences.showInDockAndSwitcher = show; presenceController.apply(showInDockAndSwitcher: show) }
     func markRead(_ id: UUID) { inbox.markRead(id) }
     func markAllRead() { inbox.markAllRead() }

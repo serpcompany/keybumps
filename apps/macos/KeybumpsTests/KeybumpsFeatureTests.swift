@@ -1444,7 +1444,7 @@ final class KeybumpsFeatureTests: XCTestCase {
         XCTAssertEqual(Capability.keyboardShortcutter.title, "Shortcut Coach")
         XCTAssertEqual(SettingsSection.keyboardShortcutter.rawValue, "Shortcut Coach")
         XCTAssertFalse(SettingsSection.allCases.map(\.rawValue).contains("Setup"))
-        XCTAssertEqual(SettingsNavigationHistory().selection, .permissions)
+        XCTAssertEqual(SettingsNavigationHistory().selection, .general)
         XCTAssertFalse(SettingsSection.allCases.map(\.rawValue).contains("Home"))
         XCTAssertFalse(SettingsSection.allCases.map(\.rawValue).contains("Dictation History"))
         XCTAssertFalse(SettingsSection.allCases.map(\.rawValue).contains("About"))
@@ -1510,7 +1510,7 @@ final class KeybumpsFeatureTests: XCTestCase {
         XCTAssertEqual(PermissionCoordinator.recoveryAction(for: .inputMonitoring, state: .required), .openSystemSettings)
     }
 
-    func testPermissionSettingsRowsAlwaysExposeAUsefulAction() {
+    func testPermissionSettingsRowsOfferAnActionUntilGranted() {
         for permission in MacPermission.allCases {
             XCTAssertEqual(
                 PermissionSettingsRowAction.resolve(
@@ -1518,7 +1518,8 @@ final class KeybumpsFeatureTests: XCTestCase {
                     state: .granted,
                     requiresRelaunch: false
                 ),
-                .openSystemSettings
+                .granted,
+                "a granted row shows only Granted (#559)"
             )
         }
 
@@ -1736,7 +1737,7 @@ final class KeybumpsFeatureTests: XCTestCase {
     }
 
     func testSettingsNavigationBackReturnsThroughVisitedScreensWithoutLooping() {
-        var navigation = SettingsNavigationHistory()
+        var navigation = SettingsNavigationHistory(selection: .permissions)
         XCTAssertEqual(navigation.selection, .permissions)
         XCTAssertFalse(navigation.canGoBack)
 

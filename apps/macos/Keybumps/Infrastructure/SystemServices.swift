@@ -242,11 +242,12 @@ enum PermissionSettingsPresentation {
     static let visiblePermissions = MacPermission.allCases
 }
 
+/// What a permission row in Settings offers: a short button, or none once the permission is granted.
 enum PermissionSettingsRowAction: Equatable {
     case restartKeybumps
     case requestAccess
     case recoverInSystemSettings
-    case openSystemSettings
+    case granted
 
     static func resolve(
         permission: MacPermission,
@@ -254,7 +255,7 @@ enum PermissionSettingsRowAction: Equatable {
         requiresRelaunch: Bool
     ) -> PermissionSettingsRowAction {
         if requiresRelaunch { return .restartKeybumps }
-        if state.isGranted { return .openSystemSettings }
+        if state.isGranted { return .granted }
         switch permission {
         case .microphone where state == .notDetermined, .speechRecognition where state == .notDetermined:
             return .requestAccess
@@ -262,6 +263,31 @@ enum PermissionSettingsRowAction: Equatable {
             return .recoverInSystemSettings
         }
     }
+
+    /// The row's button: a short visible title, and the full name VoiceOver reads, which starts with
+    /// the title so Voice Control finds it by what's shown (#559). Nil when granted.
+    func button(for permission: MacPermission) -> PermissionRowButton? {
+        switch self {
+        case .restartKeybumps:
+            PermissionRowButton(title: "Restart", accessibilityLabel: "Restart Keybumps")
+        case .requestAccess:
+            PermissionRowButton(title: "Allow…", accessibilityLabel: "Allow \(permission.title)")
+        case .recoverInSystemSettings:
+            PermissionRowButton(
+                title: "Allow…",
+                accessibilityLabel: "Allow \(permission.title)",
+                accessibilityHint: "Open System Settings for \(permission.title)"
+            )
+        case .granted: nil
+        }
+    }
+}
+
+struct PermissionRowButton: Equatable {
+    let title: String
+    let accessibilityLabel: String
+    /// What VoiceOver says after the name: where the button goes, when that isn't a prompt in place.
+    var accessibilityHint: String? = nil
 }
 
 struct PermissionReadinessSnapshot: Equatable {

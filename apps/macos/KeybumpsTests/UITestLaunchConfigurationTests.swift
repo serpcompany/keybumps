@@ -171,7 +171,7 @@ struct UITestLaunchConfigurationTests {
     }
 
     @Test func settingsNavigationStartsAtRequestedSection() {
-        #expect(SettingsNavigationHistory().selection == .permissions)
+        #expect(SettingsNavigationHistory().selection == .general)
         var navigation = SettingsNavigationHistory(selection: .general)
         #expect(navigation.selection == .general)
         #expect(!navigation.canGoBack)
