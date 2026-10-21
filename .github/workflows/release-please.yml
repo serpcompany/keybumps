@@ -26,8 +26,11 @@ jobs:
   release:
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
+    # A called workflow gets no more than this. Its `tested` job reads check runs to skip the suites
+    # the merge queue already passed (#615).
     permissions:
       contents: read
+      checks: read
     uses: ./.github/workflows/release.yml
     with:
       version: ${{ needs.release-please.outputs.version }}

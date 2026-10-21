@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { afterAll, describe, expect, it } from 'vitest'
 
 // .github/scripts/pr-touches.sh decides whether a required check's slow job runs on a pull request
-// or a merge queue group.
+// or a merge queue group, and whether a release runs a suite the merge queue already passed (#615).
 // When unsure it must say run=true: a wrong run=false skips a required suite and passes the check.
 // It runs here with a stub `gh` that prints a canned compare result, never the real API.
 const script = fileURLToPath(new URL('../../../../.github/scripts/pr-touches.sh', import.meta.url))
@@ -23,8 +23,14 @@ const appCode = '^(apps/macos/|\\.github/workflows/keybumps-unit-tests\\.yml$)'
 /** The arguments the last run passed to `gh`, or '' if it didn't call it. */
 let ghArgs = ''
 
-/** Runs the script for a pull request (or another event) against a compare result's lines. */
-function run(lines: string[], { event = 'pull_request', ghExit = 0 } = {}): string | undefined {
+/**
+ * Runs the script for a pull request (or another event) against a compare result's lines. A tested
+ * base is what Release Keybumps passes: the newest commit where the suite passed.
+ */
+function run(
+  lines: string[],
+  { event = 'pull_request', ghExit = 0, testedBase = '' } = {}
+): string | undefined {
   const output = join(scratch, `output-${Math.random()}`)
   const args = join(scratch, `args-${Math.random()}`)
   writeFileSync(output, '')
@@ -40,6 +46,7 @@ function run(lines: string[], { event = 'pull_request', ghExit = 0 } = {}): stri
       GITHUB_REPOSITORY: 'example/repo',
       BASE: 'base123',
       HEAD_SHA: 'head456',
+      TESTED_BASE: testedBase,
       GITHUB_OUTPUT: output
     }
   })
@@ -95,10 +102,50 @@ describe('.github/scripts/pr-touches.sh', () => {
     ['300 or more files changed', { lines: ['300', 'AGENTS.md'], options: {} }],
     ["the PR's files can't be read", { lines: [], options: { ghExit: 1 } }],
     [
-      'it runs for another event (the release gate, a manual run)',
-      { lines: changed(['AGENTS.md']), options: { event: 'workflow_call' } }
+      'it runs for another event (a manual run, or a release with no tested commit)',
+      { lines: changed(['AGENTS.md']), options: { event: 'workflow_dispatch' } }
     ]
   ])('runs the check when %s', (_, { lines, options }) => {
     expect(run(lines, options)).toBe('true')
+  })
+
+  it.each(['push', 'workflow_dispatch'])(
+    "doesn't list the files on %s with no tested base",
+    event => {
+      expect(run(changed(['AGENTS.md']), { event })).toBe('true')
+      expect(ghArgs).toBe('')
+    }
+  )
+})
+
+// Release Keybumps runs on a push to main (from release-please) or a manual run, never a pull
+// request, and passes the newest commit where the suite passed (.github/scripts/last-tested.sh).
+describe('.github/scripts/pr-touches.sh with a tested base', () => {
+  const testedBase = 'tested789'
+
+  it.each(['push', 'workflow_dispatch'])(
+    'lists the files from the tested base to HEAD_SHA on %s',
+    event => {
+      run(changed(['CHANGELOG.md']), { event, testedBase })
+      expect(ghArgs).toMatch(/^api repos\/example\/repo\/compare\/tested789\.\.\.head456 /)
+    }
+  )
+
+  it('runs the suite when the release changed its files since', () => {
+    const files = ['CHANGELOG.md', 'apps/macos/Keybumps/App/AppModel.swift']
+    expect(run(changed(files), { event: 'push', testedBase })).toBe('true')
+  })
+
+  it('skips it when the release changed none of them', () => {
+    const files = ['.release-please-manifest.json', 'CHANGELOG.md', 'version.txt']
+    expect(run(changed(files), { event: 'push', testedBase })).toBe('false')
+  })
+
+  it('skips it when nothing changed since', () => {
+    expect(run(changed([]), { event: 'push', testedBase })).toBe('false')
+  })
+
+  it("runs it when the changed files can't be read", () => {
+    expect(run([], { event: 'push', testedBase, ghExit: 1 })).toBe('true')
   })
 })

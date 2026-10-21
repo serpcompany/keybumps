@@ -2,7 +2,9 @@ name: Release Keybumps
 
 # Runs when release-please publishes a release (merging its "release: Keybumps x.y.z" PR),
 # or manually from Actions. Merging ordinary PRs to main never releases.
-# The unit and UI test suites run first; nothing is built or published unless both pass.
+# The unit and UI test suites run first; nothing is built or published unless both pass. From main,
+# each runs only if the files it covers changed since a commit where it passed, normally in the merge
+# queue; otherwise it's skipped, as the queue would skip it (owner, 2026-10-21, #615).
 # Staging publishes automatically; production waits for approval on the `production` environment.
 on:
   workflow_call:
@@ -61,14 +63,68 @@ env:
   SENTRY_CLI_VERSION: 3.8.0
 
 jobs:
+  # For each suite, the newest commit in this release's history where it passed
+  # (.github/scripts/last-tested.sh), which the test workflows diff from. Only from main, whose
+  # commits all came through the merge queue: a branch's commits can carry pull request runs, which
+  # tested the branch merged into main, not the commit itself. It never stops the release: a
+  # failed lookup leaves the commit empty, and the suite runs.
+  tested:
+    name: Last tested commits
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    permissions:
+      contents: read
+      checks: read
+    outputs:
+      unit: ${{ steps.unit.outputs.sha }}
+      ui: ${{ steps.ui.outputs.sha }}
+    steps:
+      - name: Check out the scripts
+        continue-on-error: true
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
+      - name: Last commit the unit suite passed on
+        id: unit
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.sha }}
+        run: .github/scripts/last-tested.sh 'Unit tests (run)'
+
+      - name: Last commit the UI suite passed on
+        id: ui
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.sha }}
+        run: .github/scripts/last-tested.sh 'UI tests (run, with retries)'
+
+  # Each runs even if the lookup failed or was skipped: with no tested commit, it runs its suite.
   unit-tests:
+    needs: tested
+    if: ${{ !cancelled() }}
     uses: ./.github/workflows/keybumps-unit-tests.yml
+    with:
+      tested_base: ${{ needs.tested.outputs.unit }}
 
   ui-tests:
+    needs: tested
+    if: ${{ !cancelled() }}
     uses: ./.github/workflows/keybumps-ui-tests.yml
+    with:
+      tested_base: ${{ needs.tested.outputs.ui }}
 
   build:
     needs: [unit-tests, ui-tests]
+    # Spelled out because a job's default condition also needs every job before its needs to have
+    # succeeded, and `tested` may have failed or been skipped. A suite skipped by path still reads
+    # as success here: the called workflow's gate job passed.
+    if: ${{ !cancelled() && needs.unit-tests.result == 'success' && needs.ui-tests.result == 'success' }}
     runs-on: macos-26
     environment: release
     timeout-minutes: 120
@@ -259,7 +315,8 @@ jobs:
 
   production:
     needs: build
-    if: inputs.publish
+    # Spelled out for the same reason as build's.
+    if: ${{ !cancelled() && inputs.publish && needs.build.result == 'success' }}
     runs-on: macos-26
     # Configure required reviewers on this environment so production waits for approval.
     environment: production

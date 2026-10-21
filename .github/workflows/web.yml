@@ -53,8 +53,9 @@ jobs:
           # any), so the diff also covers every queued PR ahead that hasn't merged yet.
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
-        # docs/releases/v*.md and CHANGELOG.md are what /changelog/ is built from (#427).
-        run: .github/scripts/pr-touches.sh '^(apps/web/|docs/releases/v[^/]*\.md$|CHANGELOG\.md$|\.github/workflows/[^/]*\.yml$|\.github/scripts/pr-touches\.sh$)'
+        # docs/releases/v*.md and CHANGELOG.md are what /changelog/ is built from (#427). The site's
+        # tests read every workflow file and run every script in .github/scripts.
+        run: .github/scripts/pr-touches.sh '^(apps/web/|docs/releases/v[^/]*\.md$|CHANGELOG\.md$|\.github/workflows/[^/]*\.yml$|\.github/scripts/[^/]*\.sh$)'
 
   check:
     name: Website check (run pnpm check)
