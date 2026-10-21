@@ -45,6 +45,9 @@ jobs:
     if: github.event_name == 'pull_request' || github.event_name == 'merge_group' || inputs.tested_base != ''
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # On a release, a failed lookup never stops it: the job reads as passed with `run` empty, so the
+    # suite runs and the gate needs it to pass. Pull requests and the queue still fail on it.
+    continue-on-error: ${{ inputs.tested_base != '' }}
     defaults:
       run:
         working-directory: .
@@ -133,7 +136,9 @@ jobs:
 
   # The required check. It always runs, and passes only if the unit suite passed, or was skipped because
   # the changes job said this change touches none of its files. A cancelled or failed changes job,
-  # or a cancelled suite, fails it, so a run that tested nothing can't pass the check.
+  # or a cancelled suite, fails it, so a run that tested nothing can't pass the check. On a release,
+  # a failed changes job reads as `success` (its continue-on-error), but only a finished lookup
+  # writes run=false, so the suite has run and must pass.
   unit-tests:
     name: Unit tests (KeybumpsTests)
     needs: [changes, unit]

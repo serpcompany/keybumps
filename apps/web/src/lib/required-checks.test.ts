@@ -15,6 +15,8 @@ const workflows = [
     job: 'unit',
     gate: 'unit-tests',
     check: 'Unit tests (KeybumpsTests)',
+    // The slow job's name, which Release Keybumps looks up (last-tested.sh).
+    run: 'Unit tests (run)',
     release: true
   },
   {
@@ -22,6 +24,7 @@ const workflows = [
     job: 'ui',
     gate: 'ui-tests',
     check: 'UI tests (with retries)',
+    run: 'UI tests (run, with retries)',
     release: true
   },
   {
@@ -29,6 +32,7 @@ const workflows = [
     job: 'check',
     gate: 'website-check',
     check: 'Website check (pnpm check)',
+    run: undefined,
     release: false
   }
 ]
@@ -50,7 +54,7 @@ function job(workflow: string, id: string): string {
   return next === -1 ? workflow.slice(start) : workflow.slice(start, start + 1 + next)
 }
 
-describe.each(workflows)('$file', ({ file, job: slow, gate, check, release }) => {
+describe.each(workflows)('$file', ({ file, job: slow, gate, check, run, release }) => {
   const workflow = read(file)
   const trigger = workflow.slice(workflow.indexOf('\non:\n'), workflow.indexOf('\npermissions:'))
 
@@ -80,8 +84,11 @@ describe.each(workflows)('$file', ({ file, job: slow, gate, check, release }) =>
     expect(changes).toContain(
       `HEAD_SHA: \${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha${release ? ' || github.sha' : ''} }}\n`
     )
-    // Only Release Keybumps passes a tested commit; an empty one runs the suite.
+    // Only Release Keybumps passes a tested commit; an empty one runs the suite. There a failed
+    // changes job reads as passed with `run` empty, so the suite runs and the gate needs it to
+    // pass; on pull requests and in the queue it still fails the check.
     if (release) {
+      expect(changes).toMatch(/^ {4}continue-on-error: \$\{\{ inputs\.tested_base != '' \}\}$/m)
       expect(changes).toContain(`TESTED_BASE: ${expression('inputs.tested_base')}\n`)
       expect(trigger).toContain('  workflow_call:\n    inputs:\n')
       expect(trigger).toMatch(
@@ -89,9 +96,11 @@ describe.each(workflows)('$file', ({ file, job: slow, gate, check, release }) =>
       )
     } else {
       expect(workflow).not.toContain('tested_base')
+      expect(changes).not.toContain('continue-on-error')
     }
     expect(changes).toContain('run: .github/scripts/pr-touches.sh ')
     const suite = job(workflow, slow)
+    if (run) expect(suite).toContain(`\n    name: ${run}\n`)
     expect(suite).toMatch(/^ {4}needs: changes$/m)
     expect(suite).toMatch(
       /if: \$\{\{ !cancelled\(\) && needs\.changes\.outputs\.run != 'false' \}\}/
@@ -115,7 +124,9 @@ describe.each(workflows)('$file', ({ file, job: slow, gate, check, release }) =>
     expect(gateJob).toContain('exit 1')
   })
 
-  it('covers its own workflow file and the script in its pattern', () => {
+  // Every build bundles the release notes: the unit suite parses them and the UI suite opens
+  // Settings › Changelog, and the site builds /changelog/ from them.
+  it('covers its own workflow file, the script, and the release notes in its pattern', () => {
     const pattern = new RegExp(workflow.match(/pr-touches\.sh '([^']+)'/)?.[1] ?? '$^')
     expect(pattern.test(`.github/workflows/${file}`)).toBe(true)
     expect(pattern.test('.github/scripts/pr-touches.sh')).toBe(true)
@@ -124,6 +135,8 @@ describe.each(workflows)('$file', ({ file, job: slow, gate, check, release }) =>
         file === 'web.yml' ? 'apps/web/src/app/site.css' : 'apps/macos/Keybumps/App/AppModel.swift'
       )
     ).toBe(true)
+    expect(pattern.test('docs/releases/v0.0.3-beta.24.md')).toBe(true)
+    expect(pattern.test('docs/releases/sparkle-update-operations.md')).toBe(false)
     expect(pattern.test('AGENTS.md')).toBe(false)
   })
 })
@@ -148,14 +161,16 @@ it('runs the website check on every script in .github/scripts, since the site ru
   }
 })
 
-it('gives no other job a required check name, which could report it without running the suite', () => {
-  const required = workflows.map(({ check }) => check)
+// Release Keybumps also skips a suite on a commit with a passing check run of its slow job's name.
+it('gives no other job a required check name, or a suite name the release looks up, which could report it without running the suite', () => {
+  const guarded = workflows.flatMap(({ check, run }) => (run ? [check, run] : [check]))
   const dir = fileURLToPath(new URL('../../../../.github/workflows/', import.meta.url))
   for (const file of readdirSync(dir).filter(name => name.endsWith('.yml'))) {
     const names = [...read(file).matchAll(/^ {4}name: (.+)$/gm)].map(match => match[1].trim())
-    const own = workflows.find(workflow => workflow.file === file)?.check
-    for (const name of names.filter(name => required.includes(name))) {
-      expect(name, `${file} has a job named "${name}"`).toBe(own)
+    const own = workflows.find(workflow => workflow.file === file)
+    const allowed = own ? [own.check, own.run] : []
+    for (const name of names.filter(name => guarded.includes(name))) {
+      expect(allowed, `${file} has a job named "${name}"`).toContain(name)
     }
   }
 })

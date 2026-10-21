@@ -34,7 +34,8 @@ afterAll(() => rmSync(scratch, { recursive: true, force: true }))
 const unit = 'Unit tests (run)'
 const ui = 'UI tests (run, with retries)'
 
-type CheckRun = [name: string, conclusion: string]
+/** A check run; `app` is the app that reported it, GitHub Actions unless given. */
+type CheckRun = [name: string, conclusion: string, app?: string]
 
 interface History {
   /** The release's commits, newest first; the first is HEAD_SHA. */
@@ -53,7 +54,12 @@ function lastTested({ commits, runs = {}, fail = [] }: History, name = unit): st
   const dir = mkdtempSync(join(scratch, 'run-'))
   writeFileSync(join(dir, 'commits'), commits.join('\n'))
   for (const [sha, list] of Object.entries(runs)) {
-    writeFileSync(join(dir, `runs-${sha}`), list.map(run => run.join('\t')).join('\n'))
+    writeFileSync(
+      join(dir, `runs-${sha}`),
+      list
+        .map(([name, conclusion, app = 'github-actions']) => [name, app, conclusion].join('\t'))
+        .join('\n')
+    )
   }
   for (const what of fail) {
     writeFileSync(join(dir, what === 'commits' ? 'commits.fail' : `runs-${what}.fail`), '')
@@ -108,6 +114,16 @@ describe('.github/scripts/last-tested.sh', () => {
     expect(lastTested({ commits, runs }, ui)).toBe('c2')
   })
 
+  // Another app with `checks: write` could report the suite's name on a commit it never tested.
+  it('counts only check runs that GitHub Actions reported', () => {
+    const runs: History['runs'] = {
+      c3: [[unit, 'success', 'some-other-app']],
+      c2: [[unit, 'success', '']],
+      c1: [[unit, 'success']]
+    }
+    expect(lastTested({ commits, runs })).toBe('c1')
+  })
+
   it('passes over a commit whose suite failed, was cancelled, or is still running', () => {
     const runs: History['runs'] = {
       c3: [[unit, 'failure']],
@@ -144,8 +160,8 @@ describe('.github/scripts/last-tested.sh', () => {
     expect(calls[0]).toBe(
       'api --method GET repos/example/repo/commits -f sha=c3 -f per_page=50 --jq .[].sha'
     )
-    expect(calls[1]).toMatch(
-      /^api --method GET repos\/example\/repo\/commits\/c3\/check-runs -f check_name=UI tests \(run, with retries\) -f per_page=100 /
+    expect(calls[1]).toBe(
+      'api --method GET repos/example/repo/commits/c3/check-runs -f check_name=UI tests (run, with retries) -f per_page=100 --jq .check_runs[] | [.name, .app.slug, .conclusion] | @tsv'
     )
     expect(calls).toHaveLength(3)
   })
