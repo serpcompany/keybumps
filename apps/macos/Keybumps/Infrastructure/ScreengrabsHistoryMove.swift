@@ -30,8 +30,10 @@ import OSLog
 ///   One it holds there for a folder chosen before #605 doesn't wait: nothing is saved there now,
 ///   and the copy leaves the folder as it is.
 /// - **Partial copies** Keybumps left when it quit mid-copy (`.<name>.keybumps-moving`) are removed
-///   first, each launch, in the history's two folders and where convenience copies go
-///   (`ScreengrabFiles.removePartialCopies`). Nothing else there is touched.
+///   first, each launch, in the history's two folders (`ScreengrabFiles.removePartialCopies`).
+///   Nothing else there is touched. The launch's moves never read where convenience copies go: a
+///   partial copy there is removed just before the next copy (`ScreengrabCopies.put`), so a Mac
+///   that never used ScreenGrabs isn't asked for its Desktop (#611).
 /// - **Logs** say only counts, the stage, an error code, and how long it took: never a path, a
 ///   name, or content.
 struct ScreengrabsHistoryMove {
@@ -52,18 +54,14 @@ struct ScreengrabsHistoryMove {
 
     /// The Keybumps folder's paths, with what `KeybumpsFolderMove` left in its old place.
     let paths: ProductPaths
-    /// Where convenience copies go (`ScreengrabCopies`), swept for partial copies; nil sweeps only
-    /// the history.
-    var copiesFolder: URL?
     var fileManager: FileManager = .default
     var defaults: UserDefaults = .standard
     /// `ScreengrabFiles.cloneExclusively`. Tests make it fail with `ENOTSUP` so the checked copy runs.
     var clone: (URL, URL) -> Int32 = ScreengrabFiles.cloneExclusively
     private let logger = Logger(subsystem: "com.serp.keybumps", category: "screengrabs-history")
 
-    init(paths: ProductPaths, copiesFolder: URL? = nil, fileManager: FileManager = .default, defaults: UserDefaults = .standard) {
+    init(paths: ProductPaths, fileManager: FileManager = .default, defaults: UserDefaults = .standard) {
         self.paths = paths
-        self.copiesFolder = copiesFolder
         self.fileManager = fileManager
         self.defaults = defaults
     }
@@ -72,14 +70,14 @@ struct ScreengrabsHistoryMove {
     /// in UI test mode, whose folders start empty.
     static func runAtLaunch() {
         guard !UnitTestHost.isActive, ProductPaths.sandboxRoot == nil else { return }
-        ScreengrabsHistoryMove(paths: .keybumps(), copiesFolder: ScreenshotLocationResolver.system.resolve()).run()
+        ScreengrabsHistoryMove(paths: .keybumps()).run()
     }
 
     @discardableResult
     func run() -> Report {
         let started = ContinuousClock.now
         var report = Report()
-        for folder in [paths.screengrabsScreenshots, paths.screengrabsRecordings] + [copiesFolder].compactMap({ $0 }) {
+        for folder in [paths.screengrabsScreenshots, paths.screengrabsRecordings] {
             report.partials += ScreengrabFiles.removePartialCopies(in: folder, fileManager: fileManager)
         }
         moveScreenshots(&report)

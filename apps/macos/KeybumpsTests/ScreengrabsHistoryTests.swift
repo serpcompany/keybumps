@@ -169,6 +169,46 @@ struct ScreengrabsHistoryTests {
         #expect(Self.tab(fixture.clipboard).count == 2, "listed in the ScreenGrabs tab")
     }
 
+    @Test("The editor's Save on a screenshot works before ScreenGrabs' history exists: the folder is made, and the edited copy kept there (#611)")
+    func editedScreenshotSavesWithoutTheHistoryFolder() throws {
+        let fixture = HistoryFixture()
+        defer { fixture.tearDown() }
+        let desktop = fixture.desktop
+        // A screenshot item from before #605 that the launch's move hasn't brought into the history.
+        let source = desktop.appendingPathComponent("Screenshot 2026-10-21 at 10.00.00.png")
+        let media = fixture.media.appendingPathComponent("made-up.png")
+        for file in [source, media] { try fixture.write(Self.realPNG(), to: file) }
+        try fixture.save([Self.screenshot(media: media, source: source, at: 0)])
+        let clipboard = fixture.clipboard()
+        let screenshot = try #require(clipboard.entries.first)
+        let screengrabs = fixture.paths.keybumpsFolder.appendingPathComponent("screengrabs", isDirectory: true)
+        try #require(!FileManager.default.fileExists(atPath: screengrabs.path), "neither screengrabs/ nor screengrabs/screenshots/ exists")
+        let delivery = ScreenshotClipboardDelivery(clipboard: clipboard, copiesToClipboard: { true }, copies: ScreengrabCopies(folder: { desktop }))
+        let watcher = ScreenshotToolsService(
+            resolver: ScreenshotLocationResolver(preferredLocation: { desktop.path }, homeDirectory: fixture.url, isDirectory: { _ in true }),
+            reader: FakeScreenshotDirectoryReader(granted: true),
+            ingest: { _ in false }
+        )
+        let presenter = ScreenshotEditorPresenter(
+            fallbackFolder: { desktop },
+            screenshotsFolder: { clipboard.screenshotsFolder },
+            keepsEditedScreenshot: { delivery.addEdited($0, watcher: watcher) },
+            pasteboard: fixture.pasteboard,
+            editingChanged: { _ in }
+        )
+
+        // Never presented, so no window appears.
+        let editor = try #require(presenter.makeController(for: screenshot))
+        editor.save()
+
+        let edited = fixture.history.appendingPathComponent("Screenshot 2026-10-21 at 10.00.00 (edited).png")
+        #expect(FileManager.default.fileExists(atPath: edited.path), "in the history, made for it")
+        let item = try #require(clipboard.entries.first)
+        #expect(item.id != screenshot.id && item.isScreenshot && item.imageURL == edited, "a screenshot of its own, newest")
+        let copy = desktop.appendingPathComponent(edited.lastPathComponent)
+        #expect(FileManager.default.contentsEqual(atPath: edited.path, andPath: copy.path), "with its copy on the Desktop")
+    }
+
     @Test("Turning Clipboard History or ScreenGrabs on lists the screenshots taken into the history while either was off, kept out of the Clipboard tab")
     func turningOnListsScreenshotsTakenWhileOff() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsScreengrabsTurningOn-\(UUID().uuidString)", isDirectory: true)
@@ -623,16 +663,13 @@ struct ScreengrabsHistoryTests {
         #expect(fileManager.comparisons == 1)
     }
 
-    @Test("At launch, partial copies Keybumps left in the history and where copies go are removed, and nothing else")
+    @Test("At launch, partial copies Keybumps left in the history are removed, and nothing else")
     func partialCopiesAreRemoved() throws {
         let fixture = HistoryFixture()
         defer { fixture.tearDown() }
-        let paths = fixture.paths
-        let desktop = fixture.desktop
-        let recordings = paths.screengrabsRecordings
+        let recordings = fixture.paths.screengrabsRecordings
         let partials = [
             KeybumpsFolderMove.partialCopy(of: fixture.history.appendingPathComponent("Screenshot A.png")),
-            KeybumpsFolderMove.partialCopy(of: desktop.appendingPathComponent("Screenshot B.png")),
             KeybumpsFolderMove.partialCopy(of: recordings.appendingPathComponent("1790000000", isDirectory: true)).appendingPathComponent("video-1.mov"),
         ]
         for partial in partials { try fixture.write(Data("partial".utf8), to: partial) }
@@ -640,18 +677,79 @@ struct ScreengrabsHistoryTests {
             fixture.history.appendingPathComponent("Screenshot C.png"),
             fixture.history.appendingPathComponent(".keybumps-moving"),
             fixture.history.appendingPathComponent("Screenshot D.png.keybumps-moving"),
-            desktop.appendingPathComponent(".Screenshot E.png"),
-            desktop.appendingPathComponent(".Screenshot F.png.keybumps-moving.txt"),
-            desktop.appendingPathComponent("Folder/.Screenshot G.png.keybumps-moving"),
             recordings.appendingPathComponent("1790000100/video-1.mov"),
         ]
         for other in others { try fixture.write(Data("the person's".utf8), to: other) }
 
-        let report = ScreengrabsHistoryMove(paths: paths, copiesFolder: desktop, defaults: fixture.defaults).run()
-        #expect(report.partials == 3 && report.failures == 0)
+        let report = fixture.move().run()
+        #expect(report.partials == 2 && report.failures == 0)
         #expect(!FileManager.default.fileExists(atPath: partials[0].path))
-        #expect(!FileManager.default.fileExists(atPath: partials[1].path), "where copies go too")
-        #expect(!FileManager.default.fileExists(atPath: partials[2].deletingLastPathComponent().path), "a partial folder, with what's in it")
+        #expect(!FileManager.default.fileExists(atPath: partials[1].deletingLastPathComponent().path), "a partial folder, with what's in it")
+        for other in others { #expect(FileManager.default.fileExists(atPath: other.path), "\(other.lastPathComponent) stays") }
+    }
+
+    @Test("With ScreenGrabs off, launch never lists where copies go, or asks where that is, and a partial copy there stays (#611)")
+    func launchLeavesWhereCopiesGoAlone() throws {
+        let fixture = HistoryFixture()
+        defer { fixture.tearDown() }
+        let desktop = fixture.desktop
+        let partial = KeybumpsFolderMove.partialCopy(of: desktop.appendingPathComponent("Screenshot A.png"))
+        try fixture.write(Data("partial".utf8), to: partial)
+
+        // The history move, which runs at every launch, ScreenGrabs on or off, lists only the history.
+        let fileManager = ListingFileManager()
+        let report = ScreengrabsHistoryMove(paths: fixture.paths, fileManager: fileManager, defaults: fixture.defaults).run()
+        #expect(report == ScreengrabsHistoryMove.Report())
+        #expect(Set(fileManager.listed) == [fixture.history.path, fixture.paths.screengrabsRecordings.path])
+
+        // The app starting with Clipboard History on and ScreenGrabs off neither asks where copies go
+        // nor lists where macOS saves screenshots.
+        var asked = 0
+        let reader = ListingScreenshotReader()
+        let harness = WiringHarness(
+            enabled: [.clipboardHistory], missing: nil, root: fixture.url, screenshotReader: reader,
+            screengrabCopies: ScreengrabCopies(folder: { asked += 1; return desktop })
+        )
+        harness.model.start()
+        #expect(asked == 0)
+        #expect(reader.listed.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: partial.path), "left for the next copy, which only ScreenGrabs makes")
+    }
+
+    @Test("With ScreenGrabs on, a partial copy Keybumps left where copies go is removed just before the next copy there, and nothing else (#611)")
+    func partialCopyGoesBeforeTheNextCopy() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let desktop = Self.desktop(in: fixture.root)
+        let partials = [
+            KeybumpsFolderMove.partialCopy(of: desktop.appendingPathComponent("Screenshot A.png")),
+            KeybumpsFolderMove.partialCopy(of: desktop.appendingPathComponent("1790000000", isDirectory: true)).appendingPathComponent("video-1.mov"),
+        ]
+        let others = [
+            desktop.appendingPathComponent("Notes.txt"),
+            desktop.appendingPathComponent(".keybumps-moving"),
+            desktop.appendingPathComponent("Screenshot D.png.keybumps-moving"),
+            desktop.appendingPathComponent(".Screenshot E.png"),
+            desktop.appendingPathComponent(".Screenshot F.png.keybumps-moving.txt"),
+            desktop.appendingPathComponent("Folder/.Screenshot G.png.keybumps-moving"),
+        ]
+        for (file, contents) in partials.map({ ($0, "partial") }) + others.map({ ($0, "the person's") }) {
+            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data(contents.utf8).write(to: file)
+        }
+        let capture = HotkeyCapture(fixture, copyingTo: desktop)
+        defer { capture.watcher.stop() }
+        #expect(partials.allSatisfy { FileManager.default.fileExists(atPath: $0.path) }, "watching the folder leaves them")
+
+        var written: [URL] = []
+        capture.delivery.capture(.area, with: capture.capturer, watcher: capture.watcher) { written = $0 }
+        capture.runner.finish?()
+
+        let file = try #require(written.first)
+        let copy = desktop.appendingPathComponent(file.lastPathComponent)
+        #expect(FileManager.default.contentsEqual(atPath: file.path, andPath: copy.path), "the copy is made")
+        #expect(!FileManager.default.fileExists(atPath: partials[0].path))
+        #expect(!FileManager.default.fileExists(atPath: partials[1].deletingLastPathComponent().path), "a partial folder, with what's in it")
         for other in others { #expect(FileManager.default.fileExists(atPath: other.path), "\(other.lastPathComponent) stays") }
     }
 
@@ -865,5 +963,30 @@ private final class ComparingFileManager: FileManager, @unchecked Sendable {
     override func contentsEqual(atPath path1: String, andPath path2: String) -> Bool {
         comparisons += 1
         return super.contentsEqual(atPath: path1, andPath: path2)
+    }
+}
+
+/// Records each folder it's asked to list.
+private final class ListingFileManager: FileManager {
+    private(set) var listed: [String] = []
+
+    override func contentsOfDirectory(atPath path: String) throws -> [String] {
+        listed.append(path)
+        return try super.contentsOfDirectory(atPath: path)
+    }
+
+    override func contentsOfDirectory(at url: URL, includingPropertiesForKeys keys: [URLResourceKey]?, options mask: FileManager.DirectoryEnumerationOptions = []) throws -> [URL] {
+        listed.append(url.path)
+        return try super.contentsOfDirectory(at: url, includingPropertiesForKeys: keys, options: mask)
+    }
+}
+
+/// Where macOS saves screenshots, as the watcher lists it, recording each folder it's asked for.
+private final class ListingScreenshotReader: ScreenshotDirectoryReading {
+    private(set) var listed: [URL] = []
+
+    func entries(in folder: URL) throws -> [ScreenshotDirectoryEntry] {
+        listed.append(folder)
+        return []
     }
 }
