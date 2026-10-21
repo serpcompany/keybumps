@@ -349,7 +349,8 @@ final class AppModel {
             ),
             permissions: permissions,
             recording: recording,
-            // An edited screenshot is saved where macOS saves screenshots, beside its copy (#605).
+            // An edited image whose own folder can't be written to; an edited screenshot goes into
+            // ScreenGrabs' history instead (#605).
             editorFallbackFolder: screenshotEditorFallbackFolder ?? { preferences.screenshotLocation.resolve() },
             updateSafety: CapabilityUpdateSafety(policy: updateSafetyPolicy, updater: updater, descriptor: .screenshotTools)
         )

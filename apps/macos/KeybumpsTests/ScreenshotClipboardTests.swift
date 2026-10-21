@@ -350,8 +350,8 @@ struct ScreenshotClipboardTests {
 
         /// The hotkeys save in the fixture's ScreenGrabs history, as the app's do (#605), and copy
         /// each screenshot where macOS saves them, which the watcher watches: `folder`, else the
-        /// fixture's folder, a stand-in for the Desktop.
-        init(_ fixture: Fixture, copyingTo folder: URL? = nil, reader: (any ScreenshotDirectoryReading)? = nil) {
+        /// fixture's folder, a stand-in for the Desktop. `now` is when each screenshot is taken.
+        init(_ fixture: Fixture, copyingTo folder: URL? = nil, reader: (any ScreenshotDirectoryReading)? = nil, now: @escaping () -> Date = Date.init) {
             let macOSFolder = folder ?? fixture.root
             let history = fixture.clipboard.screenshotsFolder
             try? FileManager.default.createDirectory(at: history, withIntermediateDirectories: true)
@@ -361,7 +361,7 @@ struct ScreenshotClipboardTests {
                 copies: ScreengrabCopies(folder: { macOSFolder })
             )
             self.delivery = delivery
-            capturer = ScreenshotCapturer(runner: runner, folder: { history }, displayCount: { 3 })
+            capturer = ScreenshotCapturer(runner: runner, folder: { history }, now: now, displayCount: { 3 })
             watcher = ScreenshotToolsService(
                 resolver: ScreenshotLocationResolver(preferredLocation: { macOSFolder.path }, homeDirectory: fixture.root, isDirectory: { _ in true }),
                 reader: reader ?? FileSystemScreenshotDirectoryReader(),

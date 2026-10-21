@@ -103,7 +103,8 @@ extension ProductPaths {
 ///   place, Finder's `.DS_Store`, and the move's own partial copies.
 /// - **A folder chosen** in Settings › ScreenGrabs before #605, or one inside it, isn't moved: an old
 ///   place that is, or holds, a chosen folder stays, read there, and is looked at again each launch.
-///   Nor is a chosen `~/Documents/Keybumps` removed once it's empty.
+///   Nor is a chosen `~/Documents/Keybumps` removed once it's empty. New recordings still go to
+///   `screengrabs/recordings/`, and `ScreengrabsHistoryMove` copies the ones held there into it.
 /// - **Paths:** Clipboard History, the recordings index, and each Dictation model's
 ///   `model-location.txt` store absolute paths, and ScreenGrabs remembered the folders it recorded
 ///   into until #605 (`RecordingFolderMemory`); one into a folder that moved is rewritten once its
@@ -173,7 +174,7 @@ struct KeybumpsFolderMove {
         let chosen = AppPreferences.chosenScreengrabFolderPaths(in: defaults)
         for item in KeybumpsFolderItem.allCases where report.looksInDocuments || !item.isInDocuments {
             let failuresBefore = report.failures
-            if holdsChosenFolder(paths.oldPlace(of: item), chosen) {
+            if Self.holdsChosenFolder(paths.oldPlace(of: item), chosen) {
                 if fileExists(paths.oldPlace(of: item)) { report.leftInOldPlace.insert(item) }
                 if item.isInDocuments { documentsFailures += 1 }
                 continue
@@ -190,7 +191,7 @@ struct KeybumpsFolderMove {
         rewritePaths(&report)
         if report.looksInDocuments {
             documentsFailures += report.failures - failuresBefore
-            if !holdsChosenFolder(paths.oldDocumentsFolder, chosen) { removeIfEmpty(paths.oldDocumentsFolder) }
+            if !Self.holdsChosenFolder(paths.oldDocumentsFolder, chosen) { removeIfEmpty(paths.oldDocumentsFolder) }
             if documentsFailures == 0 {
                 defaults.set(Date(), forKey: Self.documentsMovedKey)
             } else {
@@ -206,7 +207,7 @@ struct KeybumpsFolderMove {
 
     /// Whether `folder` is a folder chosen in Settings › ScreenGrabs before #605, or holds one. Lexical: it never
     /// looks at the disk.
-    private func holdsChosenFolder(_ folder: URL, _ chosen: [String]) -> Bool {
+    static func holdsChosenFolder(_ folder: URL, _ chosen: [String]) -> Bool {
         let path = folder.standardizedFileURL.path
         return chosen.contains { $0 == path || $0.hasPrefix(path + "/") }
     }

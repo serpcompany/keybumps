@@ -16,15 +16,33 @@ enum ScreenshotCaptureMode: Equatable {
 /// How `/usr/sbin/screencapture` is called and where the files go, named like macOS's own
 /// screenshots so Finder and Clipboard History treat them the same.
 enum ScreenshotCapturePlan {
-    static func files(in folder: URL, at date: Date, displayCount: Int, mode: ScreenshotCaptureMode) -> [URL] {
+    /// One file per display for `screens`, else one: `Screenshot <date> at <time>.png`, then
+    /// ` (2)`, ` (3)` for the other displays. `screencapture` writes over whatever is at a path, so
+    /// while any of a capture's names `isTaken`, such as by a screenshot taken in the same second,
+    /// the capture takes Finder's next name for all of them (`Screenshot … 2.png`, `… 2 (2).png`).
+    static func files(
+        in folder: URL,
+        at date: Date,
+        displayCount: Int,
+        mode: ScreenshotCaptureMode,
+        isTaken: (URL) -> Bool = { _ in false }
+    ) -> [URL] {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
         let base = "Screenshot \(formatter.string(from: date))"
         let count = mode == .screens ? max(displayCount, 1) : 1
-        return (1...count).map { index in
-            folder.appendingPathComponent(index == 1 ? "\(base).png" : "\(base) (\(index)).png")
+        func files(_ base: String) -> [URL] {
+            (1...count).map { index in
+                folder.appendingPathComponent(index == 1 ? "\(base).png" : "\(base) (\(index)).png")
+            }
         }
+        for attempt in 1...ScreengrabFiles.maximumAttempts {
+            let candidate = files(attempt == 1 ? base : "\(base) \(attempt)")
+            if !candidate.contains(where: isTaken) { return candidate }
+        }
+        // Never reached in practice: a thousand captures in one second. A name of its own, still.
+        return files("\(base) \(UUID().uuidString)")
     }
 
     static func arguments(for mode: ScreenshotCaptureMode, files: [URL]) -> [String] {
@@ -77,6 +95,9 @@ final class ScreenshotCapturer {
     private let now: () -> Date
     private let displayCount: () -> Int
     private let fileManager: FileManager
+    /// The files captures under way are about to write, by resolved path, so a capture started
+    /// before the last one's `screencapture` exits never takes its names.
+    private var writing: Set<String> = []
 
     init(
         runner: any ScreenshotCaptureRunning = ProcessScreenshotCaptureRunner(),
@@ -102,16 +123,26 @@ final class ScreenshotCapturer {
         let folder = folder()
         // `screencapture` writes nothing into a folder that isn't there.
         try? fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
-        let files = ScreenshotCapturePlan.files(in: folder, at: now(), displayCount: displayCount(), mode: mode)
+        // Never a name already in the folder, or one a capture under way is writing: the history
+        // keeps each screenshot's only file there (#605).
+        let files = ScreenshotCapturePlan.files(in: folder, at: now(), displayCount: displayCount(), mode: mode) { [writing] file in
+            var info = stat()
+            return lstat(file.path, &info) == 0 || writing.contains(ProductPaths.canonicalPath(file))
+        }
+        let reserved = Set(files.map(ProductPaths.canonicalPath))
+        writing.formUnion(reserved)
         willWrite(files)
-        runner.run(arguments: ScreenshotCapturePlan.arguments(for: mode, files: files)) { [fileManager] in
+        runner.run(arguments: ScreenshotCapturePlan.arguments(for: mode, files: files)) { [weak self, fileManager] in
+            self?.writing.subtract(reserved)
             let written = files.filter { fileManager.fileExists(atPath: $0.path) }
             written.forEach(Self.markAsScreenCapture)
             completion(written)
         }
     }
 
-    private static func markAsScreenCapture(_ url: URL) {
+    /// Gives a file macOS's screen-capture mark, as `screencapture` gives macOS's own screenshots,
+    /// unless it has it. The Screenshot Editor's saved screenshots get it too.
+    static func markAsScreenCapture(_ url: URL) {
         guard getxattr(url.path, FileSystemScreenshotDirectoryReader.screenCaptureAttribute, nil, 0, 0, 0) < 0,
               let value = try? PropertyListSerialization.data(fromPropertyList: true, format: .binary, options: 0)
         else { return }

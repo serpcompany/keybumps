@@ -156,8 +156,8 @@ final class ScreencastModule {
 
     /// ScreenGrabs turned off, or Keybumps Locked: the picker closes and a countdown is cancelled,
     /// but a recording stops and is kept. It opens nothing; it stays in the history it was made in,
-    /// which the index reads again at the next launch, so it lists it (`ScreencastController.shutDown`).
-    /// It gets no copy where macOS saves screenshots, as the recording window never kept it.
+    /// is listed, and gets its copy where macOS saves screenshots, as Save in the recording window
+    /// would give it (`ScreencastController.shutDown`, `ScreencastReviewFlow.captureKept`).
     func deactivate(_ context: CapabilityContext) {
         isOn = false
         recordingControls.deactivate()
@@ -235,6 +235,7 @@ final class ScreencastModule {
             overlays: overlays
         )
         controller.onCaptureFinished = { [review] result in review.captureFinished(result) }
+        controller.onCaptureKept = { [review] result in review.captureKept(result) }
         controller.addPhaseObserver { [review] phase in review.capturePhaseChanged(phase) }
         controllerStorage = controller
         return controller

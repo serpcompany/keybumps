@@ -461,7 +461,7 @@ struct RecordingLibraryTests {
     }
 
     @available(macOS 15, *)
-    @Test("A recording kept as ScreenGrabs turns off mid-recording is saved in the history, and listed at the next launch")
+    @Test("A recording kept as ScreenGrabs turns off mid-recording is saved in the history, listed, and copied where macOS saves screenshots, and still listed at the next launch")
     func shutDownMidRecordingIsListedNextLaunch() async throws {
         defer { fixture.tearDown() }
         let library = fixture.library()
@@ -471,6 +471,9 @@ struct RecordingLibraryTests {
         let history = preferences.screencast.capturesFolder
         try FileManager.default.createDirectory(at: history, withIntermediateDirectories: true)
         let before = Set(try FileManager.default.contentsOfDirectory(atPath: history.path))
+        let desktop = fixture.root.url.appendingPathComponent("Desktop", isDirectory: true)
+        var review = fixture.reviewServices(recordings: library)
+        review.copies = ScreengrabCopies(folder: { desktop })
         let module = ScreencastModule(
             preferences: preferences,
             permissions: PermissionCoordinator(screenRecordingAuthorized: { true }),
@@ -484,7 +487,7 @@ struct RecordingLibraryTests {
                 sleep: { _ in },
                 contextReader: .inert
             ),
-            review: fixture.reviewServices(recordings: library)
+            review: review
         )
         module.apply(fixture.context([.screenshotTools], preferences: preferences))
 
@@ -496,14 +499,18 @@ struct RecordingLibraryTests {
         controller.confirm()
         #expect(await eventually { controller.phase == .recording })
 
-        // Locked, or ScreenGrabs turned off: the recording is kept, and nothing opens or adds it.
+        // Locked, or ScreenGrabs turned off: the recording is kept, listed, and copied, and nothing opens.
         module.deactivate(fixture.context([], preferences: preferences))
         #expect(await eventually { controller.phase == .idle && controller.recorder.state == .idle })
         let made = Set(try FileManager.default.contentsOfDirectory(atPath: history.path)).subtracting(before)
         let kept = try #require(made.map { history.appendingPathComponent($0, isDirectory: true) }
             .first { FileManager.default.fileExists(atPath: $0.appendingPathComponent(ScreencastMetadata.fileName).path) })
         defer { try? FileManager.default.removeItem(at: kept) }
-        #expect(library.recordings.isEmpty)
+        #expect(await eventually { !library.recordings.isEmpty })
+        #expect(library.recordings.map { ProductPaths.canonicalPath($0.folder) } == [ProductPaths.canonicalPath(kept)])
+        #expect(module.review.panel == nil)
+        let copy = desktop.appendingPathComponent(kept.lastPathComponent, isDirectory: true)
+        #expect(FileManager.default.contentsEqual(atPath: kept.path, andPath: copy.path), "its whole folder")
 
         let next = fixture.library(capturesFolder: history)
         next.load()

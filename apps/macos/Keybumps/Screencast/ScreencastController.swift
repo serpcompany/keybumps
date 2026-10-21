@@ -145,6 +145,9 @@ final class ScreencastController {
     /// A recording was saved: the review panel takes it from here. A recording that ended early
     /// comes here too, with `endedEarly` set, after its message.
     @ObservationIgnored var onCaptureFinished: ((ScreencastCaptureResult) -> Void)?
+    /// A recording was kept after `shutDown()` (ScreenGrabs turned off, or Keybumps Locked), which
+    /// opens nothing: it's listed and gets its copy where macOS saves screenshots from here (#605).
+    @ObservationIgnored var onCaptureKept: ((ScreencastCaptureResult) -> Void)?
 
     @ObservationIgnored private let system: any ScreencastPickerSystem
     @ObservationIgnored private let presenter: any ScreencastOverlayPresenting
@@ -603,9 +606,8 @@ final class ScreencastController {
 
     /// Screencast turned off, or Keybumps Locked: the picker closes, and a countdown or a start is
     /// cancelled. A recording stops and is kept, and a capture being saved finishes; neither opens
-    /// anything: they stay in the history they were made in (`ScreencastPreferences.capturesFolder`),
-    /// which the recordings index reads again at the next launch, so it lists them. Footage is never
-    /// thrown away here.
+    /// anything: they stay in the history they were made in (`ScreencastPreferences.capturesFolder`)
+    /// and go to `onCaptureKept`. Footage is never thrown away here.
     func shutDown() async {
         opensFinishedCaptures = false
         switch phase {
@@ -688,6 +690,7 @@ final class ScreencastController {
             onCaptureFinished?(result)
         } else {
             logger.info("screencast recording kept while turned off")
+            onCaptureKept?(result)
         }
     }
 

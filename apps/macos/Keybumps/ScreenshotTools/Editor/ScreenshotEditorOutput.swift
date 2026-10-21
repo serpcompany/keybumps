@@ -4,8 +4,8 @@ import Foundation
 enum ScreenshotEditorOutput {
     /// Beside the source, named after it, where that folder can be written to, else in
     /// `fallbackFolder`. `besideSource: false` always writes in `fallbackFolder`, still named after
-    /// the source: a screenshot's file is in ScreenGrabs' history, which holds only screenshots
-    /// (#605), so its edited copy goes where macOS saves screenshots, beside the screenshot's copy.
+    /// the source: for a screenshot, ScreenGrabs' history (#605). The first name nothing has is
+    /// used, so nothing is written over.
     static func destination(
         sourceURL: URL?,
         fallbackFolder: URL,

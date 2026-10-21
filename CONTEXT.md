@@ -144,11 +144,11 @@ A PNG of the screens or an area, taken with ScreenGrabs' hotkeys or with macOS's
 _Avoid_: Snap
 
 **ScreenGrabs' history**:
-Where ScreenGrabs keeps every screengrab, in the Keybumps folder's `screengrabs/`: every screenshot in `screenshots/`, and every recording, in a folder of its own, in `recordings/` (ADR 0013, decision 4). The hotkeys and the recorder save there, and a screenshot macOS saves is copied in. The ScreenGrabs tab, the recordings index, and Clipboard History's screenshot items name these files. There's no folder to choose: one chosen in Settings › ScreenGrabs before #605 is no longer used.
+Where ScreenGrabs keeps every screengrab, in the Keybumps folder's `screengrabs/`: every screenshot in `screenshots/`, and every recording, in a folder of its own, in `recordings/` (ADR 0013, decision 4). The hotkeys, the recorder, and the Screenshot Editor's Save on a screenshot save there, never over a file already there, and a screenshot macOS saves is copied in. The ScreenGrabs tab, the recordings index, and Clipboard History's screenshot items name these files. There's no folder to choose: one chosen in Settings › ScreenGrabs before #605 is no longer used.
 _Avoid_: Screenshots folder, Recordings folder, captures folder (former names), library
 
 **Convenience copy**:
-The copy of a screengrab where macOS saves screenshots (`com.apple.screencapture` `location`, else the Desktop): a hotkey screenshot's as it's taken, and a recording's whole folder once the recording window keeps it; a screenshot macOS saved itself is its own copy. An APFS clone where it can be, so it takes no more space (`ScreengrabCopies`). It's the person's: nothing Keybumps keeps names it, so moving or deleting it, such as by clearing the Desktop, never touches the history, and a screengrab is never "Moved or deleted" because of it.
+The copy of a screengrab where macOS saves screenshots (`com.apple.screencapture` `location`, else the Desktop): a hotkey screenshot's as it's taken, an edited screenshot's as it's saved, and a recording's whole folder once it's kept; a screenshot macOS saved itself is its own copy. An APFS clone where it can be, so it takes no more space (`ScreengrabCopies`). It's the person's: nothing Keybumps keeps names it, so moving or deleting it, such as by clearing the Desktop, never touches the history, and a screengrab is never "Moved or deleted" because of it.
 _Avoid_: Desktop copy (the Desktop is only macOS's default), backup, export, duplicate
 
 **ScreenGrabs tab**:

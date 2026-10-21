@@ -38,6 +38,10 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
     private var keyMonitor: Any?
     private var didFinish = false
     var onFinish: ((Result?) -> Void)?
+    /// Called with the edited copy as soon as Save has written it, before `onFinish`, in the same
+    /// turn of the main thread as its pasteboard write: a screenshot's is kept in ScreenGrabs'
+    /// history as a screenshot of its own (`ScreenshotEditorPresenter`, #605).
+    var onSaved: ((URL) -> Void)?
 
     init(
         source: ScreenshotRenderSource,
@@ -104,6 +108,7 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
         if copied { pasteboard.markCopiedByKeybumps() }
         let destination = ScreenshotEditorOutput.destination(sourceURL: sourceURL, fallbackFolder: fallbackFolder, besideSource: savesBesideSource)
         let savedURL: URL? = (try? png.write(to: destination, options: .withoutOverwriting)) == nil ? nil : destination
+        if let savedURL { onSaved?(savedURL) }
         if savedURL == nil {
             let alert = NSAlert()
             alert.messageText = "Couldn’t save the edited copy"

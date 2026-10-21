@@ -142,7 +142,7 @@ struct ScreenshotClipboardDelivery {
     /// (`copies`), which the watcher leaves alone (`skip`), then adds them here. Screenshot Screen
     /// adds only while ScreenGrabs runs with Clipboard History
     /// (`ScreenshotToolsStatus.addsScreenshots`); one taken otherwise stays in the history, and is
-    /// listed at the next launch (`ClipboardHistoryService.adoptScreenshots()`). Screen and Edit and
+    /// listed once both are on again (`ClipboardHistoryService.adoptScreenshots()`). Screen and Edit and
     /// Area and Edit (`forEditing`) always add, since the editor opens the item. The QA smoke test
     /// takes its screenshots through this too. Calls `completion` with the files written, main
     /// first.
@@ -170,6 +170,17 @@ struct ScreenshotClipboardDelivery {
             watcher.stopSkipping(planned.filter { !files.contains($0) })
             completion(files)
         }
+    }
+
+    /// Keeps a screenshot the Screenshot Editor saved into ScreenGrabs' history (#605) as a hotkey's
+    /// is kept: marked as a screen capture, copied to where macOS saves screenshots (`copies`), which
+    /// the watcher leaves alone (`skip`), and added here as a screenshot of its own, newest. Its
+    /// pasteboard copy, which the editor wrote, then moves this item up rather than adding an image.
+    @discardableResult
+    func addEdited(_ file: URL, watcher: ScreenshotToolsService) -> ClipboardEntry? {
+        ScreenshotCapturer.markAsScreenCapture(file)
+        if let copy = copies?.put(file) { watcher.skip([copy]) }
+        return clipboard.addScreenshot(at: file)
     }
 
     /// Adds a capture that doesn't open the editor (Screenshot Screen, or the QA smoke test's): every display's file, the main

@@ -17,9 +17,10 @@ struct ScreencastPreferences: Equatable {
     /// Whether a ring shows where the pointer clicks while recording. Off by default.
     var highlightsClicks: Bool
     /// Where each recording is saved, in a `<timestamp>/` folder of its own: the history, the Keybumps
-    /// folder's `screengrabs/recordings/` (#605, ADR 0013), where the launch's move left it
-    /// (`ProductPaths.inUse`), or its stand-in in the UI-test sandbox and the unit-test host. A copy
-    /// goes where macOS saves screenshots once the recording window keeps it (`ScreengrabCopies`).
+    /// folder's `screengrabs/recordings/` (#605, ADR 0013), or its stand-in in the UI-test sandbox
+    /// and the unit-test host. Always there, even while the launch's move left the old recordings
+    /// folder in its old place. A copy goes where macOS saves screenshots once the recording is kept
+    /// (`ScreengrabCopies`).
     var capturesFolder: URL
 
     /// The picker's switches, which are these settings too.
@@ -51,7 +52,7 @@ extension AppPreferences {
             countdownSeconds: Int(choice(.screencastCountdown, for: .screenshotTools)) ?? 0,
             showsShortcuts: bool(.screencastShowsShortcuts, for: .screenshotTools),
             highlightsClicks: bool(.screencastHighlightsClicks, for: .screenshotTools),
-            capturesFolder: ProductPaths.keybumps().inUse(.recordings)
+            capturesFolder: ProductPaths.keybumps().screengrabsRecordings
         )
     }
 

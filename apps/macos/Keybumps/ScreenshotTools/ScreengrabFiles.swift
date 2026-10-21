@@ -28,6 +28,7 @@ enum ScreengrabFiles {
         clone: (URL, URL) -> Int32 = cloneExclusively
     ) -> Result {
         let code = clone(source, destination)
+        // A clone shares the original's storage, so it isn't read back; only a plain copy is checked.
         if code == 0 { return .copied(destination) }
         if code == EEXIST { return .exists }
         if code == ENOENT, !exists(source) { return .failed(Int(code)) }
@@ -101,6 +102,23 @@ enum ScreengrabFiles {
         let parent = url.deletingLastPathComponent()
         if parent.standardizedFileURL.path == folder.standardizedFileURL.path { return true }
         return ProductPaths.canonicalPath(parent) == ProductPaths.canonicalPath(folder)
+    }
+
+    /// Removes the partial copies Keybumps left directly in `folder` when it quit mid-copy:
+    /// `.<name>.keybumps-moving` (`KeybumpsFolderMove.partialCopy(of:)`), and nothing else, so no
+    /// file of the person's is touched. Returns how many it removed.
+    @discardableResult
+    static func removePartialCopies(in folder: URL, fileManager: FileManager = .default) -> Int {
+        guard let names = try? fileManager.contentsOfDirectory(atPath: folder.path) else { return 0 }
+        return names.filter(isPartialCopyName).reduce(0) { removed, name in
+            (try? fileManager.removeItem(at: folder.appendingPathComponent(name))) == nil ? removed : removed + 1
+        }
+    }
+
+    /// Whether `name` is a partial copy's, `.<name>.keybumps-moving`, with a name of at least one character.
+    static func isPartialCopyName(_ name: String) -> Bool {
+        let prefix = ".", suffix = ".keybumps-moving"
+        return name.hasPrefix(prefix) && name.hasSuffix(suffix) && name.count > prefix.count + suffix.count
     }
 
     /// `clonefile`, which never replaces what's at `destination`: 0, or the error code.

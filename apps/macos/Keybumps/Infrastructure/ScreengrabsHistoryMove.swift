@@ -25,8 +25,13 @@ import OSLog
 /// - **A failure** leaves the item as it was, read where it was, and is tried again at the next
 ///   launch. A store's file is written once, after its copies are in place; a file that can't be
 ///   read, or a later build's index, is left as it is.
-/// - **Not after a failed move:** while `KeybumpsFolderMove` left the recordings or the index in
-///   their old place, recordings wait for a launch that finds them in the Keybumps folder.
+/// - **Not after a failed move:** while a failed `KeybumpsFolderMove` left the recordings or the
+///   index in their old place, recordings wait for a launch that finds them in the Keybumps folder.
+///   One it holds there for a folder chosen before #605 doesn't wait: nothing is saved there now,
+///   and the copy leaves the folder as it is.
+/// - **Partial copies** Keybumps left when it quit mid-copy (`.<name>.keybumps-moving`) are removed
+///   first, each launch, in the history's two folders and where convenience copies go
+///   (`ScreengrabFiles.removePartialCopies`). Nothing else there is touched.
 /// - **Logs** say only counts, the stage, an error code, and how long it took: never a path, a
 ///   name, or content.
 struct ScreengrabsHistoryMove {
@@ -37,6 +42,8 @@ struct ScreengrabsHistoryMove {
         var recordings = 0
         /// Index entries dropped because another already names the same recording in the history.
         var duplicates = 0
+        /// Partial copies removed (`ScreengrabFiles.removePartialCopies`).
+        var partials = 0
         var failures = 0
     }
 
@@ -45,14 +52,18 @@ struct ScreengrabsHistoryMove {
 
     /// The Keybumps folder's paths, with what `KeybumpsFolderMove` left in its old place.
     let paths: ProductPaths
+    /// Where convenience copies go (`ScreengrabCopies`), swept for partial copies; nil sweeps only
+    /// the history.
+    var copiesFolder: URL?
     var fileManager: FileManager = .default
     var defaults: UserDefaults = .standard
     /// `ScreengrabFiles.cloneExclusively`. Tests make it fail with `ENOTSUP` so the checked copy runs.
     var clone: (URL, URL) -> Int32 = ScreengrabFiles.cloneExclusively
     private let logger = Logger(subsystem: "com.serp.keybumps", category: "screengrabs-history")
 
-    init(paths: ProductPaths, fileManager: FileManager = .default, defaults: UserDefaults = .standard) {
+    init(paths: ProductPaths, copiesFolder: URL? = nil, fileManager: FileManager = .default, defaults: UserDefaults = .standard) {
         self.paths = paths
+        self.copiesFolder = copiesFolder
         self.fileManager = fileManager
         self.defaults = defaults
     }
@@ -61,15 +72,18 @@ struct ScreengrabsHistoryMove {
     /// in UI test mode, whose folders start empty.
     static func runAtLaunch() {
         guard !UnitTestHost.isActive, ProductPaths.sandboxRoot == nil else { return }
-        ScreengrabsHistoryMove(paths: .keybumps()).run()
+        ScreengrabsHistoryMove(paths: .keybumps(), copiesFolder: ScreenshotLocationResolver.system.resolve()).run()
     }
 
     @discardableResult
     func run() -> Report {
         let started = ContinuousClock.now
         var report = Report()
+        for folder in [paths.screengrabsScreenshots, paths.screengrabsRecordings] + [copiesFolder].compactMap({ $0 }) {
+            report.partials += ScreengrabFiles.removePartialCopies(in: folder, fileManager: fileManager)
+        }
         moveScreenshots(&report)
-        if !paths.leftInOldPlace.contains(.recordings), !paths.leftInOldPlace.contains(.recordingsIndex) {
+        if !recordingsWait {
             let indexed = moveIndexedRecordings(&report)
             if defaults.object(forKey: Self.doneKey) == nil {
                 let failuresBefore = report.failures
@@ -79,9 +93,18 @@ struct ScreengrabsHistoryMove {
         }
         let milliseconds = Int(started.duration(to: .now) / .milliseconds(1))
         if report != Report() {
-            logger.info("screengrabs history move screenshots=\(report.screenshots, privacy: .public) recordings=\(report.recordings, privacy: .public) duplicates=\(report.duplicates, privacy: .public) failures=\(report.failures, privacy: .public) ms=\(milliseconds, privacy: .public)")
+            logger.info("screengrabs history move screenshots=\(report.screenshots, privacy: .public) recordings=\(report.recordings, privacy: .public) duplicates=\(report.duplicates, privacy: .public) partials=\(report.partials, privacy: .public) failures=\(report.failures, privacy: .public) ms=\(milliseconds, privacy: .public)")
         }
         return report
+    }
+
+    /// Whether a failed `KeybumpsFolderMove` left the recordings or the index in their old place.
+    /// One it left there because it is, or holds, a folder chosen before #605 doesn't count.
+    private var recordingsWait: Bool {
+        let chosen = AppPreferences.chosenScreengrabFolderPaths(in: defaults)
+        return [KeybumpsFolderItem.recordings, .recordingsIndex].contains {
+            paths.leftInOldPlace.contains($0) && !KeybumpsFolderMove.holdsChosenFolder(paths.oldPlace(of: $0), chosen)
+        }
     }
 
     // MARK: Screenshots

@@ -138,8 +138,8 @@ final class RecordingLibrary {
     }
 
     /// The app's: in the Keybumps folder's `screengrabs/` and Caches, through `ProductPaths`, so the
-    /// UI-test sandbox and the unit-test host keep theirs in their own folders. Each is where the
-    /// launch's move left it (`ProductPaths.inUse`, ADR 0013).
+    /// UI-test sandbox and the unit-test host keep theirs in their own folders. The index is where the
+    /// launch's move left it (`ProductPaths.inUse`, ADR 0013); recordings are always in the history.
     static func makeDefault(
         importMemory: RecordingImportMemory,
         screenshots: ClipboardHistoryService?
@@ -147,7 +147,7 @@ final class RecordingLibrary {
         let paths = ProductPaths.keybumps()
         return RecordingLibrary(
             storageURL: paths.inUse(.recordingsIndex),
-            capturesFolder: paths.inUse(.recordings),
+            capturesFolder: paths.screengrabsRecordings,
             posterFrames: RecordingPosterFrames(folder: RecordingPosterFrames.defaultFolder),
             importMemory: importMemory,
             screenshots: screenshots

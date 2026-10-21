@@ -127,6 +127,8 @@ final class ScreenshotToolsModule: CapabilityModule {
         )
         editor = ScreenshotEditorPresenter(
             fallbackFolder: editorFallbackFolder,
+            screenshotsFolder: { [clipboard] in clipboard.screenshotsFolder },
+            keepsEditedScreenshot: { [delivery, service] file in delivery.addEdited(file, watcher: service) },
             editingChanged: { isEditing in
                 updateSafety.setCriticalOperation(.unsavedWork, active: isEditing)
             }
@@ -135,10 +137,14 @@ final class ScreenshotToolsModule: CapabilityModule {
 
     func apply(_ context: CapabilityContext) {
         let isEnabled = context.isEnabled(capability)
+        let addedScreenshots = service.status.addsScreenshots
         service.apply(
             enabled: isEnabled,
             clipboardHistoryEnabled: descriptor.dependencies.allSatisfy(context.isEnabled)
         )
+        // ScreenGrabs or Clipboard History just turned on: lists the hotkeys' screenshots taken
+        // while either was off, which are in the history already (#605).
+        if !addedScreenshots, service.status.addsScreenshots { clipboard.adoptScreenshots() }
         palette.editImage = isEnabled
             ? { [weak editor] entry in editor?.edit(entry) ?? false }
             : nil

@@ -19,7 +19,7 @@ struct ScreengrabsHistoryTests {
 
     // MARK: Where it's kept
 
-    @Test("The history is the Keybumps folder's screengrabs/screenshots/ and screengrabs/recordings/, whatever folder was chosen before; an edited screenshot goes where macOS saves them")
+    @Test("The history is the Keybumps folder's screengrabs/screenshots/ and screengrabs/recordings/, whatever folder was chosen before; an edited screenshot goes into the history too")
     func historyIsInTheKeybumpsFolder() throws {
         let paths = ProductPaths.keybumps()
         #expect(paths.screengrabsScreenshots == paths.keybumpsFolder.appendingPathComponent("screengrabs/screenshots", isDirectory: true))
@@ -35,15 +35,16 @@ struct ScreengrabsHistoryTests {
         #expect(AppPreferences.chosenScreengrabFolderPaths(in: defaults).count == 2, "kept for the launch's moves")
         #expect(AppPreferences(defaults: defaults).screencast.capturesFolder == paths.screengrabsRecordings, "where recordings are saved")
 
-        // A screenshot's edited copy never goes into the history, which holds only screenshots.
+        // A screenshot's edited copy is a screenshot of its own in the history, under a free name.
+        let source = paths.screengrabsScreenshots.appendingPathComponent("Screenshot 2026-10-21 at 10.00.00.png")
         let edited = ScreenshotEditorOutput.destination(
-            sourceURL: paths.screengrabsScreenshots.appendingPathComponent("Screenshot 2026-10-21 at 10.00.00.png"),
-            fallbackFolder: URL(fileURLWithPath: "/Desktop", isDirectory: true),
+            sourceURL: source,
+            fallbackFolder: paths.screengrabsScreenshots,
             besideSource: false,
             isWritableDirectory: { _ in true },
-            exists: { _ in false }
+            exists: { $0.lastPathComponent == "Screenshot 2026-10-21 at 10.00.00 (edited).png" }
         )
-        #expect(edited.path == "/Desktop/Screenshot 2026-10-21 at 10.00.00 (edited).png")
+        #expect(edited == paths.screengrabsScreenshots.appendingPathComponent("Screenshot 2026-10-21 at 10.00.00 (edited 2).png"))
     }
 
     // MARK: New screenshots and recordings
@@ -75,6 +76,124 @@ struct ScreengrabsHistoryTests {
         let relaunched = Self.relaunch(fixture)
         #expect(relaunched.adoptScreenshots() == 0, "listed already")
         try await Self.expectUsable(relaunched.entries.first, file: file, in: relaunched, pasteboard: fixture.pasteboard)
+    }
+
+    @Test("Two hotkey screenshots in the same second keep both, every display's, in the history and on the Desktop, under Finder's next name")
+    func sameSecondKeepsBoth() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let desktop = Self.desktop(in: fixture.root)
+        let second = Date(timeIntervalSince1970: 1_790_000_000)
+        let capture = HotkeyCapture(fixture, copyingTo: desktop, now: { second })
+        defer { capture.watcher.stop() }
+        var first: [URL] = []
+        var next: [URL] = []
+        capture.delivery.capture(.screens, with: capture.capturer, watcher: capture.watcher) { first = $0 }
+        capture.runner.finish?()
+        capture.delivery.capture(.screens, with: capture.capturer, watcher: capture.watcher) { next = $0 }
+        capture.runner.finish?()
+
+        #expect(first.count == 3 && next.count == 3)
+        let base = try #require(first.first).deletingPathExtension().lastPathComponent
+        #expect(next.map(\.lastPathComponent) == ["\(base) 2.png", "\(base) 2 (2).png", "\(base) 2 (3).png"])
+        let history = fixture.clipboard.screenshotsFolder
+        let kept = Set(try FileManager.default.contentsOfDirectory(atPath: history.path))
+        #expect(kept == Set((first + next).map(\.lastPathComponent)), "six files, none written over")
+        for file in first + next {
+            #expect(try Data(contentsOf: file) == ScreenshotClipboardTests.png + Data(file.path.utf8), "each its own screenshot")
+            let copy = desktop.appendingPathComponent(file.lastPathComponent)
+            #expect(FileManager.default.contentsEqual(atPath: file.path, andPath: copy.path), "and its own copy on the Desktop")
+        }
+        #expect(fixture.clipboard.entries.count == 6)
+        capture.scan()
+        #expect(fixture.clipboard.entries.count == 6, "the copies aren't added again")
+    }
+
+    @Test("A screenshot started while another is still being taken never takes its names")
+    func overlappingCapturesTakeTheirOwnNames() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let runner = DeferredRunner()
+        let history = fixture.clipboard.screenshotsFolder
+        let second = Date(timeIntervalSince1970: 1_790_000_000)
+        let capturer = ScreenshotCapturer(runner: runner, folder: { history }, now: { second }, displayCount: { 1 })
+        var planned: [[URL]] = []
+        capturer.capture(.area, willWrite: { planned.append($0) }) { _ in }
+        capturer.capture(.area, willWrite: { planned.append($0) }) { _ in }
+        #expect(planned.count == 2)
+        #expect(Set(planned.joined()).count == 2, "the second waits for no file, and still takes a name of its own")
+        runner.finishAll()
+        // Once both are done, a third takes the next free name.
+        capturer.capture(.area, willWrite: { planned.append($0) }) { _ in }
+        #expect(planned.last?.first?.lastPathComponent.hasSuffix(" 3.png") == true)
+        runner.finishAll()
+    }
+
+    @Test("An edited screenshot is saved into the history as a screenshot of its own, with its copy on the Desktop, added once")
+    func editedScreenshotJoinsTheHistory() throws {
+        let fixture = try Fixture()
+        defer { fixture.tearDown() }
+        let desktop = Self.desktop(in: fixture.root)
+        let capture = HotkeyCapture(fixture, copyingTo: desktop)
+        defer { capture.watcher.stop() }
+        let history = fixture.clipboard.screenshotsFolder
+        let original = history.appendingPathComponent("Screenshot 2026-10-21 at 10.00.00.png")
+        try Self.realPNG().write(to: original)
+        let screenshot = try #require(fixture.clipboard.addScreenshot(at: original))
+        let presenter = ScreenshotEditorPresenter(
+            fallbackFolder: { desktop },
+            screenshotsFolder: { history },
+            keepsEditedScreenshot: { capture.delivery.addEdited($0, watcher: capture.watcher) },
+            pasteboard: fixture.pasteboard,
+            editingChanged: { _ in }
+        )
+
+        // Never presented, so no window appears.
+        let editor = try #require(presenter.makeController(for: screenshot))
+        editor.save()
+
+        let edited = history.appendingPathComponent("Screenshot 2026-10-21 at 10.00.00 (edited).png")
+        #expect(FileManager.default.fileExists(atPath: edited.path), "in the history")
+        let item = try #require(fixture.clipboard.entries.first)
+        #expect(item.id != screenshot.id && item.isScreenshot, "a screenshot of its own, newest")
+        #expect(item.sourceURL == edited && item.imageURL == edited)
+        #expect(fixture.clipboard.entries.count == 2)
+        let copy = desktop.appendingPathComponent(edited.lastPathComponent)
+        #expect(FileManager.default.contentsEqual(atPath: edited.path, andPath: copy.path), "with its copy on the Desktop")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: desktop.path) == [edited.lastPathComponent])
+
+        capture.scan()
+        fixture.clipboard.pollForTesting()
+        #expect(fixture.clipboard.entries.count == 2, "neither its copy nor its pasteboard write is added again")
+        #expect(fixture.clipboard.entries.first?.id == item.id)
+        #expect(Self.tab(fixture.clipboard).count == 2, "listed in the ScreenGrabs tab")
+    }
+
+    @Test("Turning Clipboard History or ScreenGrabs on lists the screenshots taken into the history while either was off, kept out of the Clipboard tab")
+    func turningOnListsScreenshotsTakenWhileOff() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsScreengrabsTurningOn-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let harness = WiringHarness(enabled: [.screenshotTools], missing: nil, root: root)
+        harness.model.start()
+        let clipboard = harness.model.clipboard
+        func take(_ name: String) throws -> URL {
+            let file = clipboard.screenshotsFolder.appendingPathComponent(name)
+            try FileManager.default.createDirectory(at: clipboard.screenshotsFolder, withIntermediateDirectories: true)
+            try (ScreenshotClipboardTests.png + Data(name.utf8)).write(to: file)
+            return file
+        }
+
+        let whileClipboardOff = try take("Screenshot 2026-10-21 at 10.00.00.png")
+        #expect(clipboard.entries.isEmpty)
+        harness.model.setCapability(.clipboardHistory, enabled: true)
+        #expect(clipboard.entries.map(\.imageURL) == [whileClipboardOff])
+
+        harness.model.setCapability(.screenshotTools, enabled: false)
+        let whileScreenGrabsOff = try take("Screenshot 2026-10-21 at 10.00.01.png")
+        harness.model.setCapability(.screenshotTools, enabled: true)
+        #expect(Set(clipboard.entries.compactMap(\.imageURL)) == [whileClipboardOff, whileScreenGrabsOff])
+        #expect(clipboard.entries.filter(\.isScreenshot).count == 2)
+        #expect(clipboard.clipboardTabEntries.isEmpty, "never copied, so not in the Clipboard tab")
     }
 
     @Test("A screenshot macOS saves on the Desktop is copied into the history, with no second copy; removing it from the Desktop keeps it listed and usable")
@@ -140,6 +259,27 @@ struct ScreengrabsHistoryTests {
         await relaunched.launchCheck?.value
         #expect(relaunched.recordings.count == 1)
         try Self.expectUsable(capture.folder, in: relaunched)
+    }
+
+    @Test("A recording kept because ScreenGrabs turned off or the Mac locked mid-recording is listed and gets its copy on the Desktop")
+    func keptRecordingGetsItsCopy() async throws {
+        let fixture = RecordingLibraryFixture()
+        defer { fixture.tearDown() }
+        let paths = Self.paths(in: fixture.root.url)
+        let desktop = Self.desktop(in: fixture.root.url)
+        let library = Self.library(fixture, paths)
+        library.load()
+        await library.launchCheck?.value
+        var services = fixture.reviewServices(recordings: library)
+        services.copies = ScreengrabCopies(folder: { desktop })
+        let flow = ScreencastReviewFlow(services: services, contextReader: .inert)
+
+        let capture = try await fixture.recording(at: 100, in: paths.screengrabsRecordings)
+        let copy = try #require(flow.captureKept(.video(capture)))
+        #expect(copy.path == desktop.appendingPathComponent(capture.folder.lastPathComponent).path)
+        #expect(FileManager.default.contentsEqual(atPath: capture.folder.path, andPath: copy.path), "its whole folder on the Desktop")
+        #expect(flow.panel == nil, "nothing opens")
+        #expect(library.recordings.map(\.folder) == [capture.folder], "listed now, from the history")
     }
 
     @Test("The ScreenGrabs tab lists every screenshot, not only the newest 50, also after a relaunch, and after an older build dropped some")
@@ -303,14 +443,14 @@ struct ScreengrabsHistoryTests {
         #expect(adopted.imageURL == taken && adopted.sourceURL == taken && adopted.isScreenshot)
         #expect(clipboard.clipboardTabEntries.map(\.id) == [waiting.id], "never copied, so not in the Clipboard tab")
 
-        // The move then gives the waiting item that copy.
-        #expect(fixture.move().run() == ScreengrabsHistoryMove.Report(screenshots: 1))
+        // The move then gives the waiting item that copy, and removes Keybumps' partial copy.
+        #expect(fixture.move().run() == ScreengrabsHistoryMove.Report(screenshots: 1, partials: 1))
         let relaunched = fixture.clipboard()
         #expect(relaunched.adoptScreenshots() == 0)
         #expect(relaunched.entries.first { $0.id == waiting.id }?.imageURL == fixture.history.appendingPathComponent("Screenshot W.png"))
         #expect(Self.tab(relaunched).count == 2)
         #expect(Set(try FileManager.default.contentsOfDirectory(atPath: fixture.history.path)) == [
-            "Screenshot W.png", "Screenshot N.png", "notes.txt", KeybumpsFolderMove.partialCopy(of: fixture.history.appendingPathComponent("Screenshot P.png")).lastPathComponent,
+            "Screenshot W.png", "Screenshot N.png", "notes.txt",
         ], "one file for the waiting screenshot")
     }
 
@@ -443,6 +583,78 @@ struct ScreengrabsHistoryTests {
         #expect(ScreengrabsHistoryMove(paths: paths, defaults: fixture.defaults).run() == ScreengrabsHistoryMove.Report(recordings: 1))
     }
 
+    @Test("Recordings held in a folder chosen before #605 don't wait: indexed ones are copied into the history, the folder stays as it is, and new recordings go to the history")
+    func chosenFolderRecordingsAreCopiedIn() async throws {
+        let fixture = RecordingLibraryFixture()
+        defer { fixture.tearDown() }
+        var paths = Self.paths(in: fixture.root.url)
+        let chosen = paths.oldPlace(of: .recordings)
+        fixture.defaults.set(chosen.standardizedFileURL.path, forKey: "screengrabs.recordingsFolder")
+        paths.leftInOldPlace = [.recordings]
+        let old = try await fixture.recording(at: 100, in: chosen)
+        let before = Self.library(fixture, paths)
+        before.load()
+        await before.launchCheck?.value
+        before.add(old)
+
+        #expect(ScreengrabsHistoryMove(paths: paths, defaults: fixture.defaults).run() == ScreengrabsHistoryMove.Report(recordings: 1))
+        let kept = paths.screengrabsRecordings.appendingPathComponent(old.folder.lastPathComponent, isDirectory: true)
+        #expect(FileManager.default.contentsEqual(atPath: old.folder.path, andPath: kept.path))
+        #expect(FileManager.default.fileExists(atPath: old.folder.path), "the chosen folder's copy stays")
+        #expect(AppPreferences(defaults: fixture.defaults).screencast.capturesFolder == ProductPaths.keybumps().screengrabsRecordings, "new recordings go to the history")
+    }
+
+    @Test("A copy that's an APFS clone isn't read back to check it; a plain copy is")
+    func onlyPlainCopiesAreChecked() throws {
+        let root = TemporaryCapturesFolder()
+        defer { root.remove() }
+        let source = root.url.appendingPathComponent("Screenshot.png")
+        try Data("made-up".utf8).write(to: source)
+        let fileManager = ComparingFileManager()
+
+        let cloned = ScreengrabFiles.copy(source, to: root.url.appendingPathComponent("Cloned.png"), fileManager: fileManager) { from, to in
+            (try? FileManager.default.copyItem(at: from, to: to)) == nil ? EIO : 0
+        }
+        #expect(cloned == .copied(root.url.appendingPathComponent("Cloned.png")))
+        #expect(fileManager.comparisons == 0)
+
+        let copied = ScreengrabFiles.copy(source, to: root.url.appendingPathComponent("Copied.png"), fileManager: fileManager) { _, _ in ENOTSUP }
+        #expect(copied == .copied(root.url.appendingPathComponent("Copied.png")))
+        #expect(fileManager.comparisons == 1)
+    }
+
+    @Test("At launch, partial copies Keybumps left in the history and where copies go are removed, and nothing else")
+    func partialCopiesAreRemoved() throws {
+        let fixture = HistoryFixture()
+        defer { fixture.tearDown() }
+        let paths = fixture.paths
+        let desktop = fixture.desktop
+        let recordings = paths.screengrabsRecordings
+        let partials = [
+            KeybumpsFolderMove.partialCopy(of: fixture.history.appendingPathComponent("Screenshot A.png")),
+            KeybumpsFolderMove.partialCopy(of: desktop.appendingPathComponent("Screenshot B.png")),
+            KeybumpsFolderMove.partialCopy(of: recordings.appendingPathComponent("1790000000", isDirectory: true)).appendingPathComponent("video-1.mov"),
+        ]
+        for partial in partials { try fixture.write(Data("partial".utf8), to: partial) }
+        let others = [
+            fixture.history.appendingPathComponent("Screenshot C.png"),
+            fixture.history.appendingPathComponent(".keybumps-moving"),
+            fixture.history.appendingPathComponent("Screenshot D.png.keybumps-moving"),
+            desktop.appendingPathComponent(".Screenshot E.png"),
+            desktop.appendingPathComponent(".Screenshot F.png.keybumps-moving.txt"),
+            desktop.appendingPathComponent("Folder/.Screenshot G.png.keybumps-moving"),
+            recordings.appendingPathComponent("1790000100/video-1.mov"),
+        ]
+        for other in others { try fixture.write(Data("the person's".utf8), to: other) }
+
+        let report = ScreengrabsHistoryMove(paths: paths, copiesFolder: desktop, defaults: fixture.defaults).run()
+        #expect(report.partials == 3 && report.failures == 0)
+        #expect(!FileManager.default.fileExists(atPath: partials[0].path))
+        #expect(!FileManager.default.fileExists(atPath: partials[1].path), "where copies go too")
+        #expect(!FileManager.default.fileExists(atPath: partials[2].deletingLastPathComponent().path), "a partial folder, with what's in it")
+        for other in others { #expect(FileManager.default.fileExists(atPath: other.path), "\(other.lastPathComponent) stays") }
+    }
+
     // MARK: Helpers
 
     /// A stand-in for the Desktop, where macOS saves screenshots, in `root`.
@@ -533,6 +745,18 @@ struct ScreengrabsHistoryTests {
         #expect(item.finderFiles.allSatisfy { FileManager.default.fileExists(atPath: $0.path) && ScreengrabFiles.isDirectly($0, in: folder) }, "Show in Finder and Copy", sourceLocation: sourceLocation)
     }
 
+    /// An 8×8 PNG the Screenshot Editor can open.
+    static func realPNG() throws -> Data {
+        let context = try #require(CGContext(
+            data: nil, width: 8, height: 8, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.setFillColor(CGColor(srgbRed: 0.5, green: 0.5, blue: 0.5, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        let image = try #require(context.makeImage())
+        return try #require(NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]))
+    }
+
     /// Lets the main actor run until `condition` holds, for three seconds at most.
     static func eventually(_ condition: () -> Bool) async -> Bool {
         for _ in 0..<300 where !condition() {
@@ -611,5 +835,35 @@ extension Screengrab {
     var screenshotID: UUID? {
         guard case .screenshot(let entry) = self else { return nil }
         return entry.id
+    }
+}
+
+/// Holds each capture's `screencapture` until `finishAll()`, writing nothing before then, as a
+/// slow area selection does.
+private final class DeferredRunner: ScreenshotCaptureRunning {
+    private var pending: [(files: [String], finish: @MainActor () -> Void)] = []
+
+    func run(arguments: [String], completion: @escaping @MainActor () -> Void) {
+        pending.append((arguments.filter { $0.hasSuffix(".png") }, completion))
+    }
+
+    @MainActor
+    func finishAll() {
+        let held = pending
+        pending = []
+        for (files, finish) in held {
+            for file in files { FileManager.default.createFile(atPath: file, contents: ScreenshotClipboardTests.png + Data(file.utf8)) }
+            finish()
+        }
+    }
+}
+
+/// Counts the reads that check a copy against its original.
+private final class ComparingFileManager: FileManager, @unchecked Sendable {
+    private(set) var comparisons = 0
+
+    override func contentsEqual(atPath path1: String, andPath path2: String) -> Bool {
+        comparisons += 1
+        return super.contentsEqual(atPath: path1, andPath: path2)
     }
 }

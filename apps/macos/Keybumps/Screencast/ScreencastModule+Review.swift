@@ -186,6 +186,15 @@ final class ScreencastReviewFlow {
         return panel
     }
 
+    /// A recording kept without the window, as ScreenGrabs turned off or Keybumps Locked mid-recording
+    /// (`ScreencastController.onCaptureKept`): listed now, and copied where macOS saves screenshots,
+    /// as Save would (#605). The copy, or nil.
+    @discardableResult
+    func captureKept(_ result: ScreencastCaptureResult) -> URL? {
+        if case .video(let capture) = result { services?.recordings?.add(capture) }
+        return services?.copies?.put(result.folder)
+    }
+
     /// A recording just made, as the window keeps it (Save, Copy, or a review that couldn't be
     /// written, edits exported first), is copied where macOS saves screenshots (`ScreengrabCopies`,
     /// #605): its whole `<timestamp>/` folder, an APFS clone where it can be. The recording stays in
