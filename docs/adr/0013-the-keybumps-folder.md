@@ -33,14 +33,18 @@ On 2026-10-21 the owner asked (#601) for every plugin that keeps history to keep
    - **Nothing is overwritten.** If the new place already has a different file, both stay, and the store reads the new one. An identical copy in the old place is removed.
    - **A failure leaves the file where it was,** and its store reads it there that launch (`ProductPaths.inUse`).
    - **Absolute paths are rewritten** in Clipboard History, the recordings index, and the folders ScreenGrabs remembers recording into, once their files have moved.
-   - **`~/Documents/Keybumps`** is looked in only on a Mac that ran an earlier build, one that has the Keybumps folder, and only until everything of Keybumps's there has moved (`keybumpsFolder.documentsMoved`). So a new install never makes macOS ask for Documents.
+   - **`~/Documents/Keybumps`** is looked in only on a Mac that ran an earlier build, so a new install never makes macOS ask for Documents:
+     - Until everything of Keybumps's there has moved (`keybumpsFolder.documentsMoved`, the time it did), on a Mac with the Keybumps folder or where an earlier build ran (`didCompleteOnboarding` or `lastLaunchedVersion`), so a Keybumps folder removed by hand or by an uninstaller doesn't hide it.
+     - After that, again when a file outside Documents is in its old place and newer than that time: a build before #602 ran since, and it saves dictations in Documents.
      - It's removed once only Finder's `.DS_Store` is left in it, and never while anything else is.
      - A folder chosen in Settings › ScreenGrabs inside it isn't moved, and a chosen `~/Documents/Keybumps` isn't removed.
-   - **Logs** say only the stage, the item, and an error code.
+   - **Logs** say only the stage, the item, an error code, and how long the move took.
 
 ## Consequences
 
-- **Downgrading** to a release before #602 starts with empty Clipboard History, snippets, recent translations, Shortcut Coach history, recordings index, and repository guesses, and no dictations, because the older build reads the old places. Nothing is lost: upgrading again finds everything in the Keybumps folder. Whatever the older build saved in the meantime moves at the next launch. Where the new place already has a file, the old one is left beside it. The release notes say so.
+- **Downgrading** to a release before #602 starts with empty Clipboard History, snippets, recent translations, Shortcut Coach history, recordings index, and repository guesses, and no dictations, because the older build reads the old places. Nothing is lost: upgrading again finds everything in the Keybumps folder. Whatever the older build saved in the meantime moves at the next launch, its dictations once it has written anything outside Documents, such as `last-dictation.txt` after each one is transcribed. Where the new place already has a file, the old one is left beside it. The release notes say so.
+  - Known gap: after a downgrade and an upgrade, a Clipboard History conflict keeps the older build's history in the old place, and its new images merge into `media/` where nothing refers to them.
+- **iCloud Desktop & Documents:** on a Mac that syncs Documents, moving dictations and older recordings out of `~/Documents/Keybumps` takes them out of iCloud, so the person's other Macs stop seeing them there. This is intended (the owner, 2026-10-21: syncing between devices is a paid feature). The release notes say so.
 - `ProductPaths.applicationSupport` is now `keybumpsFolder`. `recordings` and `captures` are now `dictation` and `screengrabsRecordings`, and `oldDocumentsFolder` names `~/Documents/Keybumps` for the move alone.
 - The unit-test host and the UI-test sandbox move both the Keybumps folder and the old Documents folder into their own temporary folders, and the move never runs under either ([testing](../testing.md)).
 - The website still names `~/Documents/Keybumps`. As in ADR 0012's decision 5, it changes after a release ships this.

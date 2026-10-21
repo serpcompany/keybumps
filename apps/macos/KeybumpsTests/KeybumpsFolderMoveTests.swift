@@ -103,7 +103,7 @@ struct KeybumpsFolderMoveTests {
         #expect(text(at: paths.inUse(.coachingEvents)) == "[]")
         for file in staying { #expect(text(at: file) == "made-up \(file.lastPathComponent)") }
         #expect(!exists(paths.oldDocumentsFolder), "Documents/Keybumps is removed once it's empty")
-        #expect(defaults.bool(forKey: KeybumpsFolderMove.documentsMovedKey))
+        #expect(documentsMoved(defaults))
 
         // Each store reads its new folder.
         let history = DictationHistoryService(recordingsDirectoryURL: paths.inUse(.dictationHistory), appVersion: "0.0.0")
@@ -192,7 +192,7 @@ struct KeybumpsFolderMoveTests {
         let history = DictationHistoryService(recordingsDirectoryURL: paths.inUse(.dictationHistory), appVersion: "0.0.0")
         #expect(history.entries.map(\.id) == ["1790000100", "1790000000"])
         #expect(!exists(paths.oldDocumentsFolder))
-        #expect(defaults.bool(forKey: KeybumpsFolderMove.documentsMovedKey))
+        #expect(documentsMoved(defaults))
     }
 
     // MARK: Never overwritten
@@ -224,10 +224,13 @@ struct KeybumpsFolderMoveTests {
         #expect(text(at: oldMeta) == "made-up old meta", "Documents/Keybumps keeps what it can't move")
         #expect(text(at: newMeta) == "made-up new meta")
         // Nothing of Keybumps's is waiting to move: Documents isn't looked in again.
-        #expect(defaults.bool(forKey: KeybumpsFolderMove.documentsMovedKey))
+        #expect(documentsMoved(defaults))
 
-        // The next launch still overwrites nothing, and leaves Documents alone.
-        #expect(KeybumpsFolderMove(paths: paths, defaults: defaults).run().conflicts == 2)
+        // The next launch still overwrites nothing, and leaves Documents alone: the conflicts left
+        // in the old places are older than the move, so they don't show an older build ran since.
+        let next = KeybumpsFolderMove(paths: paths, defaults: defaults).run()
+        #expect(next.conflicts == 2)
+        #expect(!next.looksInDocuments)
         #expect(text(at: oldMeta) == "made-up old meta")
         #expect(text(at: paths.oldPlace(of: .recentTranslations)) == "made-up old translations")
         #expect(text(at: paths.place(of: .recentTranslations)) == "made-up new translations")
@@ -278,7 +281,7 @@ struct KeybumpsFolderMoveTests {
         #expect(report.failures == 1)
         #expect(report.leftInOldPlace == [.recordings])
         #expect(text(at: meta) == "made-up meta")
-        #expect(!defaults.bool(forKey: KeybumpsFolderMove.documentsMovedKey))
+        #expect(!documentsMoved(defaults))
 
         try FileManager.default.removeItem(at: paths.screengrabs)
         let next = KeybumpsFolderMove(paths: paths, defaults: defaults).run()
@@ -286,7 +289,7 @@ struct KeybumpsFolderMoveTests {
         #expect(next.failures == 0)
         #expect(text(at: paths.place(of: .recordings).appendingPathComponent("1791000100/meta.json")) == "made-up meta")
         #expect(!exists(paths.oldDocumentsFolder))
-        #expect(defaults.bool(forKey: KeybumpsFolderMove.documentsMovedKey))
+        #expect(documentsMoved(defaults))
     }
 
     // MARK: Documents
@@ -302,7 +305,7 @@ struct KeybumpsFolderMoveTests {
 
         #expect(!report.looksInDocuments)
         #expect(report == KeybumpsFolderMove.Report())
-        #expect(defaults.bool(forKey: KeybumpsFolderMove.documentsMovedKey))
+        #expect(documentsMoved(defaults))
         #expect(text(at: meta) == "made-up meta")
         #expect(!exists(paths.keybumpsFolder))
     }
@@ -314,13 +317,64 @@ struct KeybumpsFolderMoveTests {
         try FileManager.default.createDirectory(at: paths.keybumpsFolder, withIntermediateDirectories: true)
         let meta = paths.oldPlace(of: .recordings).appendingPathComponent("1791000100/meta.json")
         try write("made-up meta", to: meta)
-        defaults.set(true, forKey: KeybumpsFolderMove.documentsMovedKey)
+        defaults.set(Date(), forKey: KeybumpsFolderMove.documentsMovedKey)
 
         let report = KeybumpsFolderMove(paths: paths, defaults: defaults).run()
 
         #expect(!report.looksInDocuments)
         #expect(text(at: meta) == "made-up meta")
         #expect(!exists(paths.place(of: .recordings)))
+    }
+
+    @Test("Dictations an older build saves in Documents after the move, move once its files outside Documents show it ran")
+    func olderBuildAfterTheMove() throws {
+        defer { tearDown() }
+        let paths = self.paths
+        try FileManager.default.createDirectory(at: paths.keybumpsFolder, withIntermediateDirectories: true)
+        try dictation(at: 1_790_000_000, in: paths.oldPlace(of: .dictationHistory))
+        #expect(KeybumpsFolderMove(paths: paths, defaults: defaults).run().looksInDocuments)
+        #expect(!exists(paths.oldDocumentsFolder))
+        // The move finished a minute ago.
+        defaults.set(Date(timeIntervalSinceNow: -60), forKey: KeybumpsFolderMove.documentsMovedKey)
+
+        // A build before #602 runs again, and dictates into Documents. Nothing outside Documents
+        // shows it yet, so Documents isn't looked in.
+        try dictation(at: 1_790_000_100, in: paths.oldPlace(of: .dictationHistory))
+        #expect(!KeybumpsFolderMove(paths: paths, defaults: defaults).run().looksInDocuments)
+
+        // It writes the last dictation at the top of the Keybumps folder once it's transcribed.
+        try write("made-up older last dictation", to: paths.oldPlace(of: .lastDictation))
+        let report = KeybumpsFolderMove(paths: paths, defaults: defaults).run()
+
+        #expect(report.looksInDocuments)
+        #expect(report.failures == 0)
+        #expect(report.conflicts == 0)
+        #expect(!exists(paths.oldDocumentsFolder))
+        #expect(text(at: paths.place(of: .lastDictation)) == "made-up older last dictation")
+        let history = DictationHistoryService(recordingsDirectoryURL: paths.inUse(.dictationHistory), appVersion: "0.0.0")
+        #expect(history.entries.map(\.id) == ["1790000100", "1790000000"])
+        // The key is the time of this move now, so the next launch leaves Documents alone.
+        #expect(!KeybumpsFolderMove(paths: paths, defaults: defaults).run().looksInDocuments)
+    }
+
+    @Test("A Mac where an earlier build ran, but whose Keybumps folder was removed, still has Documents looked in")
+    func earlierBuildWithoutKeybumpsFolder() throws {
+        for setupDone in [true, false] {
+            defer { tearDown() }
+            let defaults = InMemoryDefaults()
+            let preferences = AppPreferences(defaults: defaults)
+            if setupDone { preferences.didCompleteOnboarding = true } else { preferences.lastLaunchedVersion = "0.0.3-beta.30" }
+            let paths = self.paths
+            try write("made-up meta", to: paths.oldPlace(of: .recordings).appendingPathComponent("1791000100/meta.json"))
+
+            let report = KeybumpsFolderMove(paths: paths, defaults: defaults).run()
+
+            #expect(report.looksInDocuments)
+            #expect(report.failures == 0)
+            #expect(text(at: paths.place(of: .recordings).appendingPathComponent("1791000100/meta.json")) == "made-up meta")
+            #expect(!exists(paths.oldDocumentsFolder))
+            #expect(documentsMoved(defaults))
+        }
     }
 
     @Test("Documents/Keybumps is removed when only Finder's .DS_Store is left, and kept with anything else in it")
@@ -341,7 +395,7 @@ struct KeybumpsFolderMoveTests {
             #expect(!exists(paths.oldPlace(of: .recordings)))
             #expect(exists(paths.oldDocumentsFolder) == keepsOwnFile)
             if keepsOwnFile { #expect(text(at: own) == "made-up notes") }
-            #expect(defaults.bool(forKey: KeybumpsFolderMove.documentsMovedKey))
+            #expect(documentsMoved(defaults))
         }
     }
 
@@ -361,7 +415,7 @@ struct KeybumpsFolderMoveTests {
         #expect(report.leftInOldPlace == [.recordings])
         #expect(text(at: meta) == "made-up meta")
         #expect(!exists(paths.place(of: .recordings)))
-        #expect(!defaults.bool(forKey: KeybumpsFolderMove.documentsMovedKey), "looked at again each launch")
+        #expect(!documentsMoved(defaults), "looked at again each launch")
 
         // Chose Documents/Keybumps itself instead: the old recordings move, and the folder stays.
         preferences.chooseScreengrabFolder(paths.oldDocumentsFolder, for: .recordings)
@@ -369,10 +423,118 @@ struct KeybumpsFolderMoveTests {
         #expect(next.leftInOldPlace.isEmpty)
         #expect(text(at: paths.place(of: .recordings).appendingPathComponent("1791000100/meta.json")) == "made-up meta")
         #expect(exists(paths.oldDocumentsFolder))
-        #expect(defaults.bool(forKey: KeybumpsFolderMove.documentsMovedKey))
+        #expect(documentsMoved(defaults))
+    }
+
+    // MARK: Across volumes
+
+    @Test("Across volumes, each item is copied beside its place, checked, put in place, and only then removed, after a partial copy left by an earlier launch is cleared")
+    func copiesAcrossVolumes() throws {
+        defer { tearDown() }
+        let paths = self.paths
+        try dictation(at: 1_790_000_000, in: paths.oldPlace(of: .dictationHistory))
+        try SnippetStore(storageURL: paths.oldPlace(of: .snippets), secrets: InMemorySnippetSecretStore())
+            .add(SnippetDraft(name: "Made-up", keyword: "mup", text: "made-up snippet"))
+        try write("made-up image", to: paths.oldPlace(of: .clipboardMedia).appendingPathComponent("made-up.png"))
+        // An earlier launch quit while copying Dictation History.
+        let leftover = KeybumpsFolderMove.partialCopy(of: paths.place(of: .dictationHistory))
+        try write("made-up half a copy", to: leftover.appendingPathComponent("1790000000/output.wav"))
+
+        var move = KeybumpsFolderMove(paths: paths, defaults: defaults)
+        move.rename = Self.acrossVolumes
+        let report = move.run()
+
+        #expect(report.failures == 0)
+        #expect(report.conflicts == 0)
+        #expect(report.moved == 3)
+        #expect(report.leftInOldPlace.isEmpty)
+        for item in [KeybumpsFolderItem.dictationHistory, .snippets, .clipboardMedia] {
+            #expect(!exists(paths.oldPlace(of: item)), "\(item.rawValue) left its old place")
+            #expect(!exists(KeybumpsFolderMove.partialCopy(of: paths.place(of: item))), "\(item.rawValue) has no partial copy")
+        }
+        let history = DictationHistoryService(recordingsDirectoryURL: paths.inUse(.dictationHistory), appVersion: "0.0.0")
+        #expect(history.entries.map(\.text) == ["made-up dictation"])
+        #expect(history.entries.first?.audioURL.flatMap { text(at: $0) } == "made-up audio")
+        #expect(SnippetStore(storageURL: paths.inUse(.snippets), secrets: InMemorySnippetSecretStore()).snippets.map(\.name) == ["Made-up"])
+        #expect(text(at: paths.place(of: .clipboardMedia).appendingPathComponent("made-up.png")) == "made-up image")
+        #expect(!exists(paths.oldDocumentsFolder))
+        #expect(documentsMoved(defaults))
+    }
+
+    @Test("Across volumes, a copy cut short or that doesn't match is removed, and the original stays where its store reads it")
+    func failedCopyLeavesTheOriginal() throws {
+        for fault in [FaultyFileManager.Fault.copyCutShort, .copyDiffers] {
+            defer { tearDown() }
+            let paths = self.paths
+            try SnippetStore(storageURL: paths.oldPlace(of: .snippets), secrets: InMemorySnippetSecretStore())
+                .add(SnippetDraft(name: "Made-up", keyword: "mup", text: "made-up snippet"))
+            let snippetsBytes = try Data(contentsOf: paths.oldPlace(of: .snippets))
+
+            var move = KeybumpsFolderMove(paths: paths, fileManager: FaultyFileManager(fault), defaults: defaults)
+            move.rename = Self.acrossVolumes
+            let report = move.run()
+
+            #expect(report.failures == 1, "\(fault)")
+            #expect(report.leftInOldPlace == [.snippets], "\(fault)")
+            #expect(try Data(contentsOf: paths.oldPlace(of: .snippets)) == snippetsBytes)
+            #expect(!exists(paths.place(of: .snippets)))
+            #expect(!exists(KeybumpsFolderMove.partialCopy(of: paths.place(of: .snippets))), "\(fault): no partial copy")
+        }
+    }
+
+    @Test("Across volumes, a copy in place whose original couldn't be removed is read in the Keybumps folder, and the original goes next launch")
+    func copyInPlaceOriginalStays() throws {
+        defer { tearDown() }
+        let paths = self.paths
+        try SnippetStore(storageURL: paths.oldPlace(of: .snippets), secrets: InMemorySnippetSecretStore())
+            .add(SnippetDraft(name: "Made-up", keyword: "mup", text: "made-up snippet"))
+        let snippetsBytes = try Data(contentsOf: paths.oldPlace(of: .snippets))
+
+        var move = KeybumpsFolderMove(paths: paths, fileManager: FaultyFileManager(.originalStays), defaults: defaults)
+        move.rename = Self.acrossVolumes
+        let report = move.run()
+
+        #expect(report.failures == 1)
+        #expect(report.leftInOldPlace.isEmpty)
+        #expect(try Data(contentsOf: paths.place(of: .snippets)) == snippetsBytes)
+        #expect(exists(paths.oldPlace(of: .snippets)))
+        #expect(paths.inUse(.snippets) == paths.place(of: .snippets))
+
+        let next = KeybumpsFolderMove(paths: paths, defaults: defaults).run()
+        #expect(next.failures == 0)
+        #expect(next.conflicts == 0)
+        #expect(!exists(paths.oldPlace(of: .snippets)), "identical, so removed")
+        #expect(try Data(contentsOf: paths.place(of: .snippets)) == snippetsBytes)
+    }
+
+    // MARK: Settings
+
+    @Test("Settings shows each plugin's folder where its files are this launch")
+    func rowsShowTheFolderInUse() {
+        var paths = self.paths
+        #expect(KeybumpsFolderRow.folder(for: .snippets, in: paths).path == paths.snippets.path)
+        #expect(KeybumpsFolderRow.folder(for: .dictation, in: paths).path == paths.dictation.path)
+        #expect(KeybumpsFolderRow.folder(for: nil, in: paths).path == paths.keybumpsFolder.path)
+
+        paths.leftInOldPlace = [.snippets, .dictationHistory]
+        #expect(KeybumpsFolderRow.folder(for: .snippets, in: paths).path == paths.keybumpsFolder.path)
+        #expect(KeybumpsFolderRow.folder(for: .dictation, in: paths).path == paths.oldPlace(of: .dictationHistory).path)
+        #expect(KeybumpsFolderRow.folder(for: .translation, in: paths).path == paths.translations.path)
     }
 
     // MARK: Helpers
+
+    /// Renames that fail as they do across volumes, except the copy fallback's own, which puts a
+    /// checked copy in place beside its destination.
+    nonisolated static func acrossVolumes(_ source: URL, _ destination: URL) -> Int32 {
+        source.lastPathComponent.hasSuffix(".keybumps-moving")
+            ? KeybumpsFolderMove.renameExclusively(source, to: destination)
+            : EXDEV
+    }
+
+    private func documentsMoved(_ defaults: UserDefaults) -> Bool {
+        KeybumpsFolderMove.documentsMoved(in: defaults) != nil
+    }
 
     private func tearDown() {
         try? FileManager.default.removeItem(at: root)
@@ -416,5 +578,40 @@ struct KeybumpsFolderMoveTests {
 
     private func names(in folder: URL) throws -> [String] {
         try FileManager.default.contentsOfDirectory(atPath: folder.path).sorted()
+    }
+}
+
+/// A file manager that fails one step of the copy fallback.
+private final class FaultyFileManager: FileManager {
+    enum Fault {
+        /// The copy fails after writing part of it.
+        case copyCutShort
+        /// The copy doesn't match its original.
+        case copyDiffers
+        /// An original can't be removed. The move's own partial copies still can.
+        case originalStays
+    }
+
+    let fault: Fault
+
+    init(_ fault: Fault) {
+        self.fault = fault
+        super.init()
+    }
+
+    override func copyItem(at srcURL: URL, to dstURL: URL) throws {
+        try super.copyItem(at: srcURL, to: dstURL)
+        if fault == .copyCutShort { throw CocoaError(.fileWriteOutOfSpace) }
+    }
+
+    override func contentsEqual(atPath path1: String, andPath path2: String) -> Bool {
+        fault == .copyDiffers ? false : super.contentsEqual(atPath: path1, andPath: path2)
+    }
+
+    override func removeItem(at url: URL) throws {
+        if fault == .originalStays, !url.lastPathComponent.hasSuffix(".keybumps-moving") {
+            throw CocoaError(.fileWriteNoPermission)
+        }
+        try super.removeItem(at: url)
     }
 }

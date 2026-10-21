@@ -25,14 +25,15 @@ struct KeybumpsFolderRow: View {
         "\(capability?.title ?? "Keybumps") folder"
     }
 
-    /// Each plugin's own folder. A plugin without one shows the Keybumps folder.
+    /// The folder each plugin's files are in this launch (`ProductPaths.inUse`): its own folder, or
+    /// the old one where this launch's move left them. A plugin without one shows the Keybumps folder.
     static func folder(for capability: Capability?, in paths: ProductPaths) -> URL {
         switch capability {
-        case .dictation: paths.dictation
-        case .clipboardHistory: paths.clipboardHistory
-        case .translation: paths.translations
-        case .snippets: paths.snippets
-        case .keyboardShortcutter: paths.shortcutCoach
+        case .dictation: paths.inUse(.dictationHistory)
+        case .clipboardHistory: paths.inUse(.clipboardHistory).deletingLastPathComponent()
+        case .translation: paths.inUse(.recentTranslations).deletingLastPathComponent()
+        case .snippets: paths.inUse(.snippets).deletingLastPathComponent()
+        case .keyboardShortcutter: paths.inUse(.coachingEvents).deletingLastPathComponent()
         default: paths.keybumpsFolder
         }
     }

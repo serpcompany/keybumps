@@ -241,6 +241,13 @@ final class AppPreferences {
         ScreengrabFolders.Kind.allCases.compactMap { defaults.string(forKey: Key.chosenFolder($0)) }.filter { $0.hasPrefix("/") }
     }
 
+    /// Whether an earlier build ran on this Mac, read straight from `defaults` before any preferences
+    /// load (ADR 0013). Every release sets `didCompleteOnboarding` once setup is done, and no plugin
+    /// that keeps files runs before it; every release since #226 sets `lastLaunchedVersion` at launch.
+    nonisolated static func ranBefore(in defaults: UserDefaults) -> Bool {
+        defaults.bool(forKey: Key.didCompleteOnboarding) || defaults.string(forKey: Key.lastLaunchedVersion) != nil
+    }
+
     /// ScreenGrabs' Screenshots and Recordings folders as they are now.
     var screengrabFolders: ScreengrabFolders {
         ScreengrabFolders(location: screenshotLocation, chosen: chosenScreengrabFolders)

@@ -23,7 +23,7 @@ enum KeybumpsFolderItem: String, CaseIterable, Sendable {
     case screencastRepositories
 
     /// In `~/Documents/Keybumps`, a folder macOS asks permission for, so the move looks there only
-    /// on a Mac that kept something there (`KeybumpsFolderMove.looksInDocuments`).
+    /// on a Mac that ran an earlier build (`KeybumpsFolderMove.looksInDocuments`).
     var isInDocuments: Bool { self == .dictationHistory || self == .recordings }
 }
 
@@ -89,11 +89,14 @@ extension ProductPaths {
 /// - **Paths:** Clipboard History and the recordings index store absolute paths, and ScreenGrabs
 ///   remembers the folders it recorded into (`RecordingFolderMemory`); one into a folder that moved
 ///   is rewritten once its file is in the new place (`rewritePaths`).
-/// - **`~/Documents/Keybumps`** is looked in only while `documentsMovedKey` isn't set and the
-///   Keybumps folder exists (a Mac that ran an earlier build), so a new install never makes macOS
-///   ask for Documents. It's removed once it's empty, and the key set once nothing of Keybumps's
-///   is left there.
-/// - **Logs** say only the stage, the item, and an error code: never a path, a name, or content.
+/// - **`~/Documents/Keybumps`** is looked in only on a Mac that ran an earlier build: while
+///   `documentsMovedKey` isn't set and the Keybumps folder exists or `AppPreferences.ranBefore`,
+///   and again once it's set whenever a file outside Documents is in its old place and newer than
+///   the key, the sign that a build before #602 ran since and saved dictations in Documents too. So
+///   a new install never makes macOS ask for Documents. It's removed once it's empty, and the key
+///   set to the time once nothing of Keybumps's is left there.
+/// - **Logs** say only the stage, the item, an error code, and how long the move took: never a
+///   path, a name, or content.
 struct KeybumpsFolderMove {
     struct Report: Equatable {
         var moved = 0
@@ -104,9 +107,16 @@ struct KeybumpsFolderMove {
         var looksInDocuments = false
     }
 
-    /// Set once nothing of Keybumps's is left in `~/Documents/Keybumps`, or on a Mac that never
-    /// ran a build before the Keybumps folder.
+    /// The time nothing of Keybumps's was left in `~/Documents/Keybumps`, or a Mac that never ran
+    /// a build before the Keybumps folder was found to be new (`documentsMoved(in:)`).
     static let documentsMovedKey = "keybumpsFolder.documentsMoved"
+
+    /// When the key was set, or nil while Documents is still to be looked in. `true`, which this
+    /// change's first candidates stored, reads as long ago.
+    static func documentsMoved(in defaults: UserDefaults) -> Date? {
+        if let date = defaults.object(forKey: documentsMovedKey) as? Date { return date }
+        return defaults.bool(forKey: documentsMovedKey) ? .distantPast : nil
+    }
 
     /// What this launch's move left in its old place. Set once at launch, before any store is
     /// built, and read through `ProductPaths.keybumps()`.
@@ -115,6 +125,9 @@ struct KeybumpsFolderMove {
     let paths: ProductPaths
     var fileManager: FileManager = .default
     var defaults: UserDefaults = .standard
+    /// A rename that never replaces anything: 0, or the error code. Tests make it fail with `EXDEV`
+    /// so the copy fallback runs.
+    var rename: (URL, URL) -> Int32 = KeybumpsFolderMove.renameExclusively
     private let logger = Logger(subsystem: "com.serp.keybumps", category: "keybumps-folder")
 
     init(paths: ProductPaths, fileManager: FileManager = .default, defaults: UserDefaults = .standard) {
@@ -131,6 +144,7 @@ struct KeybumpsFolderMove {
 
     @discardableResult
     func run() -> Report {
+        let started = ContinuousClock.now
         var report = Report()
         report.looksInDocuments = looksInDocuments()
         var documentsFailures = 0
@@ -154,9 +168,16 @@ struct KeybumpsFolderMove {
         if report.looksInDocuments {
             documentsFailures += report.failures - failuresBefore
             if !holdsChosenFolder(paths.oldDocumentsFolder, chosen) { removeIfEmpty(paths.oldDocumentsFolder) }
-            if documentsFailures == 0 { defaults.set(true, forKey: Self.documentsMovedKey) }
+            if documentsFailures == 0 {
+                defaults.set(Date(), forKey: Self.documentsMovedKey)
+            } else {
+                // Looked in again next launch, even when what showed an older build ran has moved.
+                defaults.removeObject(forKey: Self.documentsMovedKey)
+            }
         }
-        logger.info("keybumps folder move moved=\(report.moved, privacy: .public) conflicts=\(report.conflicts, privacy: .public) failures=\(report.failures, privacy: .public) left=\(report.leftInOldPlace.count, privacy: .public) documents=\(report.looksInDocuments, privacy: .public)")
+        // A copy across volumes, or of files iCloud has to download first, can make a launch slow.
+        let milliseconds = Int(started.duration(to: .now) / .milliseconds(1))
+        logger.info("keybumps folder move moved=\(report.moved, privacy: .public) conflicts=\(report.conflicts, privacy: .public) failures=\(report.failures, privacy: .public) left=\(report.leftInOldPlace.count, privacy: .public) documents=\(report.looksInDocuments, privacy: .public) ms=\(milliseconds, privacy: .public)")
         return report
     }
 
@@ -167,12 +188,21 @@ struct KeybumpsFolderMove {
         return chosen.contains { $0 == path || $0.hasPrefix(path + "/") }
     }
 
-    /// Whether `~/Documents/Keybumps` may still hold something of Keybumps's. A Mac with no Keybumps
-    /// folder yet never ran a build that kept anything there, so the key is set without looking.
+    /// Whether `~/Documents/Keybumps` may still hold something of Keybumps's. Every case that looks
+    /// is a Mac that ran an earlier build, which already settled macOS's Documents permission.
+    /// - Once the key is set: only if an older build ran since. A build before #602 saves each
+    ///   dictation in Documents, and writes `last-dictation.txt`, Clipboard History, and the rest at
+    ///   the top of the Keybumps folder, so one of those newer than the key is the sign. One left
+    ///   there as a conflict is older, and doesn't count.
+    /// - Before: on a Mac with the Keybumps folder, or where an earlier build ran (a Keybumps folder
+    ///   removed by hand or by an uninstaller). Anything else is a new install, and the key is set
+    ///   without looking.
     private func looksInDocuments() -> Bool {
-        guard !defaults.bool(forKey: Self.documentsMovedKey) else { return false }
-        guard fileExists(paths.keybumpsFolder) else {
-            defaults.set(true, forKey: Self.documentsMovedKey)
+        if let movedAt = Self.documentsMoved(in: defaults) {
+            return KeybumpsFolderItem.allCases.contains { !$0.isInDocuments && modified(paths.oldPlace(of: $0), after: movedAt) }
+        }
+        guard fileExists(paths.keybumpsFolder) || AppPreferences.ranBefore(in: defaults) else {
+            defaults.set(Date(), forKey: Self.documentsMovedKey)
             return false
         }
         return true
@@ -203,6 +233,13 @@ struct KeybumpsFolderMove {
         return lstat(url.path, &info) == 0
     }
 
+    private func modified(_ url: URL, after date: Date) -> Bool {
+        var info = stat()
+        guard lstat(url.path, &info) == 0 else { return false }
+        let time = info.st_mtimespec
+        return Date(timeIntervalSince1970: TimeInterval(time.tv_sec) + TimeInterval(time.tv_nsec) / 1_000_000_000) > date
+    }
+
     private func fail(_ stage: Stage, _ item: KeybumpsFolderItem, code: Int, _ report: inout Report) {
         report.failures += 1
         logger.error("keybumps folder move failed stage=\(stage.rawValue, privacy: .public) item=\(item.rawValue, privacy: .public) code=\(code, privacy: .public)")
@@ -230,7 +267,7 @@ struct KeybumpsFolderMove {
             // A copy an earlier launch didn't finish: the original is still here, so it goes.
             let partial = Self.partialCopy(of: destination)
             if fileExists(partial) { try? fileManager.removeItem(at: partial) }
-            switch Self.renameExclusively(source, to: destination) {
+            switch rename(source, destination) {
             case 0: report.moved += 1
             case EEXIST: merge(source, sourceEntry, into: destination, item: item, &report)
             default: copyThenRemove(source, to: destination, item: item, &report)
@@ -280,7 +317,7 @@ struct KeybumpsFolderMove {
             try? fileManager.removeItem(at: partial)
             return fail(.verify, item, code: 0, &report)
         }
-        let code = Self.renameExclusively(partial, to: destination)
+        let code = rename(partial, destination)
         guard code == 0 else {
             try? fileManager.removeItem(at: partial)
             return fail(.place, item, code: Int(code), &report)
@@ -328,7 +365,7 @@ struct KeybumpsFolderMove {
         guard code == ENOTSUP || code == EINVAL else { return code }
         var info = stat()
         if lstat(destination.path, &info) == 0 { return EEXIST }
-        return rename(source.path, destination.path) == 0 ? 0 : errno
+        return Darwin.rename(source.path, destination.path) == 0 ? 0 : errno
     }
 
     // MARK: Paths
