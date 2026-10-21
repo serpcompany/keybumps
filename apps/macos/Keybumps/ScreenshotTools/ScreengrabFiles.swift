@@ -138,15 +138,16 @@ enum ScreengrabFiles {
 /// Desktop, never touches the history, and nothing Keybumps keeps points to it. A screenshot's file
 /// keeps its name; a recording's folder (`<timestamp>/`) is copied whole, as it was saved there
 /// before #605. A partial copy Keybumps left there when it quit mid-copy is removed just before the
-/// next copy, not at launch, so that folder is read only as ScreenGrabs copies into it, never on a
-/// Mac that doesn't use ScreenGrabs (#611).
+/// next copy, not at launch, so the launch's moves never read that folder, and a Mac that doesn't
+/// use ScreenGrabs is never asked for it (#611).
 struct ScreengrabCopies {
     var folder: () -> URL
     var fileManager: FileManager = .default
 
     /// Copies `screengrab`, a screenshot's file or a recording's folder, there (`ScreengrabFiles`).
     /// Nil when it's in that folder already (macOS saving screenshots in the history folder) or
-    /// can't be copied.
+    /// can't be copied. Main actor only, so no other copy is under way during the sweep below.
+    @MainActor
     func put(_ screengrab: URL) -> URL? {
         let folder = folder()
         guard !ScreengrabFiles.isDirectly(screengrab, in: folder) else { return nil }

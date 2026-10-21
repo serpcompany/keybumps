@@ -31,9 +31,9 @@ import OSLog
 ///   and the copy leaves the folder as it is.
 /// - **Partial copies** Keybumps left when it quit mid-copy (`.<name>.keybumps-moving`) are removed
 ///   first, each launch, in the history's two folders (`ScreengrabFiles.removePartialCopies`).
-///   Nothing else there is touched. Where convenience copies go isn't read at launch: a partial copy
-///   there is removed just before the next copy (`ScreengrabCopies.put`), so a Mac that never used
-///   ScreenGrabs isn't asked for its Desktop (#611).
+///   Nothing else there is touched. The launch's moves never read where convenience copies go: a
+///   partial copy there is removed just before the next copy (`ScreengrabCopies.put`), so a Mac
+///   that never used ScreenGrabs isn't asked for its Desktop (#611).
 /// - **Logs** say only counts, the stage, an error code, and how long it took: never a path, a
 ///   name, or content.
 struct ScreengrabsHistoryMove {

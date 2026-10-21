@@ -58,7 +58,7 @@ On 2026-10-21 the owner asked (#601) for every plugin that keeps history to keep
      - Every launch: a recording the index lists outside the history, such as one saved on the Desktop from #504 until #605, gets a copy of its folder there, and the index then names it. The folder it was in stays, as the person's copy.
      - Once: a recording the index lacks, in a folder ScreenGrabs recorded into, gets a copy unless the history has its folder.
      - Recordings wait while decision 3's move has left the recordings or the index in their old place, unless it left them for a folder chosen before #605; new recordings go to the history either way.
-     - Every launch: a partial copy Keybumps left when it quit mid-copy (`.<name>.keybumps-moving`) is removed from the history. One where copies go is removed just before the next copy there, so launch never reads that folder, and a Mac that doesn't use ScreenGrabs is never asked for its Desktop (#611).
+     - Every launch: a partial copy Keybumps left when it quit mid-copy (`.<name>.keybumps-moving`) is removed from the history. One where copies go is removed just before the next copy there, so the launch's moves never read that folder, and a Mac that doesn't use ScreenGrabs is never asked for its Desktop (#611).
 
 ## Consequences
 

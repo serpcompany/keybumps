@@ -111,7 +111,9 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
         try? FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
         let savedURL: URL? = (try? png.write(to: destination, options: .withoutOverwriting)) == nil ? nil : destination
         if let savedURL { onSaved?(savedURL) }
-        if savedURL == nil {
+        // Never under the unit-test host, where nothing would dismiss it: a test whose Save fails
+        // then fails on its own expectations instead of waiting forever (#613).
+        if savedURL == nil, !UnitTestHost.isActive {
             let alert = NSAlert()
             alert.messageText = "Couldn’t save the edited copy"
             alert.informativeText = copied ? "The edited image is on the clipboard." : "The edited image could not be copied either."
