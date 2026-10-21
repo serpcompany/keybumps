@@ -171,12 +171,11 @@ struct ScreengrabDetailTests {
         #expect(ScreengrabFileFacts.size(of: []) == nil)
     }
 
-    @Test("A screenshot whose file moved: Dimensions and Size from Clipboard History's copy, and no Show in Finder once its files are read")
+    @Test("A screenshot from before #605 whose file moved: Dimensions and Size from Clipboard History's copy, and no Show in Finder once its files are read")
     func savedFileMoved() async throws {
         let fixture = RecordingsTabFixture()
         defer { fixture.tearDown() }
-        let entry = try Self.addScreenshot(to: fixture, width: 12, height: 8, at: Self.start)
-        try FileManager.default.removeItem(at: try #require(entry.sourceURL))
+        let entry = try Self.screenshotFromBefore(in: fixture, width: 12, height: 8, at: Self.start)
         let copy = try #require(entry.imageURL)
         let detail = try #require(fixture.content.detail(row: 0, query: ""))
         #expect(detail.buttons.map(\.action) == [.copy, .paste, .edit, .quickLook, .showInFinder, .delete], "Nothing's read yet")
@@ -507,19 +506,42 @@ struct ScreengrabDetailTests {
     // MARK: Helpers
 
     /// A made-up screenshot of `width` by `height` pixels in Clipboard History, taken at `date`,
-    /// with its file kept.
+    /// with its file copied into ScreenGrabs' history under its own name (#605).
     @discardableResult
     static func addScreenshot(to fixture: RecordingsTabFixture, width: Int, height: Int, at date: Date) throws -> ClipboardEntry {
+        let file = fixture.library.root.url.appendingPathComponent("Screenshot \(Int(date.timeIntervalSince1970)).png")
+        try png(width: width, height: height, at: date).write(to: file)
+        #expect(fixture.library.clipboard.importScreenshot(at: file, capturedAt: date))
+        let inHistory = fixture.library.clipboard.screenshotsFolder.appendingPathComponent(file.lastPathComponent)
+        return try #require(fixture.library.clipboard.entries.first { $0.sourcePath == inHistory.path })
+    }
+
+    /// A screenshot item from before #605 that the move hasn't brought into ScreenGrabs' history
+    /// yet (`ScreengrabsHistoryMove`): Clipboard History's own copy in `media/`, and its own file,
+    /// which was moved. Written before Clipboard History loads.
+    static func screenshotFromBefore(in fixture: RecordingsTabFixture, width: Int, height: Int, at date: Date) throws -> ClipboardEntry {
+        let support = fixture.library.support
+        let media = support.appendingPathComponent("clipboard-media", isDirectory: true)
+        try FileManager.default.createDirectory(at: media, withIntermediateDirectories: true)
+        let copy = media.appendingPathComponent("made-up.png")
+        try png(width: width, height: height, at: date).write(to: copy)
+        let entry = ClipboardEntry(
+            id: UUID(), text: "", capturedAt: date, kind: .image, mediaPath: copy.path, mediaPasteboardType: "public.png",
+            fingerprint: "image:made-up", sourcePath: fixture.library.root.url.appendingPathComponent("Moved.png").path,
+            isScreenCapture: true
+        )
+        try JSONEncoder().encode([entry]).write(to: support.appendingPathComponent("clipboard-history.json"))
+        return entry
+    }
+
+    /// A PNG of `width` by `height` pixels, its own for each `date`, so Clipboard History keeps every one.
+    private static func png(width: Int, height: Int, at date: Date) throws -> Data {
         let rep = try #require(NSBitmapImageRep(
             bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height, bitsPerSample: 8, samplesPerPixel: 4,
             hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
         ))
-        // Each one's own pixels, so Clipboard History keeps every one.
         rep.setColor(NSColor(white: CGFloat(Int(date.timeIntervalSince1970) % 200) / 255, alpha: 1), atX: 0, y: 0)
-        let file = fixture.library.root.url.appendingPathComponent("Screenshot \(Int(date.timeIntervalSince1970)).png")
-        try #require(rep.representation(using: .png, properties: [:])).write(to: file)
-        #expect(fixture.library.clipboard.importScreenshot(at: file, capturedAt: date))
-        return try #require(fixture.library.clipboard.entries.first { $0.sourcePath == file.path })
+        return try #require(rep.representation(using: .png, properties: [:]))
     }
 
     static func taken(_ date: Date) -> String {

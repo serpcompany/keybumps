@@ -101,13 +101,15 @@ extension ProductPaths {
 /// - **A failure** leaves the original where it was, and its store reads it there this launch
 ///   (`leftInOldPlace`). Nothing is ever overwritten or deleted except an original whose copy is in
 ///   place, Finder's `.DS_Store`, and the move's own partial copies.
-/// - **A folder chosen** in Settings › ScreenGrabs, or one inside it, isn't moved: an old place that
-///   is, or holds, a chosen folder stays, read there, and is looked at again each launch. Nor is
-///   a chosen `~/Documents/Keybumps` removed once it's empty.
+/// - **A folder chosen** in Settings › ScreenGrabs before #605, or one inside it, isn't moved: an old
+///   place that is, or holds, a chosen folder stays, read there, and is looked at again each launch.
+///   Nor is a chosen `~/Documents/Keybumps` removed once it's empty. New recordings still go to
+///   `screengrabs/recordings/`, and `ScreengrabsHistoryMove` copies the ones held there into it.
 /// - **Paths:** Clipboard History, the recordings index, and each Dictation model's
-///   `model-location.txt` store absolute paths, and ScreenGrabs remembers the folders it recorded
-///   into (`RecordingFolderMemory`); one into a folder that moved is rewritten once its file is in
-///   the new place (`rewritePaths`).
+///   `model-location.txt` store absolute paths, and ScreenGrabs remembered the folders it recorded
+///   into until #605 (`RecordingFolderMemory`); one into a folder that moved is rewritten once its
+///   file is in the new place (`rewritePaths`). Then `ScreengrabsHistoryMove` brings every screengrab
+///   into ScreenGrabs' history.
 /// - **This change's first candidates** kept each dictation at the top of `dictation/`; they move
 ///   into `dictation/recordings/` (`moveDictationsFromTheFirstCandidates`).
 /// - **`~/Documents/Keybumps`** is looked in only on a Mac that ran an earlier build: while
@@ -172,7 +174,7 @@ struct KeybumpsFolderMove {
         let chosen = AppPreferences.chosenScreengrabFolderPaths(in: defaults)
         for item in KeybumpsFolderItem.allCases where report.looksInDocuments || !item.isInDocuments {
             let failuresBefore = report.failures
-            if holdsChosenFolder(paths.oldPlace(of: item), chosen) {
+            if Self.holdsChosenFolder(paths.oldPlace(of: item), chosen) {
                 if fileExists(paths.oldPlace(of: item)) { report.leftInOldPlace.insert(item) }
                 if item.isInDocuments { documentsFailures += 1 }
                 continue
@@ -189,7 +191,7 @@ struct KeybumpsFolderMove {
         rewritePaths(&report)
         if report.looksInDocuments {
             documentsFailures += report.failures - failuresBefore
-            if !holdsChosenFolder(paths.oldDocumentsFolder, chosen) { removeIfEmpty(paths.oldDocumentsFolder) }
+            if !Self.holdsChosenFolder(paths.oldDocumentsFolder, chosen) { removeIfEmpty(paths.oldDocumentsFolder) }
             if documentsFailures == 0 {
                 defaults.set(Date(), forKey: Self.documentsMovedKey)
             } else {
@@ -203,9 +205,9 @@ struct KeybumpsFolderMove {
         return report
     }
 
-    /// Whether `folder` is a folder chosen in Settings › ScreenGrabs, or holds one. Lexical: it never
+    /// Whether `folder` is a folder chosen in Settings › ScreenGrabs before #605, or holds one. Lexical: it never
     /// looks at the disk.
-    private func holdsChosenFolder(_ folder: URL, _ chosen: [String]) -> Bool {
+    static func holdsChosenFolder(_ folder: URL, _ chosen: [String]) -> Bool {
         let path = folder.standardizedFileURL.path
         return chosen.contains { $0 == path || $0.hasPrefix(path + "/") }
     }
@@ -413,7 +415,7 @@ struct KeybumpsFolderMove {
     // MARK: Paths
 
     /// Clipboard History's image copies and screenshot sources, the recordings index's folders, the
-    /// folders ScreenGrabs remembers recording into, and each Dictation model's folder are absolute
+    /// folders ScreenGrabs remembered recording into, and each Dictation model's folder are absolute
     /// paths. One under a folder that moved is rewritten to the same place in the new folder once
     /// it's gone from the old one and is there. A file that can't be read, or a later build's index,
     /// is left as it is.
@@ -479,7 +481,7 @@ struct KeybumpsFolderMove {
             }
         }
 
-        // So the launch check doesn't look for the old recordings folder in Documents.
+        // So the move into ScreenGrabs' history doesn't look for the old recordings folder in Documents.
         let remembered = defaults.stringArray(forKey: RecordingFolderMemory.key) ?? []
         let updated = remembered.map { rewritten($0, moves) ?? $0 }
         if updated != remembered {

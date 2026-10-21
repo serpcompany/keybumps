@@ -33,7 +33,7 @@ struct ScreencastRecordingReviewTests {
 
     /// The flow the app hangs the review on, with its notch notices recorded.
     private func flow(
-        outcomes: ReviewOutcomeLog, notices: ReviewNotices, front: ScreencastReviewFront = .app
+        outcomes: ReviewOutcomeLog, notices: ReviewNotices, front: ScreencastReviewFront = .app, copies: ScreengrabCopies? = nil
     ) -> ScreencastReviewFlow {
         let flow = ScreencastReviewFlow(
             services: ScreencastReviewServices(
@@ -41,7 +41,8 @@ struct ScreencastRecordingReviewTests {
                 pasteboard: fixture.pasteboard,
                 notices: notices,
                 repositories: { [fixture] in fixture.repositories },
-                front: front
+                front: front,
+                copies: copies
             ),
             contextReader: .inert
         )
@@ -49,9 +50,9 @@ struct ScreencastRecordingReviewTests {
         return flow
     }
 
-    /// What the notch says after Save: the folder the capture's folder is in, the test's captures
-    /// folder, by the name Finder shows.
-    private var savedNotice: String { "Recording saved to \(fixture.folder.url.lastPathComponent)" }
+    /// What the notch says after Save of a recording that gets no copy where macOS saves screenshots
+    /// (#605): one these tests open with `show`, not one the recorder just made. It's in the history.
+    private let savedNotice = "Recording saved"
 
     /// The window's SwiftUI view.
     private func windowView(of panel: ScreencastReviewPanel) -> ScreencastRecordingReviewView? {
@@ -237,7 +238,7 @@ struct ScreencastRecordingReviewTests {
 
     // MARK: Save, Copy, and Discard
 
-    @Test("Save keeps the recording in the captures folder, closes the window, and the notch says it was saved there")
+    @Test("Save keeps the recording in the folder it was recorded into, closes the window, and the notch says it was saved")
     func saveClosesWithANotice() async throws {
         defer { fixture.tearDown() }
         let outcomes = ReviewOutcomeLog()
@@ -251,10 +252,56 @@ struct ScreencastRecordingReviewTests {
         await panel.model?.save()
         #expect(outcomes.outcomes == [.saved(recording)])
         #expect(!panel.isShown && !panel.window.isVisible && panel.playback == nil, "the window closes")
-        #expect(notices.messages == [savedNotice] && notices.warnings == [false], "where it went: the captures folder")
+        #expect(notices.messages == [savedNotice] && notices.warnings == [false])
         #expect(FileManager.default.fileExists(atPath: recording.folder.path), "kept in the captures folder it was recorded into")
         #expect(try ScreencastMetadata.read(from: recording.metadataURL).duration == 4, "the recording as it was")
         #expect(ScreencastReview.read(from: recording.metadataURL) != nil, "with its review in meta.json")
+    }
+
+    @Test("A recording just made stays in ScreenGrabs' history and, once the window keeps it, its whole folder is copied where macOS saves screenshots, and the notch names that folder; removing the copy leaves the recording; Discard leaves no copy, nor does a recording opened again (#605)")
+    func newRecordingGetsACopy() async throws {
+        defer { fixture.tearDown() }
+        let outcomes = ReviewOutcomeLog()
+        let notices = ReviewNotices()
+        // A stand-in for the Desktop.
+        let desktop = fixture.folder.url.appendingPathComponent("Desktop", isDirectory: true)
+        let flow = flow(outcomes: outcomes, notices: notices, copies: ScreengrabCopies(folder: { desktop }))
+
+        let made = try fixture.video(name: "1791000000")
+        flow.captureFinished(Self.result(made))
+        try await eventually { flow.panel?.model?.input == made }
+        let panel = try #require(flow.panel)
+        await panel.model?.save()
+        let copy = desktop.appendingPathComponent("1791000000", isDirectory: true)
+        #expect(outcomes.outcomes == [.saved(made)])
+        #expect(FileManager.default.fileExists(atPath: made.folder.path), "kept in the folder it was recorded into")
+        #expect(FileManager.default.contentsEqual(atPath: made.folder.path, andPath: copy.path), "its whole folder, review and all")
+        #expect(notices.messages == ["Recording saved to \(FileManager.default.displayName(atPath: desktop.path))"] && notices.warnings == [false])
+        try FileManager.default.removeItem(at: copy)
+        #expect(try ScreencastMetadata.read(from: made.metadataURL).duration == 4, "the recording doesn't need its copy")
+
+        let discarded = try fixture.video(name: "1791000100")
+        flow.captureFinished(Self.result(discarded))
+        try await eventually { panel.model?.input == discarded }
+        panel.model?.askToDiscard()
+        panel.model?.confirmDiscard()
+        #expect(outcomes.outcomes == [.saved(made), .discarded(discarded)])
+        #expect(!FileManager.default.fileExists(atPath: desktop.appendingPathComponent("1791000100").path), "Discard leaves no copy")
+
+        let reopened = try fixture.video(name: "1791000200")
+        await flow.show(reopened, context: .none)
+        await panel.model?.save()
+        #expect(outcomes.outcomes.last == .saved(reopened))
+        #expect(!FileManager.default.fileExists(atPath: desktop.appendingPathComponent("1791000200").path), "it had its copy when it was made")
+        #expect(notices.messages.last == "Recording saved")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: desktop.path).isEmpty)
+    }
+
+    /// What the recorder hands the flow for `input`.
+    private static func result(_ input: ScreencastReviewInput) -> ScreencastCaptureResult {
+        switch input {
+        case .video(let capture): .video(capture)
+        }
     }
 
     @Test("Return saves once, however long it's held; Escape and the close button save too, each with the notice")
@@ -422,19 +469,21 @@ struct ScreencastRecordingReviewTests {
         #expect(!panel.isShown && !window.isVisible && !window.isKeyWindow, "and it never comes back")
     }
 
-    @Test("What the notch says: where Save put the recording, Copy, the reason as a warning when the recording couldn't be saved, and nothing for Discard")
+    @Test("What the notch says: the folder Save's copy went to, else that it was saved; Copy; the reason as a warning when the recording couldn't be saved; and nothing for Discard (#605)")
     func notices() throws {
         defer { fixture.tearDown() }
         let recording = try fixture.video(name: "1791000000")
-        // The folder named is the one the capture's own folder is in, by its name in Finder.
+        let copy = fixture.folder.url.appendingPathComponent("Desktop/1791000000", isDirectory: true)
+        // The folder named is the one the copy is in, by its name in Finder.
         var asked: [URL] = []
-        let saved = ScreencastReviewFlow.notice(for: .saved(recording)) { folder in
+        let saved = ScreencastReviewFlow.notice(for: .saved(recording), copy: copy) { folder in
             asked.append(folder)
-            return "Movies"
+            return "Desktop"
         }
-        #expect(saved?.message == "Recording saved to Movies" && saved?.isWarning == false)
-        #expect(asked.map(\.standardizedFileURL) == [fixture.folder.url.standardizedFileURL], "the captures folder, not the capture's own")
-        #expect(ScreencastReviewFlow.notice(for: .saved(recording))?.message == savedNotice, "Finder's name for it")
+        #expect(saved?.message == "Recording saved to Desktop" && saved?.isWarning == false)
+        #expect(asked.map(\.standardizedFileURL) == [copy.deletingLastPathComponent().standardizedFileURL], "the folder the copy is in, not the copy")
+        #expect(ScreencastReviewFlow.notice(for: .saved(recording), copy: copy)?.message == "Recording saved to Desktop", "Finder's name for it")
+        #expect(ScreencastReviewFlow.notice(for: .saved(recording))?.message == "Recording saved", "no copy: it's in the history")
         #expect(ScreencastReviewFlow.notice(for: .copied(recording))?.message == "Recording copied")
         let failed = ScreencastReviewFlow.notice(for: .saveFailed(recording, .diskFull))
         #expect(failed?.message == "Couldn’t save the recording: the disk is full." && failed?.isWarning == true)

@@ -88,9 +88,9 @@ struct ScreengrabDetail: Equatable {
 }
 
 /// What a screengrab's files say for the detail's Information and its Show in Finder (#552): a
-/// screenshot's Dimensions, read from Clipboard History's copy, which has its pixels and is always on
-/// this Mac, and whether its own file is still where it was saved; a screenshot's or a recording's
-/// Size. They're read off the main thread (`read(_:)`), since a file on a Desktop synced with iCloud
+/// screenshot's Dimensions, read from the file its item keeps (`imageURL`: since #605 its file in
+/// ScreenGrabs' history, which is always on this Mac), and whether its own file (`sourceURL`, the
+/// same one since #605) is still there; a screenshot's or a recording's Size. They're read off the main thread (`read(_:)`), since a file on a Desktop synced with iCloud
 /// may have to download before its header can be read, once for each screengrab highlighted after
 /// the tab shows (`ScreengrabsPaletteContent.loadFileFacts(for:)`), so neither a hover nor a key
 /// waits on a file.
@@ -116,9 +116,9 @@ struct ScreengrabFileFacts: Equatable, Sendable {
         }
     }
 
-    /// A screenshot's, from its files: Dimensions from Clipboard History's copy, else its own file;
-    /// Size of its own file while it's where it was saved, else of the copy, as Quick Look shows one
-    /// or the other (`Screengrab.previewFiles`).
+    /// A screenshot's, from its files: Dimensions from the file its item keeps, else its own file;
+    /// Size of its own file while it's there, else of the kept one, as Quick Look shows one or the
+    /// other (`Screengrab.previewFiles`). Since #605 they're one file, in ScreenGrabs' history.
     static func screenshot(copy: URL?, saved: URL?) -> ScreengrabFileFacts {
         let exists = saved.map { FileManager.default.fileExists(atPath: $0.path) }
         let own = exists == true ? saved : nil

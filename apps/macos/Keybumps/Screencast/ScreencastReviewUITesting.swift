@@ -4,8 +4,8 @@ import AVFoundation
 import SwiftUI
 
 // UI test mode's `-KBUITestScreencastReview video`: Screencast's review panel on a recording made
-// up in the Recordings folder (`preferences.screencast.capturesFolder`, which defaults to the
-// sandbox's screenshot folder), as the flow controller would save one, since UI tests can't record
+// up in ScreenGrabs' history (`preferences.screencast.capturesFolder`, in the sandbox's Keybumps
+// folder), as the flow controller would save one, since UI tests can't record
 // the screen. With `-KBOpenPalette`, the recording is indexed instead, beside a made-up screenshot,
 // and the palette opens (#494). Debug builds only, like the rest of UI test mode.
 

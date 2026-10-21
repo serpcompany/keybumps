@@ -30,11 +30,11 @@ struct ScreencastPhaseObservation: Hashable, Sendable {
     let id: Int
 }
 
-/// A capture saved in the Recordings folder, for the review panel (#450).
+/// A capture saved in ScreenGrabs' history, for the review panel (#450).
 enum ScreencastCaptureResult: Equatable, Sendable {
     case video(ScreencastCapture)
 
-    /// Its `<Recordings folder>/<timestamp>/` folder.
+    /// Its `screengrabs/recordings/<timestamp>/` folder.
     var folder: URL {
         switch self {
         case .video(let capture): capture.folder
@@ -145,6 +145,9 @@ final class ScreencastController {
     /// A recording was saved: the review panel takes it from here. A recording that ended early
     /// comes here too, with `endedEarly` set, after its message.
     @ObservationIgnored var onCaptureFinished: ((ScreencastCaptureResult) -> Void)?
+    /// A recording was kept after `shutDown()` (ScreenGrabs turned off, or Keybumps Locked), which
+    /// opens nothing: it's listed and gets its copy where macOS saves screenshots from here (#605).
+    @ObservationIgnored var onCaptureKept: ((ScreencastCaptureResult) -> Void)?
 
     @ObservationIgnored private let system: any ScreencastPickerSystem
     @ObservationIgnored private let presenter: any ScreencastOverlayPresenting
@@ -182,7 +185,7 @@ final class ScreencastController {
     /// Where the displays changing is heard, while the picker is open.
     @ObservationIgnored private let screenChanges: NotificationCenter
     @ObservationIgnored private var screenObserver: (any NSObjectProtocol)?
-    /// False after `shutDown()`: what's saved stays in the Recordings folder and nothing opens.
+    /// False after `shutDown()`: what's saved stays in ScreenGrabs' history and nothing opens.
     @ObservationIgnored private var opensFinishedCaptures = true
 
     /// - Parameters:
@@ -492,7 +495,6 @@ final class ScreencastController {
                 target: choice.target,
                 audio: choice.audio,
                 capturesFolder: settings.capturesFolder,
-                fallbackFolder: settings.fallbackFolder,
                 options: ScreencastOptions(showsMouseClicks: choice.highlightsClicks)
             )
         } catch is CancellationError {
@@ -604,9 +606,8 @@ final class ScreencastController {
 
     /// Screencast turned off, or Keybumps Locked: the picker closes, and a countdown or a start is
     /// cancelled. A recording stops and is kept, and a capture being saved finishes; neither opens
-    /// anything: they stay in the Recordings folder they were made in, which the recordings index
-    /// remembered as the recorder made each one's folder (`ScreencastRecorder.onFolderMade`), so the
-    /// next launch lists them. Footage is never thrown away here.
+    /// anything: they stay in the history they were made in (`ScreencastPreferences.capturesFolder`)
+    /// and go to `onCaptureKept`. Footage is never thrown away here.
     func shutDown() async {
         opensFinishedCaptures = false
         switch phase {
@@ -689,6 +690,7 @@ final class ScreencastController {
             onCaptureFinished?(result)
         } else {
             logger.info("screencast recording kept while turned off")
+            onCaptureKept?(result)
         }
     }
 

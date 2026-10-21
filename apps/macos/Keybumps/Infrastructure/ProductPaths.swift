@@ -37,10 +37,11 @@ struct ProductPaths: Equatable {
     var shortcutCoach: URL { folder("shortcut_coach") }
     /// ScreenGrabs' recordings index and repository memory, and `recordings/` and `screenshots/`.
     var screengrabs: URL { folder("screengrabs") }
-    /// ScreenGrabs' recordings kept in the Keybumps folder, each in its own `<timestamp>/` folder
-    /// (ADR 0009, ADR 0010): those made before #504. New recordings save in the Recordings folder.
+    /// ScreenGrabs' history of recordings, each in its own `<timestamp>/` folder (ADR 0009, ADR 0013):
+    /// every recording is saved here (#605), and the recordings index points here.
     var screengrabsRecordings: URL { screengrabs.appendingPathComponent("recordings", isDirectory: true) }
-    /// Empty for now: #605 keeps every screenshot here too.
+    /// ScreenGrabs' history of screenshots (#605): every screenshot's file, which its Clipboard
+    /// History item names. The hotkeys save here, and one macOS saves is copied here.
     var screengrabsScreenshots: URL { screengrabs.appendingPathComponent("screenshots", isDirectory: true) }
 
     private func folder(_ name: String) -> URL {

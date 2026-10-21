@@ -6,7 +6,7 @@ import Testing
 @MainActor
 @Suite("New screenshots on the clipboard")
 struct ScreenshotClipboardTests {
-    private static let png = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n4cAAAAASUVORK5CYII=")!
+    static let png = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2n4cAAAAASUVORK5CYII=")!
 
     @Test("A new screenshot goes on the clipboard, and Clipboard History doesn't add that copy again")
     func copiesNewScreenshots() throws {
@@ -22,7 +22,11 @@ struct ScreenshotClipboardTests {
         fixture.clipboard.pollForTesting()
         #expect(fixture.clipboard.entries.map(\.kind) == [.text, .image])
         #expect(fixture.clipboard.entries.last?.isScreenshot == true)
-        #expect(fixture.clipboard.entries.last?.sourceURL == shot)
+        // macOS's file is copied into ScreenGrabs' history, which the item names; macOS's stays (#605).
+        let kept = fixture.clipboard.screenshotsFolder.appendingPathComponent(shot.lastPathComponent)
+        #expect(fixture.clipboard.entries.last?.sourceURL == kept)
+        #expect(fixture.clipboard.entries.last?.imageURL == kept)
+        #expect(FileManager.default.contentsEqual(atPath: kept.path, andPath: shot.path))
     }
 
     @Test("Something copied after the screenshot was taken stays on the clipboard and reaches Clipboard History")
@@ -117,8 +121,9 @@ struct ScreenshotClipboardTests {
         let fixture = try Fixture()
         defer { fixture.tearDown() }
         let delivery = ScreenshotClipboardDelivery(clipboard: fixture.clipboard, copiesToClipboard: { true })
-        let main = try fixture.screenshot("Screenshot 1.png")
-        let second = try fixture.screenshot("Screenshot 1 (2).png")
+        // Saved in ScreenGrabs' history, as the hotkeys save them.
+        let main = try fixture.screenshot("Screenshot 1.png", inHistory: true)
+        let second = try fixture.screenshot("Screenshot 1 (2).png", inHistory: true)
         let changeCount = fixture.pasteboard.changeCount
 
         #expect(delivery.addForEditing([main, second]) == main)
@@ -134,7 +139,7 @@ struct ScreenshotClipboardTests {
         let start = fixture.pasteboard.changeCount
         #expect(delivery.add(try fixture.screenshot("Earlier.png")))
         let oneCopy = fixture.pasteboard.changeCount - start
-        let files = try ["1", "1 (2)", "1 (3)"].map { try fixture.screenshot("Screenshot \($0).png") }
+        let files = try ["1", "1 (2)", "1 (3)"].map { try fixture.screenshot("Screenshot \($0).png", inHistory: true) }
         let before = fixture.pasteboard.changeCount
 
         delivery.addCapture(files)
@@ -144,7 +149,7 @@ struct ScreenshotClipboardTests {
         #expect(fixture.pasteboard.data(forType: .png) == (try Data(contentsOf: files[0])))
     }
 
-    @Test("The Screen hotkey's files are added when screencapture exits, never by the watcher first")
+    @Test("The Screen hotkey's files are saved in ScreenGrabs' history, copied where macOS saves screenshots, and added when screencapture exits, never by the watcher, which never adds the copies (#605)")
     func screenHotkeyAddsItsOwnFiles() throws {
         let fixture = try Fixture()
         defer { fixture.tearDown() }
@@ -153,20 +158,25 @@ struct ScreenshotClipboardTests {
         var written: [URL] = []
         capture.delivery.capture(.screens, with: capture.capturer, watcher: capture.watcher) { written = $0 }
 
-        // screencapture marks display 1 before it exits; the watcher would add and copy it now.
+        // screencapture marks display 1 before it exits.
         capture.scan()
         #expect(fixture.clipboard.entries.isEmpty)
         capture.runner.finish?()
         #expect(written.count == 3)
+        #expect(written.allSatisfy { ScreengrabFiles.isDirectly($0, in: fixture.clipboard.screenshotsFolder) }, "in the history")
+        for file in written {
+            let copy = fixture.root.appendingPathComponent(file.lastPathComponent)
+            #expect(FileManager.default.contentsEqual(atPath: file.path, andPath: copy.path), "and a copy where macOS saves screenshots")
+        }
         let listed = ScreenshotPaletteContent.resolve(entries: fixture.clipboard.entries, query: "", isEnabled: true)
-        #expect(listed.entries.compactMap(\.sourceURL) == written, "⌘3, the main display's on top")
+        #expect(listed.entries.compactMap(\.sourceURL) == written, "⌘3, the main display's on top, naming the history's files")
         #expect(fixture.pasteboard.data(forType: .png) == (try Data(contentsOf: written[0])), "⌘V")
 
         capture.scan()
-        #expect(fixture.clipboard.entries.count == 3, "the watcher doesn't add them again")
+        #expect(fixture.clipboard.entries.count == 3, "the watcher doesn't add the copies")
     }
 
-    @Test("Screen and Edit adds its files the same way, copying none; Screen adds none while Clipboard History is off")
+    @Test("Screen and Edit adds its files the same way, copying none to the clipboard; Screen adds none while Clipboard History is off, but keeps them in the history and copies them, and the next launch lists them (#605)")
     func editAndOffCaptures() throws {
         let fixture = try Fixture()
         defer { fixture.tearDown() }
@@ -188,6 +198,11 @@ struct ScreenshotClipboardTests {
         offCapture.delivery.capture(.screens, with: offCapture.capturer, watcher: offCapture.watcher) { written = $0 }
         offCapture.runner.finish?()
         #expect(written.count == 3 && off.clipboard.entries.isEmpty)
+        #expect(written.allSatisfy { FileManager.default.fileExists(atPath: off.root.appendingPathComponent($0.lastPathComponent).path) }, "copied")
+        #expect(off.clipboard.adoptScreenshots() == 3, "listed at the next launch")
+        let listed = ScreenshotPaletteContent.resolve(entries: off.clipboard.entries, query: "", isEnabled: true)
+        #expect(Set(listed.entries.compactMap(\.sourceURL)) == Set(written))
+        #expect(off.clipboard.clipboardTabEntries.isEmpty, "never copied, so not in the Clipboard tab")
     }
 
     @Test("Area and Edit (⇧⌘4, #545) adds its one file without copying it; a selection cancelled with Escape writes and adds nothing")
@@ -219,13 +234,11 @@ struct ScreenshotClipboardTests {
         #expect(written.isEmpty && cancelled.clipboard.entries.isEmpty)
     }
 
-    @Test("A hotkey screenshot saved in a chosen Screenshots folder reaches Clipboard History and ⌘3, and is copied, while Keybumps can't read macOS's folder")
-    func chosenFolderWithoutTheWatcher() throws {
+    @Test("A hotkey screenshot reaches Clipboard History and ⌘3, and is copied, while Keybumps can't read macOS's folder")
+    func hotkeyWithoutTheWatcher() throws {
         let fixture = try Fixture()
         defer { fixture.tearDown() }
-        let chosen = fixture.root.appendingPathComponent("Chosen", isDirectory: true)
-        try FileManager.default.createDirectory(at: chosen, withIntermediateDirectories: true)
-        let capture = HotkeyCapture(fixture, savingIn: chosen, reader: DeniedScreenshotReader())
+        let capture = HotkeyCapture(fixture, reader: DeniedScreenshotReader())
         defer { capture.watcher.stop() }
         guard case .folderAccessDenied = capture.watcher.status else {
             Issue.record("the watcher can't read macOS's folder")
@@ -236,21 +249,22 @@ struct ScreenshotClipboardTests {
         capture.runner.finish?()
 
         #expect(written.count == 3)
-        #expect(written.allSatisfy { $0.deletingLastPathComponent().standardizedFileURL == chosen.standardizedFileURL })
+        #expect(written.allSatisfy { $0.deletingLastPathComponent().standardizedFileURL == fixture.clipboard.screenshotsFolder.standardizedFileURL })
+        #expect(written.allSatisfy { FileManager.default.fileExists(atPath: fixture.root.appendingPathComponent($0.lastPathComponent).path) }, "copied")
         let listed = ScreenshotPaletteContent.resolve(entries: fixture.clipboard.entries, query: "", isEnabled: true)
         #expect(listed.entries.compactMap(\.sourceURL) == written, "⌘3, the main display's on top")
         #expect(fixture.pasteboard.data(forType: .png) == (try Data(contentsOf: written[0])), "⌘V")
     }
 
-    @Test("A hotkey screenshot the watcher also sees, saved where macOS saves them however that's spelled, is listed and copied once")
+    @Test("A hotkey screenshot's copy the watcher sees, where macOS saves them however that's spelled, isn't added or copied again")
     func hotkeyScreenshotTheWatcherSeesIsAddedOnce() throws {
         let fixture = try Fixture()
         defer { fixture.tearDown() }
-        // A Screenshots folder chosen through a link to macOS's.
+        // Where macOS saves screenshots, through a link.
         let link = FileManager.default.temporaryDirectory.appendingPathComponent("KeybumpsScreenshotLink-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: fixture.root)
         defer { try? FileManager.default.removeItem(at: link) }
-        let capture = HotkeyCapture(fixture, savingIn: link)
+        let capture = HotkeyCapture(fixture, copyingTo: link)
         defer { capture.watcher.stop() }
         var written: [URL] = []
         capture.delivery.capture(.screens, with: capture.capturer, watcher: capture.watcher) { written = $0 }
@@ -260,15 +274,16 @@ struct ScreenshotClipboardTests {
         // The watcher's first look comes after the hotkey added them, as when it's slow to scan.
         capture.scan()
         #expect(written.count == 3)
+        #expect(written.allSatisfy { FileManager.default.fileExists(atPath: fixture.root.appendingPathComponent($0.lastPathComponent).path) }, "copied")
         #expect(fixture.clipboard.entries.compactMap(\.sourceURL) == written)
-        #expect(fixture.pasteboard.changeCount == changeCount, "copied once")
+        #expect(fixture.pasteboard.changeCount == changeCount, "on the clipboard once")
     }
 
-    @Test("A cancelled Area capture leaves its path to the watcher, so a macOS screenshot there still reaches ⌘3")
+    @Test("A cancelled Area capture leaves its path to the watcher, so a macOS screenshot there still reaches ⌘3, when macOS saves screenshots in ScreenGrabs' history")
     func cancelledAreaFreesItsPath() throws {
         let fixture = try Fixture()
         defer { fixture.tearDown() }
-        let capture = HotkeyCapture(fixture)
+        let capture = HotkeyCapture(fixture, copyingTo: fixture.clipboard.screenshotsFolder)
         defer { capture.watcher.stop() }
         capture.runner.writes = false
         capture.delivery.capture(.area, with: capture.capturer, watcher: capture.watcher)
@@ -325,24 +340,30 @@ struct ScreenshotClipboardTests {
 
     /// A Screen capture through the hotkey's path: the real capturer, with a stand-in for
     /// `screencapture` that writes three displays' PNGs, marks display 1 as it does, and exits only
-    /// when the test says (`finish`); and a watcher on the fixture's folder.
+    /// when the test says (`finish`); and a watcher on where macOS saves screenshots.
     @MainActor
-    fileprivate struct HotkeyCapture {
+    struct HotkeyCapture {
         let runner = HeldRunner(png: ScreenshotClipboardTests.png)
         let capturer: ScreenshotCapturer
         let watcher: ScreenshotToolsService
         let delivery: ScreenshotClipboardDelivery
 
-        /// The watcher watches the fixture's folder, macOS's; the hotkeys save in `folder`, a chosen
-        /// Screenshots folder, or there too.
-        init(_ fixture: Fixture, savingIn folder: URL? = nil, reader: (any ScreenshotDirectoryReading)? = nil) {
-            let root = fixture.root
-            let saves = folder ?? root
-            let delivery = ScreenshotClipboardDelivery(clipboard: fixture.clipboard, copiesToClipboard: { true })
+        /// The hotkeys save in the fixture's ScreenGrabs history, as the app's do (#605), and copy
+        /// each screenshot where macOS saves them, which the watcher watches: `folder`, else the
+        /// fixture's folder, a stand-in for the Desktop. `now` is when each screenshot is taken.
+        init(_ fixture: Fixture, copyingTo folder: URL? = nil, reader: (any ScreenshotDirectoryReading)? = nil, now: @escaping () -> Date = Date.init) {
+            let macOSFolder = folder ?? fixture.root
+            let history = fixture.clipboard.screenshotsFolder
+            try? FileManager.default.createDirectory(at: history, withIntermediateDirectories: true)
+            let delivery = ScreenshotClipboardDelivery(
+                clipboard: fixture.clipboard,
+                copiesToClipboard: { true },
+                copies: ScreengrabCopies(folder: { macOSFolder })
+            )
             self.delivery = delivery
-            capturer = ScreenshotCapturer(runner: runner, folder: { saves }, displayCount: { 3 })
+            capturer = ScreenshotCapturer(runner: runner, folder: { history }, now: now, displayCount: { 3 })
             watcher = ScreenshotToolsService(
-                resolver: ScreenshotLocationResolver(preferredLocation: { root.path }, homeDirectory: root, isDirectory: { _ in true }),
+                resolver: ScreenshotLocationResolver(preferredLocation: { macOSFolder.path }, homeDirectory: fixture.root, isDirectory: { _ in true }),
                 reader: reader ?? FileSystemScreenshotDirectoryReader(),
                 now: { .distantPast },
                 ingest: { delivery.add($0) }
@@ -364,7 +385,7 @@ struct ScreenshotClipboardTests {
     }
 
     /// `writes: false` stands in for an Area capture cancelled with Escape: no file.
-    fileprivate final class HeldRunner: ScreenshotCaptureRunning {
+    final class HeldRunner: ScreenshotCaptureRunning {
         let png: Data
         var writes = true
         private(set) var files: [String] = []
@@ -393,7 +414,7 @@ struct ScreenshotClipboardTests {
     }
 
     @MainActor
-    fileprivate struct Fixture {
+    struct Fixture {
         let root: URL
         let pasteboard: NSPasteboard
         let clipboard: ClipboardHistoryService
@@ -410,9 +431,13 @@ struct ScreenshotClipboardTests {
             )
         }
 
-        /// Each file gets its own pixels, so Clipboard History never treats two as the same item.
-        func screenshot(_ name: String = "Screenshot 2026-09-30 at 10.00.00.png", createdAt: Date? = nil) throws -> URL {
-            let url = root.appendingPathComponent(name)
+        /// Each file gets its own pixels, so Clipboard History never treats two as the same item. In
+        /// the fixture's folder, as macOS saves one on the Desktop, or `inHistory`, in ScreenGrabs'
+        /// history, as the hotkeys save them.
+        func screenshot(_ name: String = "Screenshot 2026-09-30 at 10.00.00.png", createdAt: Date? = nil, inHistory: Bool = false) throws -> URL {
+            let folder = inHistory ? clipboard.screenshotsFolder : root
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let url = folder.appendingPathComponent(name)
             try (ScreenshotClipboardTests.png + Data(name.utf8)).write(to: url)
             if let createdAt { try FileManager.default.setAttributes([.creationDate: createdAt], ofItemAtPath: url.path) }
             return url
@@ -439,7 +464,7 @@ struct ClipboardTabClearTests {
         let originals: [URL]
     }
 
-    @Test("Clear All empties the Clipboard tab, deletes other items and their media, and keeps screenshots and their media")
+    @Test("Clear All empties the Clipboard tab, deletes other items and their media, and keeps screenshots and their files")
     func clearingTheClipboardTabKeepsScreenshots() throws {
         let fixture = try Fixture()
         defer { fixture.tearDown() }
@@ -450,7 +475,7 @@ struct ClipboardTabClearTests {
         #expect(fixture.clipboard.clipboardTabEntries.isEmpty)
         #expect(fixture.clipboard.entries.map(\.id) == [history.screenshot.id])
         #expect(Self.screenshotsTab(fixture.clipboard).map(\.id) == [history.screenshot.id])
-        #expect(Self.exists(history.screenshot.imageURL), "the screenshot's media copy stays")
+        #expect(Self.exists(history.screenshot.imageURL), "the screenshot's file in ScreenGrabs' history stays")
         #expect(!Self.exists(history.copiedImage.imageURL))
         #expect(!Self.exists(history.copiedFile.imageURL))
     }
@@ -498,7 +523,7 @@ struct ClipboardTabClearTests {
         #expect(Self.screenshotsTab(fixture.clipboard).map(\.id) == [newShot.id, history.screenshot.id])
     }
 
-    @Test("Copying a cleared screenshot again, or taking one with the same pixels, puts it back in the Clipboard tab")
+    @Test("Copying a cleared screenshot again puts it back in the Clipboard tab; a new screenshot with the same pixels is a screenshot of its own (#605)")
     func copyingAgainShowsItInTheClipboardTab() throws {
         let fixture = try Fixture()
         defer { fixture.tearDown() }
@@ -509,13 +534,16 @@ struct ClipboardTabClearTests {
         #expect(fixture.clipboard.restore(history.screenshot))
         #expect(fixture.clipboard.clipboardTabEntries.map(\.id) == [history.screenshot.id])
 
-        // A new file with the same pixels as the newest item adds nothing new.
         fixture.clipboard.clearClipboardTab()
+        #expect(Self.reload(fixture).clipboardTabEntries.isEmpty, "and that's saved")
+
+        // A new file with the same pixels is its own file in the history, so its own item.
         let samePixels = fixture.root.appendingPathComponent("Screenshot again.png")
         try FileManager.default.copyItem(at: history.originals[0], to: samePixels)
-        #expect(!fixture.clipboard.ingestImageFile(at: samePixels))
-        #expect(fixture.clipboard.clipboardTabEntries.map(\.id) == [history.screenshot.id])
-        #expect(Self.reload(fixture).clipboardTabEntries.map(\.id) == [history.screenshot.id], "and that's saved")
+        let again = try #require(fixture.clipboard.addScreenshot(at: samePixels))
+        #expect(fixture.clipboard.clipboardTabEntries.map(\.id) == [again.id])
+        #expect(Self.screenshotsTab(fixture.clipboard).map(\.id) == [again.id, history.screenshot.id])
+        #expect(again.imageURL != history.screenshot.imageURL)
     }
 
     @Test("Delete in the Clipboard tab hides a screenshot there and deletes anything else")
@@ -554,7 +582,7 @@ struct ClipboardTabClearTests {
         #expect(Self.reload(fixture).entries.map(\.id) == others)
     }
 
-    @Test("Neither Clear All touches the original files, only Keybumps' media copies")
+    @Test("Neither Clear All touches the files macOS saved or that were copied, only Keybumps' media copies and, for the Screenshots tab's, the files in ScreenGrabs' history, which go to the Trash (#605)")
     func originalFilesAreNeverTouched() throws {
         let fixture = try Fixture()
         defer { fixture.tearDown() }
@@ -568,10 +596,11 @@ struct ClipboardTabClearTests {
 
         #expect(fixture.clipboard.entries.isEmpty)
         #expect(try FileManager.default.contentsOfDirectory(atPath: fixture.clipboard.mediaDirectoryURL.path).isEmpty)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: fixture.clipboard.screenshotsFolder.path).isEmpty)
     }
 
-    @Test("Hidden screenshots count toward the screenshot limit: copies never push them out, newer screenshots do")
-    func hiddenScreenshotsCountTowardTheScreenshotLimit() throws {
+    @Test("A hidden screenshot is never pushed out: not by copies, nor by more than 50 newer screenshots (#605)")
+    func hiddenScreenshotsAreNeverPushedOut() throws {
         let fixture = try Fixture()
         defer { fixture.tearDown() }
         let history = try Self.seed(fixture)
@@ -581,11 +610,13 @@ struct ClipboardTabClearTests {
         #expect(Self.screenshotsTab(fixture.clipboard).map(\.id) == [history.screenshot.id])
         #expect(Self.exists(history.screenshot.imageURL))
 
-        for index in 1...ClipboardHistoryService.screenshotCapacity {
+        for index in 1...60 {
             #expect(fixture.clipboard.ingestImageFile(at: try fixture.screenshot("Screenshot \(index).png")))
         }
-        #expect(!fixture.clipboard.entries.contains { $0.id == history.screenshot.id })
-        #expect(!Self.exists(history.screenshot.imageURL))
+        #expect(Self.screenshotsTab(fixture.clipboard).count == 61)
+        #expect(Self.screenshotsTab(fixture.clipboard).last?.id == history.screenshot.id)
+        #expect(Self.exists(history.screenshot.imageURL))
+        #expect(Self.reload(fixture).entries.filter(\.isScreenshot).count == 61, "and after a reload")
     }
 
     /// Adds a screenshot, an image file copied in Finder, image data copied from an app, and text.
@@ -602,7 +633,8 @@ struct ClipboardTabClearTests {
         let entries = fixture.clipboard.entries
         try #require(entries.count == 4)
         #expect(entries.map(\.isScreenshot) == [false, false, false, true])
-        #expect(entries.dropFirst().allSatisfy { exists($0.imageURL) }, "each image has its own media copy")
+        #expect(entries.dropFirst().allSatisfy { exists($0.imageURL) }, "each image has its file: a copy in media/, or the screenshot's in ScreenGrabs' history")
+        #expect(entries[3].imageURL?.deletingLastPathComponent().standardizedFileURL == fixture.clipboard.screenshotsFolder.standardizedFileURL)
         #expect(fixture.clipboard.clipboardTabEntries == entries)
         return History(
             text: entries[0],
@@ -632,13 +664,13 @@ struct ClipboardTabClearTests {
 }
 
 @MainActor
-@Suite("Screenshots and other Clipboard History items each keep their own newest 50")
+@Suite("Clipboard History keeps its newest 50 copies, and every screenshot (#605)")
 struct ClipboardHistoryLimitTests {
     private typealias Fixture = ScreenshotClipboardTests.Fixture
     private typealias Tabs = ClipboardTabClearTests
 
-    @Test("120 screenshots and 60 copies keep the newest 50 of each, and pruned items' media files go")
-    func eachKindKeepsItsOwnNewest() throws {
+    @Test("120 screenshots and 60 copies keep every screenshot and the newest 50 copies; pruned copies' media files go, screenshots keep none there, and the files macOS saved stay")
+    func keepsEveryScreenshot() throws {
         let fixture = try Fixture()
         defer { fixture.tearDown() }
         for index in 0..<120 {
@@ -649,9 +681,12 @@ struct ClipboardHistoryLimitTests {
         let entries = fixture.clipboard.entries
         let screenshots = entries.filter(\.isScreenshot).map(\.displayText)
         let copies = entries.filter { !$0.isScreenshot }.map(\.text)
-        #expect(screenshots == (70..<120).reversed().map { "Screenshot \($0)" })
+        #expect(screenshots == (0..<120).reversed().map { "Screenshot \($0)" })
         #expect(copies == (10..<60).reversed().map { "copy \($0)" })
-        #expect(try Self.mediaFiles(fixture) == Set(entries.compactMap(\.imageURL?.lastPathComponent)))
+        #expect(try Self.mediaFiles(fixture).isEmpty)
+        let kept = try FileManager.default.contentsOfDirectory(atPath: fixture.clipboard.screenshotsFolder.path)
+        #expect(Set(kept) == Set(entries.filter(\.isScreenshot).compactMap(\.imageURL?.lastPathComponent)) && kept.count == 120)
+        #expect(Tabs.screenshotsTab(fixture.clipboard).count == 120, "the ScreenGrabs tab lists every one")
         #expect(Tabs.exists(fixture.root.appendingPathComponent("Screenshot 0.png")), "originals stay")
         #expect(Tabs.reload(fixture).entries.map(\.id) == entries.map(\.id))
     }
@@ -673,7 +708,7 @@ struct ClipboardHistoryLimitTests {
         #expect(upgraded.clipboardTabEntries == Array(upgraded.entries.prefix(50)))
     }
 
-    @Test("History past either limit loads only the newest 50 of each")
+    @Test("History past the limits loads every screenshot and the newest 50 copies")
     func historyPastTheLimitsLoadsTheNewest() throws {
         let fixture = try Fixture()
         defer { fixture.tearDown() }
@@ -682,7 +717,7 @@ struct ClipboardHistoryLimitTests {
         try JSONEncoder().encode(screenshots + copies).write(to: fixture.clipboard.storageURL)
 
         let loaded = Tabs.reload(fixture).entries
-        #expect(loaded == Array(screenshots.prefix(50) + copies.prefix(50)))
+        #expect(loaded == screenshots + Array(copies.prefix(50)))
     }
 
     @Test("The Clipboard tab lists the newest 50, and its Delete only hides a screenshot")
@@ -731,7 +766,7 @@ struct ClipboardHistoryLimitTests {
         #expect(fixture.clipboard.entries.count == 2)
         #expect(Tabs.screenshotsTab(fixture.clipboard).map(\.id) == [shot.id])
         #expect(Tabs.exists(shot.imageURL))
-        #expect(try Self.mediaFiles(fixture).count == 1, "no second media copy")
+        #expect(try Self.mediaFiles(fixture).isEmpty, "no media copy")
     }
 
     /// An item as a build with one shared limit saved it, newest first by `index`.

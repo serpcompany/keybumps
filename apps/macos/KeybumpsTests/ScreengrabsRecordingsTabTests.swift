@@ -283,7 +283,7 @@ struct ScreengrabsRecordingsTabTests {
 
         try FileManager.default.removeItem(at: try #require(entry.sourceURL))
         #expect(items[1].finderFiles.isEmpty, "Nothing to show once the file's gone")
-        #expect(items[1].previewFiles == [try #require(entry.imageURL)], "Quick Look shows Clipboard History's copy")
+        #expect(items[1].previewFiles == [try #require(entry.imageURL)], "Quick Look is still given the file it names")
     }
 
     // MARK: Delete
@@ -350,7 +350,9 @@ struct ScreengrabsRecordingsTabTests {
         try fixture.addRecording(at: Self.start)
         #expect(fixture.content.deletionConfirmation(row: 1, query: "") == nil)
         #expect(fixture.content.delete(row: 1, query: ""))
-        #expect(FileManager.default.fileExists(atPath: try #require(entry.sourceURL).path), "Its file stays")
+        #expect(!FileManager.default.fileExists(atPath: try #require(entry.sourceURL).path), "Its file in ScreenGrabs' history is moved to the Trash")
+        let saved = fixture.library.root.url.appendingPathComponent(try #require(entry.sourceURL).lastPathComponent)
+        #expect(FileManager.default.fileExists(atPath: saved.path), "The file it was copied from stays")
         fixture.library.clipboard.clearScreenshots()
         #expect(fixture.content.content(query: "").items.map { $0.recording != nil } == [true])
         #expect(fixture.trashed.isEmpty)
@@ -843,12 +845,14 @@ final class RecordingsTabFixture {
         return try #require(recordings.recordings.first { $0.folder.lastPathComponent == folder.lastPathComponent })
     }
 
-    /// A made-up screenshot in Clipboard History, taken at `date`, with its file kept.
+    /// A made-up screenshot in Clipboard History, taken at `date`, with its file copied into
+    /// ScreenGrabs' history under its own name (#605).
     @discardableResult
     func addScreenshot(at date: Date) throws -> ClipboardEntry {
         let file = try library.png(seed: Int(date.timeIntervalSince1970) % 200, named: "Screenshot \(Int(date.timeIntervalSince1970)).png")
         #expect(library.clipboard.importScreenshot(at: file, capturedAt: date))
-        return try #require(library.clipboard.entries.first { $0.sourcePath == file.path })
+        let inHistory = library.clipboard.screenshotsFolder.appendingPathComponent(file.lastPathComponent)
+        return try #require(library.clipboard.entries.first { $0.sourcePath == inHistory.path })
     }
 
     func tearDown() {

@@ -424,9 +424,9 @@ final class SmokeUITests: XCTestCase {
     func testScreengrabsPageShowsRecording() {
         // Recording is part of ScreenGrabs, which ships on (#490). Its page is drawn by the plugin
         // template: Screen Recording, the Microphone and Input Monitoring as optional permissions,
-        // the Recordings group's preferences at Screencast's keys, and the Screenshots and Recordings
-        // folders, each with Show in Finder and Choose… (#504). CI's Mac runs macOS 15 or later, so it
-        // can record.
+        // the Recordings group's preferences at Screencast's keys, and a note on where recordings
+        // are kept. It has no folder rows (#605): everything is in the Keybumps folder, with a copy
+        // where macOS saves screenshots. CI's Mac runs macOS 15 or later, so it can record.
         launch(permissions: "denied", ["-KBOpenSettings", "screenshotTools"])
         let toggle = element("capability.toggle.screenshotTools")
         XCTAssertTrue(toggle.waitForExistence(timeout: 20))
@@ -437,9 +437,9 @@ final class SmokeUITests: XCTestCase {
         for key in ["recordsMicrophone", "recordsSystemAudio", "countdown", "showsShortcuts", "highlightsClicks"] {
             XCTAssertTrue(element("plugin.screencast.\(key)").exists, key)
         }
-        XCTAssertTrue(element("plugin.screencast.showCaptures").exists)
-        for identifier in ["plugin.screenshotTools.show.screenshots", "plugin.screenshotTools.choose.screenshots", "plugin.screenshotTools.choose.recordings"] {
-            XCTAssertTrue(element(identifier).exists, identifier)
+        XCTAssertTrue(element("plugin.screenshotTools.recordingsAbout").exists, "where recordings are kept")
+        for identifier in ["plugin.screencast.showCaptures", "plugin.screenshotTools.show.screenshots", "plugin.screenshotTools.choose.screenshots", "plugin.screenshotTools.choose.recordings"] {
+            XCTAssertFalse(element(identifier).exists, "no folder rows: \(identifier)")
         }
         XCTAssertFalse(element("plugin.screenshotTools.recordingRequirement").exists, "Recording works here")
         XCTAssertFalse(element("capability.offBanner.screenshotTools").exists)

@@ -13,9 +13,14 @@ extension AppModel {
             return makeForUITesting(granted: mode == .granted, configuration: configuration)
         }
         #endif
-        // Before any store reads its file (ADR 0013).
+        // Before any store reads its file (ADR 0013), then every screengrab into ScreenGrabs' history (#605).
         KeybumpsFolderMove.runAtLaunch()
-        return AppModel()
+        ScreengrabsHistoryMove.runAtLaunch()
+        let model = AppModel()
+        // Screenshots in the history no item names yet, such as one a hotkey took while Clipboard
+        // History was off.
+        model.clipboard.adoptScreenshots()
+        return model
     }
 
     private static var didPerformUITestLaunchActions = false
@@ -94,9 +99,9 @@ extension AppModel {
         let defaults = UserDefaults(suiteName: uiTestDefaultsSuite) ?? .standard
         defaults.removePersistentDomain(forName: uiTestDefaultsSuite)
         defaults.set(true, forKey: "didCompleteOnboarding")
-        // The sandbox's screenshot folder stands in for macOS's, for the watcher and as the
-        // Screenshots and Recordings folders' default, so screenshots and recordings, the recording
-        // window's made-up one too (`ScreencastReviewUITesting`), stay in the sandbox.
+        // The sandbox's screenshot folder stands in for macOS's, for the watcher and for each
+        // screengrab's copy (`ScreengrabCopies`, #605), so those copies stay in the sandbox, as does
+        // ScreenGrabs' history, in the sandbox's Keybumps folder (`ProductPaths.sandboxRoot`).
         let screenshotLocation = ScreenshotLocationResolver(
             preferredLocation: { sandbox.screenshots.path },
             homeDirectory: sandbox.root,

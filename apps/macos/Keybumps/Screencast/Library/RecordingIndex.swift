@@ -21,7 +21,8 @@ struct IndexedRecording: Codable, Equatable, Identifiable, Sendable {
 
     /// Made when the recording is indexed, and kept as long as the entry. It names its first poster frame.
     let id: UUID
-    /// The recording's own folder, `<recordings folder>/<timestamp>/`, wherever it's saved.
+    /// The recording's own folder, `screengrabs/recordings/<timestamp>/` (#605), or wherever an
+    /// older build saved it.
     var folder: URL
     var startedAt: Date
     /// Recorded seconds, pauses excluded.
