@@ -47,7 +47,7 @@ A capability added after the default set, starting with Timer. Since #559, Setti
 _Avoid_: Plugin, extension, add-on
 
 **Settings**:
-The Keybumps window where capabilities are turned on and configured. Quick Search offers it as Keybumps Settings, a Quick Search command, and its gear button and ⌘, open it too. It opens on the page last open, or on Permissions while a permission is missing. While an update waits, an Update Available row under the account row opens Changelog (#559).
+The Keybumps window where capabilities are turned on and configured. Quick Search offers it as Keybumps Settings, a Quick Search command, and its gear button and ⌘, open it too. It opens on the page last chosen there, or on Permissions while a permission is missing, which doesn't replace the page last chosen. While an update waits, an Update Available row under the account row opens Changelog (#559).
 _Avoid_: Preferences, Settings panel
 
 **Keybumps folder**:

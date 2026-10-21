@@ -36,7 +36,7 @@ final class AppPreferences {
         /// Quick Search off before #553 (owner's decision on #553).
         static let takesCommandSpaceFromSpotlightOnLaunch = "takesCommandSpaceFromSpotlightOnLaunch"
         static let foldsSettingsSidebarPlugins = "foldsSettingsSidebarPlugins"
-        /// The Settings page last open, by `SettingsSection.launchToken` (#559).
+        /// The Settings page last chosen, by `SettingsSection.launchToken` (#559).
         static let lastSettingsPage = "lastSettingsPage"
         static let didRequestScreenRecording = "didRequestScreenRecording"
         static let copiesScreenshotsToClipboard = "copiesScreenshotsToClipboard"
@@ -227,8 +227,8 @@ final class AppPreferences {
         didSet { defaults.set(foldsSettingsSidebarPlugins, forKey: Key.foldsSettingsSidebarPlugins) }
     }
 
-    /// The Settings page last open, which Settings reopens on (#559). A page this version doesn't
-    /// have reads as none.
+    /// The Settings page last chosen, which Settings reopens on (#559); see
+    /// `SettingsNavigationHistory.chosenPage`. A page this version doesn't have reads as none.
     var lastSettingsPage: SettingsSection? {
         didSet {
             guard lastSettingsPage != oldValue else { return }

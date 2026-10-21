@@ -156,7 +156,7 @@ struct SettingsSidebarTests {
             #expect(!SettingsSidebar.showsUpdateRow(nothing), "\(nothing.status)")
         }
 
-        #expect(SettingsSection.updateAvailable.page == .changelog, "choosing the row opens Changelog")
+        #expect(SettingsSection.updateAvailable.page == .changelog, "choosing the row shows Changelog")
         #expect(SettingsSection.changelog.page == .changelog)
         #expect(SettingsSection.dictation.page == .dictation)
         #expect(SettingsSection.updateAvailable.sidebarTitle == "Update Available")
@@ -227,6 +227,87 @@ struct SettingsSidebarTests {
             missingPermissionCount: 0,
             lastPage: AppPreferences(defaults: defaults).lastSettingsPage
         ) == .general)
+    }
+
+    @Test("The Update Available row is selected as itself and shows Changelog, so rows above and below it stay in reach (#559)")
+    func updateRowHasItsOwnSelection() {
+        var navigation = SettingsNavigationHistory(selection: .account)
+        navigation.navigate(to: .updateAvailable)
+        #expect(navigation.selection == .updateAvailable, "the row clicked is the row highlighted")
+        #expect(navigation.selection.page == .changelog, "it shows Changelog")
+        #expect(navigation.chosenPage == .changelog, "Changelog is the page stored")
+        navigation.navigate(to: .general)
+        #expect(navigation.selection == .general, "↓ from Update Available reaches General")
+        navigation.navigate(to: .updateAvailable)
+        navigation.navigate(to: .account)
+        #expect(navigation.selection == .account, "↑ from Update Available reaches Account")
+        navigation.goBack()
+        #expect(navigation.selection == .updateAvailable)
+        #expect(navigation.chosenPage == .changelog)
+    }
+
+    @Test("When the Update Available row goes while it's selected, the selection moves to Changelog (#559)")
+    func updateRowHidingMovesToChangelog() {
+        var navigation = SettingsNavigationHistory(selection: .account)
+        navigation.navigate(to: .updateAvailable)
+        navigation.updateRowDidHide()
+        #expect(navigation.selection == .changelog)
+        #expect(navigation.backStack == [.account])
+        #expect(navigation.chosenPage == .changelog)
+
+        // In Back and Forward too, without Changelog next to itself.
+        navigation = SettingsNavigationHistory(selection: .changelog)
+        navigation.navigate(to: .updateAvailable)
+        navigation.navigate(to: .general)
+        navigation.navigate(to: .updateAvailable)
+        navigation.navigate(to: .timer)
+        navigation.goBack()
+        navigation.goBack()
+        #expect(navigation.selection == .general)
+        navigation.updateRowDidHide()
+        #expect(navigation.backStack == [.changelog])
+        #expect(navigation.selection == .general)
+        #expect(navigation.forwardStack == [.timer, .changelog], "Forward reaches Changelog, then Timer")
+
+        // Nothing changes when the row wasn't visited.
+        var untouched = SettingsNavigationHistory(selection: .general)
+        untouched.navigate(to: .dictation)
+        let before = untouched
+        untouched.updateRowDidHide()
+        #expect(untouched == before)
+    }
+
+    @Test("Only a page chosen is stored: the page Settings opened on isn't (#559)")
+    func onlyAChosenPageIsStored() {
+        // Opening on Permissions because something is missing stores nothing, so the stored page stays.
+        var navigation = SettingsNavigationHistory(selection: SettingsNavigationHistory.openingPage(
+            missingPermissionCount: 1,
+            lastPage: .dictation
+        ))
+        #expect(navigation.selection == .permissions)
+        #expect(navigation.chosenPage == nil)
+        #expect(SettingsNavigationHistory.openingPage(missingPermissionCount: 0, lastPage: .dictation) == .dictation,
+                "once it's granted, Settings reopens on the page last chosen")
+
+        // Choosing a page stores it, Permissions included, which reopens on General with nothing missing.
+        navigation.navigate(to: .timer)
+        #expect(navigation.chosenPage == .timer)
+        navigation.navigate(to: .permissions)
+        #expect(navigation.chosenPage == .permissions)
+        #expect(SettingsNavigationHistory.openingPage(missingPermissionCount: 0, lastPage: navigation.chosenPage) == .general)
+
+        // Choosing the row already showing counts too; so do Back and Forward.
+        var opened = SettingsNavigationHistory(selection: .permissions)
+        opened.navigate(to: .permissions)
+        #expect(opened.chosenPage == .permissions)
+        navigation.goBack()
+        #expect(navigation.chosenPage == .timer)
+        navigation.goForward()
+        #expect(navigation.chosenPage == .permissions)
+
+        // A UI test's -KBOpenSettings page is stored, as a page request.
+        #expect(SettingsNavigationHistory(selection: .snippets, isChosen: true).chosenPage == .snippets)
+        #expect(SettingsNavigationHistory(selection: .updateAvailable, isChosen: true).chosenPage == .changelog)
     }
 
     @Test("Forward returns through screens left with Back, and a new visit clears it")

@@ -276,7 +276,7 @@ enum PermissionSettingsRowAction: Equatable {
             PermissionRowButton(
                 title: "Allow…",
                 accessibilityLabel: "Allow \(permission.title)",
-                accessibilityHint: "Open System Settings for \(permission.title)"
+                accessibilityHint: "Opens System Settings for \(permission.title)."
             )
         case .granted: nil
         }

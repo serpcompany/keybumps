@@ -47,10 +47,10 @@ struct PermissionRowTests {
         #expect(Self.button(.accessibility, .required) == PermissionRowButton(
             title: "Allow…",
             accessibilityLabel: "Allow Accessibility",
-            accessibilityHint: "Open System Settings for Accessibility"
+            accessibilityHint: "Opens System Settings for Accessibility."
         ))
-        #expect(Self.button(.microphone, .denied)?.accessibilityHint == "Open System Settings for Microphone")
-        #expect(Self.button(.screenRecording, .required)?.accessibilityHint == "Open System Settings for Screen Recording")
+        #expect(Self.button(.microphone, .denied)?.accessibilityHint == "Opens System Settings for Microphone.")
+        #expect(Self.button(.screenRecording, .required)?.accessibilityHint == "Opens System Settings for Screen Recording.")
     }
 
     @Test("While macOS needs a restart to apply a permission, the row shows Restart, which VoiceOver reads as Restart Keybumps")
