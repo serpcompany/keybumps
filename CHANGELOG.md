@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.0.3-beta.31](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.30...v0.0.3-beta.31) (2026-10-21)
+
+
+### Features
+
+* **macos:** keep each plugin's history in its own folder in the Keybumps folder ([#602](https://github.com/serpcompany/keybumps/issues/602)) ([#607](https://github.com/serpcompany/keybumps/issues/607)) ([b752bc5](https://github.com/serpcompany/keybumps/commit/b752bc5b77b6a2e806f00cde08b59ef54f43168f))
+* **macos:** ScreenGrabs keeps every screenshot and recording in the Keybumps folder, with a copy where macOS saves screenshots ([#605](https://github.com/serpcompany/keybumps/issues/605)) ([#609](https://github.com/serpcompany/keybumps/issues/609)) ([f147349](https://github.com/serpcompany/keybumps/commit/f14734936c5b590888d3f3209ad5df99f91b3daf))
+* **settings:** shorter permission buttons, an Update Available row, and reopen on the last page ([#559](https://github.com/serpcompany/keybumps/issues/559)) ([#608](https://github.com/serpcompany/keybumps/issues/608)) ([aac5991](https://github.com/serpcompany/keybumps/commit/aac5991ba940a306b0d1fdf672de31b5b5d9c57d))
+
+
+### Fixes
+
+* **macos:** launch no longer reads where ScreenGrabs' copies go, and the editor's Save makes the history folder ([#611](https://github.com/serpcompany/keybumps/issues/611)) ([#613](https://github.com/serpcompany/keybumps/issues/613)) ([137a883](https://github.com/serpcompany/keybumps/commit/137a883ab3501e155e63262fdd54f1eb4ecc12b3))
+
 ## [0.0.3-beta.30](https://github.com/serpcompany/keybumps/compare/v0.0.3-beta.29...v0.0.3-beta.30) (2026-10-20)
 
 
