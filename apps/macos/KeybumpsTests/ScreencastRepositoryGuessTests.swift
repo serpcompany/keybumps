@@ -273,10 +273,10 @@ struct ScreencastRepositoryGuessTests {
         #expect(memory().stored == ScreencastRepositoryMemory.Stored())
     }
 
-    @Test("Its default file is in Application Support through ProductPaths, so this run's own folder")
+    @Test("Its default file is in the Keybumps folder's screengrabs/ through ProductPaths, so this run's own folder")
     func defaultLocation() {
         #expect(ScreencastRepositoryMemory.defaultStorageURL
-                == ProductPaths.keybumps().applicationSupport.appendingPathComponent("screencast-repositories.json"))
+                == ProductPaths.keybumps().screengrabs.appendingPathComponent("screencast-repositories.json"))
         #expect(ScreencastRepositoryMemory.defaultStorageURL.path.hasPrefix(UnitTestHost.dataDirectory.path))
     }
 }

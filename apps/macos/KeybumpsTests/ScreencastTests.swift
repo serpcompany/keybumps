@@ -289,14 +289,12 @@ struct ScreencastTests {
         #expect(!preferences.screencast.recordsMicrophone)
     }
 
-    @Test("Recordings from before #504 stay in Documents › Keybumps › captures; a folder shows as Go to Folder takes it")
+    @Test("Recordings from before #504 are in the Keybumps folder's screengrabs/recordings; a folder shows as Go to Folder takes it")
     func capturesFolder() {
         let paths = ProductPaths.make(productDirectoryName: "Keybumps", fileManager: .default, sandboxRoot: nil, unitTestRoot: nil)
-        #expect(paths.captures == paths.recordings.deletingLastPathComponent().appendingPathComponent("captures", isDirectory: true))
+        #expect(paths.screengrabsRecordings == paths.keybumpsFolder.appendingPathComponent("screengrabs/recordings", isDirectory: true))
         // Lexical only: nothing reads the owner's folders.
-        let home = URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
-        let documents = home.appendingPathComponent("Documents/Keybumps/captures", isDirectory: true)
-        #expect(ScreengrabFolderRow.displayPath(documents) == "~/Documents/Keybumps/captures")
+        #expect(ScreengrabFolderRow.displayPath(paths.screengrabsRecordings) == "~/Library/Application Support/Keybumps/screengrabs/recordings")
     }
 
     // MARK: The macOS 15 gate

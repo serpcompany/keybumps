@@ -50,6 +50,10 @@ _Avoid_: Plugin, extension, add-on
 The Keybumps window where capabilities are turned on and configured. Quick Search offers it as Keybumps Settings, a Quick Search command, and its gear button and ⌘, open it too.
 _Avoid_: Preferences, Settings panel
 
+**Keybumps folder**:
+Where Keybumps keeps what it saves on this Mac, `~/Library/Application Support/Keybumps`, a folder that never syncs (ADR 0013). Each plugin that keeps history has its own folder in it: `dictation/`, `clipboard_history/`, `translations/`, `snippets/`, `shortcut_coach/`, and `screengrabs/`. Settings › General shows it with Show in Finder, and each of those plugins' pages shows its own folder. Caches and temporary files are elsewhere, and ScreenGrabs' Screenshots and Recordings folders are the person's own.
+_Avoid_: Data folder, library folder, `~/Documents/Keybumps` (where Dictation History was kept before #602); Application Support (macOS's folder that holds it)
+
 **What's New**:
 A release's notes for the people who use Keybumps, shown once in their own window after that release installs.
 _Avoid_: Release notes window, changelog
@@ -93,7 +97,7 @@ How often and how recently the user picked each app or Quick Search command from
 _Avoid_: Search history, frecency
 
 **Clipboard History**:
-The recent text and image items the user copied, kept locally: the newest 50 that aren't screenshots, and apart from them the newest 50 screenshot items, so copying never pushes out a screenshot and a screenshot never pushes out a copy. The Clipboard tab lists the newest 50 that match its filter and search, leaving out screenshots cleared or deleted there.
+The recent text and image items the user copied, kept locally: the newest 50 that aren't screenshots, and apart from them the newest 50 screenshot items, so copying never pushes out a screenshot and a screenshot never pushes out a copy. The Clipboard tab lists the newest 50 that match its filter and search, leaving out screenshots cleared or deleted there. Kept in the Keybumps folder's `clipboard_history/`: `clipboard-history.json`, and each image's copy in `media/`.
 _Avoid_: Permanent clipboard archive, Dictation History duplicate
 
 **Source app**:
@@ -113,7 +117,7 @@ Dictation's language, in Settings › Dictation: **Automatic**, the default, or 
 _Avoid_: Input language, auto-detect setting
 
 **Dictation History**:
-The local archive of completed Dictation recordings and their transcripts.
+The local archive of completed Dictation recordings and their transcripts, one folder each (`output.wav` and `meta.json`) in the Keybumps folder's `dictation/`.
 _Avoid_: Cloud transcript
 
 **Window Manager**:
@@ -207,7 +211,7 @@ Quick Search's tab for Translation: what you type or paste in the search field, 
 _Avoid_: Translation window, translator
 
 **Recent translations**:
-The last 50 translations saved with Return or ⌘Return in the Translate tab, newest first, listed there while the search field is empty, with the highlighted one in full beside the list, as in the Dictation tab. Return or ⌘C copies one, kept out of Clipboard History; its Paste button pastes it (⌘V stays the search field's in this tab); Delete asks, then deletes it; and Read Aloud, or Space, reads it aloud in an installed voice for its language, or says there's none. User content, kept only on this Mac (`recent-translations.json`) and never logged. Turning Translation off keeps them; Clear Recent Translations in its settings removes them.
+The last 50 translations saved with Return or ⌘Return in the Translate tab, newest first, listed there while the search field is empty, with the highlighted one in full beside the list, as in the Dictation tab. Return or ⌘C copies one, kept out of Clipboard History; its Paste button pastes it (⌘V stays the search field's in this tab); Delete asks, then deletes it; and Read Aloud, or Space, reads it aloud in an installed voice for its language, or says there's none. User content, kept only on this Mac (`recent-translations.json` in the Keybumps folder's `translations/`) and never logged. Turning Translation off keeps them; Clear Recent Translations in its settings removes them.
 _Avoid_: Translation history, favorites, phrasebook
 
 **Language pair**:
@@ -227,8 +231,8 @@ A video ScreenGrabs made of an area, a window, or the screens, with the micropho
 _Avoid_: Capture (Screencast's word, which also meant screenshots), screencast, video (one display's file), screen recording (macOS's permission; only a ScreenGrabs tab tile's name says "Screen Recording <date>", as macOS names its own recordings), Dictation's audio
 
 **Recordings folder**:
-Where recordings are saved, each in a folder of its own: the folder chosen in Settings › ScreenGrabs, apart from the Screenshots folder, or, until one is, the folder macOS saves screenshots to (else the Desktop). A chosen folder that's gone or can't be written to falls back the same way. Recordings saved before #504 stay in `~/Documents/Keybumps/captures` (`ProductPaths.captures`), still listed.
-_Avoid_: Captures folder; Dictation's recordings folder (`ProductPaths.recordings`)
+Where recordings are saved, each in a folder of its own: the folder chosen in Settings › ScreenGrabs, apart from the Screenshots folder, or, until one is, the folder macOS saves screenshots to (else the Desktop). A chosen folder that's gone or can't be written to falls back the same way. Recordings saved before #504 are in the Keybumps folder's `screengrabs/recordings/` (`ProductPaths.screengrabsRecordings`, moved from `~/Documents/Keybumps/captures` by ADR 0013), still listed.
+_Avoid_: Captures folder; Dictation's folder (`ProductPaths.dictation`)
 
 **Recordings index**:
 ScreenGrabs' list of every recording it keeps, wherever it's saved, for the ScreenGrabs tab (`RecordingLibrary`): each recording's folder, start, length, and displays, never what the person wrote about it. A recording moved or deleted outside Keybumps stays listed, marked as moved or deleted.

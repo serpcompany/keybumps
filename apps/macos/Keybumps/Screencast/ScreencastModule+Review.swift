@@ -12,7 +12,7 @@ struct ScreencastReviewServices {
     /// The notch, where "Recording saved to Desktop" (the Recordings folder's name) and "Recording
     /// copied" show; nil shows nothing, as under the unit-test host.
     var notices: (any PaletteNoticePresenting)?
-    /// Where corrected repositories are remembered: Application Support, through `ProductPaths`.
+    /// Where corrected repositories are remembered: the Keybumps folder's `screengrabs/`, through `ProductPaths`.
     var repositories: @MainActor () -> ScreencastRepositoryMemory = { .makeDefault() }
     /// Who has the front, which the review window takes and gives back: macOS's, or a test's
     /// stand-in.

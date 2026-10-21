@@ -41,9 +41,13 @@ struct UnitTestDataIsolationTests {
     }
 
     private func expectInRunFolder(_ paths: ProductPaths, _ what: String, sourceLocation: SourceLocation = #_sourceLocation) {
-        expectInRunFolder(paths.applicationSupport, "\(what) Application Support", sourceLocation: sourceLocation)
-        expectInRunFolder(paths.recordings, "\(what) recordings", sourceLocation: sourceLocation)
-        expectInRunFolder(paths.captures, "\(what) Screencast captures", sourceLocation: sourceLocation)
+        expectInRunFolder(paths.keybumpsFolder, "\(what) Keybumps folder", sourceLocation: sourceLocation)
+        expectInRunFolder(paths.oldDocumentsFolder, "\(what) old Documents folder", sourceLocation: sourceLocation)
+        for item in KeybumpsFolderItem.allCases {
+            expectInRunFolder(paths.place(of: item), "\(what) \(item.rawValue)", sourceLocation: sourceLocation)
+            expectInRunFolder(paths.oldPlace(of: item), "\(what) old \(item.rawValue)", sourceLocation: sourceLocation)
+        }
+        expectInRunFolder(paths.screengrabsScreenshots, "\(what) ScreenGrabs screenshots", sourceLocation: sourceLocation)
         expectInRunFolder(paths.dictationModels, "\(what) Dictation models", sourceLocation: sourceLocation)
         expectInRunFolder(paths.translatedSpeechTemporary, "\(what) translated audio", sourceLocation: sourceLocation)
         expectInRunFolder(paths.caches, "\(what) caches", sourceLocation: sourceLocation)
@@ -56,9 +60,9 @@ struct UnitTestDataIsolationTests {
         try #require(ProductPaths.sandboxRoot == nil, "Only UI test mode sets the sandbox", sourceLocation: sourceLocation)
         let paths = ProductPaths.keybumps()
         let locations = [
-            paths.applicationSupport, paths.recordings, paths.captures, paths.dictationModels, paths.translatedSpeechTemporary,
+            paths.keybumpsFolder, paths.oldDocumentsFolder, paths.dictationModels, paths.translatedSpeechTemporary,
             paths.caches, ScreenshotLocationResolver.system.homeDirectory,
-        ]
+        ] + KeybumpsFolderItem.allCases.flatMap { [paths.place(of: $0), paths.oldPlace(of: $0)] }
         for url in locations {
             try #require(
                 Self.isInside(url, UnitTestHost.dataDirectory),
@@ -158,9 +162,13 @@ struct UnitTestDataIsolationTests {
 
         let paths = ProductPaths.make(productDirectoryName: "Keybumps", fileManager: .default, sandboxRoot: nil, unitTestRoot: nil)
 
-        #expect(paths.applicationSupport == support)
-        #expect(paths.recordings == documents.appendingPathComponent("recordings", isDirectory: true))
-        #expect(paths.captures == documents.appendingPathComponent("captures", isDirectory: true))
+        #expect(paths.keybumpsFolder == support)
+        #expect(paths.oldDocumentsFolder == documents)
+        #expect(paths.dictation == support.appendingPathComponent("dictation", isDirectory: true))
+        #expect(paths.clipboardHistory == support.appendingPathComponent("clipboard_history", isDirectory: true))
+        #expect(paths.screengrabsRecordings == support.appendingPathComponent("screengrabs/recordings", isDirectory: true))
+        #expect(paths.oldPlace(of: .dictationHistory) == documents.appendingPathComponent("recordings", isDirectory: true))
+        #expect(paths.oldPlace(of: .recordings) == documents.appendingPathComponent("captures", isDirectory: true))
         #expect(paths.dictationModels == support.appendingPathComponent("DictationModels", isDirectory: true))
         #expect(paths.translatedSpeechTemporary == FileManager.default.temporaryDirectory
             .appendingPathComponent("Keybumps", isDirectory: true)
@@ -177,8 +185,8 @@ struct UnitTestDataIsolationTests {
 
         let sandboxed = ProductPaths.make(productDirectoryName: "Keybumps", fileManager: .default, sandboxRoot: sandbox, unitTestRoot: run)
         for url in [
-            sandboxed.applicationSupport, sandboxed.recordings, sandboxed.captures, sandboxed.dictationModels,
-            sandboxed.translatedSpeechTemporary, sandboxed.caches,
+            sandboxed.keybumpsFolder, sandboxed.oldDocumentsFolder, sandboxed.dictation, sandboxed.screengrabsRecordings,
+            sandboxed.oldPlace(of: .recordings), sandboxed.dictationModels, sandboxed.translatedSpeechTemporary, sandboxed.caches,
         ] {
             #expect(Self.isInside(url, sandbox))
         }
@@ -189,9 +197,8 @@ struct UnitTestDataIsolationTests {
             sandboxRoot: nil,
             unitTestRoot: run
         )
-        #expect(Self.isInside(rooted.applicationSupport, rootedRoot))
-        #expect(Self.isInside(rooted.recordings, rootedRoot))
-        #expect(Self.isInside(rooted.captures, rootedRoot))
+        #expect(Self.isInside(rooted.keybumpsFolder, rootedRoot))
+        #expect(Self.isInside(rooted.oldDocumentsFolder, rootedRoot))
         #expect(Self.isInside(rooted.dictationModels, rootedRoot))
         #expect(Self.isInside(rooted.caches, rootedRoot))
         // That file manager keeps the real temporary folder, so it moves to the run's folder.
@@ -223,9 +230,8 @@ struct UnitTestDataIsolationTests {
             let support = root("Application Support").appendingPathComponent("Keybumps", isDirectory: true)
             let documents = root("Documents").appendingPathComponent("Keybumps", isDirectory: true)
             return ProductPaths(
-                applicationSupport: support,
-                recordings: documents.appendingPathComponent("recordings", isDirectory: true),
-                captures: documents.appendingPathComponent("captures", isDirectory: true),
+                keybumpsFolder: support,
+                oldDocumentsFolder: documents,
                 dictationModels: support.appendingPathComponent("DictationModels", isDirectory: true),
                 translatedSpeechTemporary: root("tmp").appendingPathComponent("Keybumps", isDirectory: true)
                     .appendingPathComponent("TranslatedAudio", isDirectory: true),

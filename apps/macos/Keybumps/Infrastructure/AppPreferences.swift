@@ -235,6 +235,12 @@ final class AppPreferences {
     /// macOS's screenshot folder (`screengrabFolders`).
     private(set) var chosenScreengrabFolders: [ScreengrabFolders.Kind: URL]
 
+    /// The paths of the folders chosen in Settings › ScreenGrabs, read straight from `defaults` before
+    /// any preferences load: the launch's move into the Keybumps folder never moves one (ADR 0013).
+    nonisolated static func chosenScreengrabFolderPaths(in defaults: UserDefaults) -> [String] {
+        ScreengrabFolders.Kind.allCases.compactMap { defaults.string(forKey: Key.chosenFolder($0)) }.filter { $0.hasPrefix("/") }
+    }
+
     /// ScreenGrabs' Screenshots and Recordings folders as they are now.
     var screengrabFolders: ScreengrabFolders {
         ScreengrabFolders(location: screenshotLocation, chosen: chosenScreengrabFolders)

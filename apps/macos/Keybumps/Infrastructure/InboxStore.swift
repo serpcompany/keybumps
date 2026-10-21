@@ -6,13 +6,15 @@ protocol EventPersistence {
     func save(_ events: [CoachingEvent]) throws
 }
 
+/// Shortcut Coach's history, `coaching-events.json` in the Keybumps folder's `shortcut_coach/`
+/// (ADR 0013).
 struct JSONEventPersistence: EventPersistence {
+    static let fileName = "coaching-events.json"
     let url: URL
 
     init(fileManager: FileManager = .default) {
-        let directory = ProductPaths.keybumps(fileManager: fileManager).applicationSupport
-        try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        url = directory.appendingPathComponent("coaching-events.json")
+        url = ProductPaths.keybumps(fileManager: fileManager).inUse(.coachingEvents)
+        try? fileManager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
     }
 
     func load() throws -> [CoachingEvent] {

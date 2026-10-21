@@ -42,8 +42,8 @@ enum SnippetLibraryState: Equatable {
     var isWritable: Bool { self != .readOnly }
 }
 
-/// The user's snippets: one JSON array in `snippets.json` in Keybumps' Application Support folder,
-/// written by `PrivateFile` (0600), never in `~/Documents`, iCloud, or telemetry. Names, keywords,
+/// The user's snippets: one JSON array in `snippets.json` in the Keybumps folder's `snippets/`
+/// (ADR 0013), written by `PrivateFile` (0600), never in `~/Documents`, iCloud, or telemetry. Names, keywords,
 /// and text are never logged. Entries decode with only the ID and name required.
 ///
 /// - **Reading:** only a missing file is an empty library. A file that can't be read makes the
@@ -71,7 +71,7 @@ enum SnippetLibraryState: Equatable {
 @MainActor
 @Observable
 final class SnippetStore {
-    static let fileName = "snippets.json"
+    nonisolated static let fileName = "snippets.json"
 
     /// Every snippet, in the order they were created.
     private(set) var snippets: [Snippet] = []
@@ -98,14 +98,14 @@ final class SnippetStore {
         load()
     }
 
-    /// The app's store: `snippets.json` in Application Support and the Keychain. Under unit tests
-    /// it lives only in memory, so tests never touch the owner's snippets or Keychain.
+    /// The app's store: `snippets.json` in the Keybumps folder's `snippets/` and the Keychain. Under
+    /// unit tests it lives only in memory, so tests never touch the owner's snippets or Keychain.
     static func makeDefault() -> SnippetStore {
         if UnitTestHost.isActive {
             return SnippetStore(storageURL: nil, secrets: InMemorySnippetSecretStore())
         }
         return SnippetStore(
-            storageURL: ProductPaths.keybumps().applicationSupport.appendingPathComponent(fileName),
+            storageURL: ProductPaths.keybumps().inUse(.snippets),
             secrets: KeychainSnippetSecretStore()
         )
     }
@@ -485,7 +485,7 @@ final class SnippetStore {
     private func keepCopy(of data: Data, beside url: URL) -> String? {
         let directory = url.deletingLastPathComponent()
         let existing = (try? fileManager.contentsOfDirectory(atPath: directory.path)) ?? []
-        for name in existing.sorted() where name.hasPrefix("snippets.unreadable-") && name.hasSuffix(".json") {
+        for name in existing.sorted() where Self.isUnreadableCopyName(name) {
             if (try? Data(contentsOf: directory.appendingPathComponent(name))) == data { return name }
         }
         let name = Self.unreadableCopyName(at: now())
@@ -493,6 +493,11 @@ final class SnippetStore {
             return nil
         }
         return name
+    }
+
+    /// A copy `keepCopy` or `startOver()` made: `snippets.unreadable-<date>.json`.
+    nonisolated static func isUnreadableCopyName(_ name: String) -> Bool {
+        name.hasPrefix("snippets.unreadable-") && name.hasSuffix(".json")
     }
 
     private static func unreadableCopyName(at date: Date) -> String {

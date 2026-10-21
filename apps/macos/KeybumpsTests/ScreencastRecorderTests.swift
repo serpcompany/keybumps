@@ -379,13 +379,13 @@ struct ScreencastRecorderTests {
     }
 
     @available(macOS 15, *)
-    @Test("By default captures go to Keybumps's captures folder, in this run's own folder under the unit-test host")
+    @Test("By default captures go to the Keybumps folder's screengrabs/recordings, in this run's own folder under the unit-test host")
     func defaultCapturesFolder() async throws {
         let recorder = makeRecorder()
         try await recorder.start(target: .display(1), audio: .none)
-        let captures = ProductPaths.keybumps().captures.standardizedFileURL.path
+        let captures = ProductPaths.keybumps().screengrabsRecordings.standardizedFileURL.path
         let file = try #require(writers.writers.first?.fileURL.standardizedFileURL.path)
-        #expect(captures.hasSuffix("/Documents/Keybumps/captures"))
+        #expect(captures.hasSuffix("/Application Support/Keybumps/screengrabs/recordings"))
         #expect(captures.hasPrefix(UnitTestHost.dataDirectory.standardizedFileURL.path))
         #expect(file.hasPrefix(captures + "/"))
         await recorder.discard()

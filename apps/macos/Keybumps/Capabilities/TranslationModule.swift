@@ -129,7 +129,7 @@ final class TranslationModule: CapabilityModule {
 }
 
 /// The Translation page's own part, below its languages: clearing recent translations, which asks
-/// first. It works whether Translation is on or off.
+/// first, and the Translation folder they're kept in. It works whether Translation is on or off.
 private struct RecentTranslationsSettings: View {
     @Environment(AppModel.self) private var model
     @State private var confirmsClear = false
@@ -147,6 +147,7 @@ private struct RecentTranslationsSettings: View {
                     subtitle: "Return in the Translate tab saves a translation. The last \(RecentTranslations.limit) are kept on this Mac."
                 )
             }
+            KeybumpsFolderRow(.translation)
         }
         .alert("Clear recent translations?", isPresented: $confirmsClear) {
             Button("Clear", role: .destructive) { recents.clear() }

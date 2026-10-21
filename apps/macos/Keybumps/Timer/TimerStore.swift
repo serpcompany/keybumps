@@ -82,7 +82,7 @@ final class TimerStore {
 
     static func makeDefault() -> TimerStore {
         TimerStore(
-            storageURL: ProductPaths.keybumps().applicationSupport.appendingPathComponent(fileName),
+            storageURL: ProductPaths.keybumps().keybumpsFolder.appendingPathComponent(fileName),
             // Unit tests never hear the Mac wake.
             notifications: UnitTestHost.isActive ? NotificationCenter() : nil
         )

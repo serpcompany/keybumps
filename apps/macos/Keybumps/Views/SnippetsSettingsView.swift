@@ -72,7 +72,7 @@ struct SnippetsSettingsView: View {
             if store.libraryState == .readOnly {
                 SettingsGroup("Saved snippets can’t be read") {
                     SettingsNote(
-                        "Keybumps can’t read snippets.json in its Application Support folder, so it won’t save any changes until it can. Check the file’s permissions and Try Again, or set the file aside and start a new library.",
+                        "Keybumps can’t read snippets.json in the Snippets folder, so it won’t save any changes until it can. Check the file’s permissions and Try Again, or set the file aside and start a new library.",
                         tint: .orange
                     )
                     HStack(spacing: 8) {
@@ -135,7 +135,10 @@ struct SnippetsSettingsView: View {
                 SettingsNote(errorMessage, tint: .orange)
             }
             if case .recovered(let copyName) = store.libraryState {
-                SettingsNote("Some saved snippets couldn’t be read. Keybumps kept a copy of the file as \(copyName) in its Application Support folder.", tint: .orange)
+                SettingsNote("Some saved snippets couldn’t be read. Keybumps kept a copy of the file as \(copyName) in the Snippets folder.", tint: .orange)
+            }
+            SettingsGroup {
+                KeybumpsFolderRow(.snippets)
             }
             // Last, so the snippets stay at the top of the page. Accessibility is optional: without
             // it, ⌘V copies instead of pasting. Expanding needs it too; while auto-expansion is on,
@@ -154,7 +157,7 @@ struct SnippetsSettingsView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Keybumps renames snippets.json to keep it, unread, beside the new library in its Application Support folder.")
+            Text("Keybumps renames snippets.json to keep it, unread, beside the new library in the Snippets folder.")
         }
         .sheet(item: $store.editorRequest) { request in
             SnippetEditorSheet(request: request)

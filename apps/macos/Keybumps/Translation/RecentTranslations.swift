@@ -18,7 +18,7 @@ struct TranslationRecord: Codable, Equatable, Identifiable {
 @MainActor
 @Observable
 final class RecentTranslations {
-    static let fileName = "recent-translations.json"
+    nonisolated static let fileName = "recent-translations.json"
     static let limit = 50
 
     private(set) var records: [TranslationRecord] = []
@@ -38,7 +38,7 @@ final class RecentTranslations {
     }
 
     static func makeDefault() -> RecentTranslations {
-        RecentTranslations(storageURL: ProductPaths.keybumps().applicationSupport.appendingPathComponent(fileName))
+        RecentTranslations(storageURL: ProductPaths.keybumps().inUse(.recentTranslations))
     }
 
     /// Saves a translation at the top, keeping the newest `limit`. The same text saved again between

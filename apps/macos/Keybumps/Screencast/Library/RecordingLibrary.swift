@@ -56,8 +56,8 @@ struct RecordingFolderMemory {
 }
 
 /// ScreenGrabs' recordings index (#492, ADR 0010 decision 6): every recording Keybumps keeps,
-/// wherever it's saved, so the ⌘3 tab lists them (#494). It's `recordings.json` in Application
-/// Support (`RecordingIndexFile`, written 0600 by `PrivateFile`), holding each recording's folder
+/// wherever it's saved, so the ⌘3 tab lists them (#494). It's `recordings.json` in the Keybumps
+/// folder's `screengrabs/` (ADR 0013; `RecordingIndexFile`, written 0600 by `PrivateFile`), holding each recording's folder
 /// and the structure of its `meta.json`, never its review, and it's never logged: logs say only
 /// counts and categories. A file name read from either is used only if it stays in its folder
 /// (`IndexedRecording.isFileName`).
@@ -65,8 +65,8 @@ struct RecordingFolderMemory {
 /// - **Added** when the recorder finishes writing (`add`), so a crash before Save still leaves the
 ///   recording listed. **Read again** when the recording window saves, copies, or can't save it,
 ///   and **removed** when it discards it (`reviewEnded`).
-/// - **Where it looks** (`recordingsFolders`): the old recordings folder (`ProductPaths.captures`),
-///   where recordings before #504 stay, and each folder a recording was made in since, remembered
+/// - **Where it looks** (`recordingsFolders`): the old recordings folder (`ProductPaths.screengrabsRecordings`,
+///   moved out of Documents by ADR 0013), where recordings before #504 stay, and each folder a recording was made in since, remembered
 ///   as the recorder makes the recording's own folder there (`recordingStarted(in:)`,
 ///   `RecordingFolderMemory`). So a recording kept without reaching `add`, as one is when
 ///   ScreenGrabs turns off or Keybumps locks while it records, is found at the next launch. A
@@ -78,13 +78,13 @@ struct RecordingFolderMemory {
 ///   marked `isMissing` each time the index looks (`load`, `refresh`, `recordingsNewestFirst`),
 ///   and stays listed until it's removed; it's unmarked if it comes back.
 /// - **The import** runs once (`RecordingImportMemory`), the first time the index loads without
-///   having run it: each recording in the old recordings folder (`ProductPaths.captures`) is indexed
+///   having run it: each recording in the old recordings folder (`ProductPaths.screengrabsRecordings`) is indexed
 ///   where it is, and each screenshot a QA build's Screencast saved there before #487 goes to the
 ///   ⌘3 tab through `ClipboardHistoryService.importScreenshot(at:capturedAt:)`. Files are never
 ///   moved or changed.
 /// - **Each launch,** once the index has loaded, the folders it looks in are read again off the main
 ///   actor (`launchCheck`): a recording there that the index lacks, such as one an older build
-///   saved in `ProductPaths.captures` after a rollback, is added, matched by resolved path so none
+///   saved in its old recordings folder after a rollback and the next launch moved, is added, matched by resolved path so none
 ///   is listed twice. Then, if the file was read and is this build's, poster frames no entry names
 ///   are deleted.
 /// - **A missing or corrupt file** after the import is rebuilt from the recordings in the folders it
@@ -115,8 +115,8 @@ final class RecordingLibrary {
     private(set) var state: State = .notLoaded
 
     @ObservationIgnored let storageURL: URL
-    /// The old recordings folder, `ProductPaths.captures`: where the import looks, and always one of
-    /// `recordingsFolders`.
+    /// The old recordings folder, `ProductPaths.screengrabsRecordings`: where the import looks, and
+    /// always one of `recordingsFolders`.
     @ObservationIgnored let capturesFolder: URL
     @ObservationIgnored let posterFrames: RecordingPosterFrames
     @ObservationIgnored private let importMemory: RecordingImportMemory
@@ -154,8 +154,9 @@ final class RecordingLibrary {
         self.now = now
     }
 
-    /// The app's: in Application Support, Caches, and the recordings folder, through `ProductPaths`,
-    /// so the UI-test sandbox and the unit-test host keep theirs in their own folders.
+    /// The app's: in the Keybumps folder's `screengrabs/` and Caches, through `ProductPaths`, so the
+    /// UI-test sandbox and the unit-test host keep theirs in their own folders. Each is where the
+    /// launch's move left it (`ProductPaths.inUse`, ADR 0013).
     static func makeDefault(
         importMemory: RecordingImportMemory,
         folderMemory: RecordingFolderMemory,
@@ -163,8 +164,8 @@ final class RecordingLibrary {
     ) -> RecordingLibrary {
         let paths = ProductPaths.keybumps()
         return RecordingLibrary(
-            storageURL: paths.applicationSupport.appendingPathComponent(RecordingIndexFile.fileName),
-            capturesFolder: paths.captures,
+            storageURL: paths.inUse(.recordingsIndex),
+            capturesFolder: paths.inUse(.recordings),
             posterFrames: RecordingPosterFrames(folder: RecordingPosterFrames.defaultFolder),
             importMemory: importMemory,
             folderMemory: folderMemory,
@@ -179,8 +180,10 @@ final class RecordingLibrary {
         return ([capturesFolder] + folderMemory.folders).filter { seen.insert(ProductPaths.canonicalPath($0)).inserted }
     }
 
+    nonisolated static let unreadableCopyName = "recordings.unreadable.json"
+
     var unreadableCopyURL: URL {
-        storageURL.deletingLastPathComponent().appendingPathComponent("recordings.unreadable.json")
+        storageURL.deletingLastPathComponent().appendingPathComponent(Self.unreadableCopyName)
     }
 
     /// Where a replacement for a corrupt or partly read index is written before it takes its place.

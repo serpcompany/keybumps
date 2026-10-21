@@ -565,6 +565,7 @@ struct ClipboardSettingsView: View {
             PluginPermissionsGroup(capability: .clipboardHistory)
             SettingsGroup("History") {
                 SettingsNote("Keeps the \(ClipboardHistoryService.capacity) most recent copied text and image items on this Mac, plus the \(ClipboardHistoryService.screenshotCapacity) most recent screenshots. Images up to 50 MB each are stored separately, so a full history can use several gigabytes. Copied secrets remain until you delete them or newer copies replace them.")
+                KeybumpsFolderRow(.clipboardHistory)
             }
         }.navigationTitle("Clipboard History")
     }
@@ -617,6 +618,9 @@ struct DictationSettingsView: View {
                         subtitle: "Keybumps stops and transcribes automatically at this limit. Choose No limit to stop only with your Dictation shortcut."
                     )
                 }
+            }
+            SettingsGroup("History") {
+                KeybumpsFolderRow(.dictation)
             }
             PluginPreferenceGroups(capability: .dictation)
         }.navigationTitle("Dictation")
@@ -951,6 +955,7 @@ struct KeyboardShortcutterSettingsView: View {
                 // The tab's show switch moved to Settings › Quick Search's tab list (#553).
                 Text("View, filter, and clear detected actions in Quick Search’s Hotkeys tab, which Settings › Quick Search shows or hides.")
                     .foregroundStyle(.secondary)
+                KeybumpsFolderRow(.keyboardShortcutter)
             }
         }
         .navigationTitle("Shortcut Coach")
@@ -1012,6 +1017,10 @@ private struct GeneralView: View {
                 ))
                 .accessibilityIdentifier("settings.general.sendsCrashReports")
                 SettingsNote(CrashReportingCopy.settingsNote)
+            }
+            SettingsGroup("Files") {
+                KeybumpsFolderRow()
+                SettingsNote("Each plugin that keeps history keeps it in its own folder here.")
             }
             SettingsGroup("Problems") {
                 LabeledContent {

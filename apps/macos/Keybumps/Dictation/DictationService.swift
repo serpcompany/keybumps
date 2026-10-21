@@ -179,6 +179,8 @@ final class DictationService {
     /// transcription can tell that the state now belongs to another session (#281).
     private var session = 0
     @ObservationIgnored private var durationTimer: Timer?
+    /// The last transcript kept for recovery, in the Keybumps folder's `dictation/` (ADR 0013).
+    nonisolated static let recoveryFileName = "last-dictation.txt"
     /// The last transcript kept for recovery; read by the unit-test isolation guard.
     let recoveryURL: URL
     private let history: DictationHistoryService
@@ -213,9 +215,8 @@ final class DictationService {
         self.accessibilityTrusted = accessibilityTrusted
         selectedLanguage = language
         self.durationLimit = durationLimit
-        let directory = ProductPaths.keybumps(fileManager: fileManager).applicationSupport
-        try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        let recoveryURL = directory.appendingPathComponent("last-dictation.txt")
+        let recoveryURL = ProductPaths.keybumps(fileManager: fileManager).inUse(.lastDictation)
+        try? fileManager.createDirectory(at: recoveryURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         self.recoveryURL = recoveryURL
         self.history = history ?? DictationHistoryService(fileManager: fileManager)
         self.transcriber = transcriber ?? AppleSpeechCompletedAudioTranscriber()

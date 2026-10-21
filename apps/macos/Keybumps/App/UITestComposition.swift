@@ -13,6 +13,8 @@ extension AppModel {
             return makeForUITesting(granted: mode == .granted, configuration: configuration)
         }
         #endif
+        // Before any store reads its file (ADR 0013).
+        KeybumpsFolderMove.runAtLaunch()
         return AppModel()
     }
 
@@ -118,7 +120,7 @@ extension AppModel {
         }
         // Sensitive snippets stay in memory, never in the Keychain.
         let snippets = SnippetStore(
-            storageURL: ProductPaths.keybumps().applicationSupport.appendingPathComponent(SnippetStore.fileName),
+            storageURL: ProductPaths.keybumps().inUse(.snippets),
             secrets: InMemorySnippetSecretStore()
         )
         if configuration.seedsSnippets {

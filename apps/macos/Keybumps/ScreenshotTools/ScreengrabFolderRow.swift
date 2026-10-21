@@ -57,7 +57,8 @@ struct ScreengrabFolderRow: View {
     }
 
     /// Opens the folder in Finder, making it first if it isn't there. Inert under the unit-test host.
-    private static func show(_ folder: URL) {
+    /// `KeybumpsFolderRow` shares it.
+    static func show(_ folder: URL) {
         guard !UnitTestHost.isActive else { return }
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         NSWorkspace.shared.open(folder)

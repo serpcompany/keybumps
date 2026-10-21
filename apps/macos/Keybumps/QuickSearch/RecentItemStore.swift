@@ -32,11 +32,11 @@ final class RecentItemStore {
         load()
     }
 
-    /// The app's Application Support folder, or under the unit-test host that run's own folder.
+    /// The top of the Keybumps folder, or under the unit-test host that run’s own folder.
     nonisolated static func defaultStorageURL(fileManager: FileManager = .default) -> URL {
         let folder = UnitTestHost.isActive
             ? UnitTestHost.dataDirectory
-            : ProductPaths.keybumps(fileManager: fileManager).applicationSupport
+            : ProductPaths.keybumps(fileManager: fileManager).keybumpsFolder
         return folder.appendingPathComponent("recent-items.json", isDirectory: false)
     }
 

@@ -21,7 +21,7 @@ final class EmojiRecents {
     }
 
     static func makeDefault() -> EmojiRecents {
-        EmojiRecents(storageURL: ProductPaths.keybumps().applicationSupport.appendingPathComponent(fileName))
+        EmojiRecents(storageURL: ProductPaths.keybumps().keybumpsFolder.appendingPathComponent(fileName))
     }
 
     /// Moves an emoji to the front, keeping the newest `limit`.

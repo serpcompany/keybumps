@@ -88,7 +88,7 @@ final class DictationHistoryService {
         self.fileManager = fileManager
         self.appVersion = appVersion
         self.recordingsDirectoryURL = recordingsDirectoryURL
-            ?? ProductPaths.keybumps(fileManager: fileManager).recordings
+            ?? ProductPaths.keybumps(fileManager: fileManager).inUse(.dictationHistory)
         try? fileManager.createDirectory(at: self.recordingsDirectoryURL, withIntermediateDirectories: true)
         refresh()
     }
@@ -100,7 +100,9 @@ final class DictationHistoryService {
             options: [.skipsHiddenFiles]
         )) ?? []
 
-        entries = directories.compactMap(loadOrRecoverEntry).sorted { left, right in
+        // `last-dictation.txt` shares the Dictation folder (ADR 0013): only folders are dictations.
+        entries = directories.filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
+            .compactMap(loadOrRecoverEntry).sorted { left, right in
             if left.capturedAt == right.capturedAt { return left.id > right.id }
             return left.capturedAt > right.capturedAt
         }

@@ -1,15 +1,42 @@
 import Foundation
 
+/// Where Keybumps keeps its files (ADR 0013). Every plugin that keeps history keeps it in its own
+/// folder in the Keybumps folder, `~/Library/Application Support/Keybumps`, which never syncs.
 struct ProductPaths: Equatable {
-    let applicationSupport: URL
-    let recordings: URL
-    /// ScreenGrabs' recordings folder: each recording in its own `<timestamp>/` folder (ADR 0009,
-    /// ADR 0010). Dictation's audio is in `recordings`.
-    let captures: URL
+    /// The Keybumps folder, `~/Library/Application Support/Keybumps`: each plugin's folder, and at
+    /// its top level the app's own state (emoji, Search's recents and usage, timers) and `DictationModels/`.
+    let keybumpsFolder: URL
+    /// `~/Documents/Keybumps`, where Dictation History (`recordings/`) and ScreenGrabs' recordings
+    /// before #504 (`captures/`) were kept until #602. Nothing writes there now: the one-time move
+    /// (`KeybumpsFolderMove`) empties it, and removes it once it's empty.
+    let oldDocumentsFolder: URL
     let dictationModels: URL
     let translatedSpeechTemporary: URL
     /// Keybumps's caches, such as recordings' poster frames: `~/Library/Caches/Keybumps`.
     let caches: URL
+    /// What this launch's one-time move left in its old place, where its store reads it
+    /// (`inUse(_:)`). Empty under the unit-test host and in UI test mode.
+    var leftInOldPlace: Set<KeybumpsFolderItem> = []
+
+    /// Dictation History, one folder per dictation, and `last-dictation.txt`.
+    var dictation: URL { folder("dictation") }
+    /// `clipboard-history.json`, and each image's copy in `media/`.
+    var clipboardHistory: URL { folder("clipboard_history") }
+    var translations: URL { folder("translations") }
+    var snippets: URL { folder("snippets") }
+    /// Shortcut Coach's history, `coaching-events.json`.
+    var shortcutCoach: URL { folder("shortcut_coach") }
+    /// ScreenGrabs' recordings index and repository memory, and `recordings/` and `screenshots/`.
+    var screengrabs: URL { folder("screengrabs") }
+    /// ScreenGrabs' recordings kept in the Keybumps folder, each in its own `<timestamp>/` folder
+    /// (ADR 0009, ADR 0010): those made before #504. New recordings save in the Recordings folder.
+    var screengrabsRecordings: URL { screengrabs.appendingPathComponent("recordings", isDirectory: true) }
+    /// Empty for now: #605 keeps every screenshot here too.
+    var screengrabsScreenshots: URL { screengrabs.appendingPathComponent("screenshots", isDirectory: true) }
+
+    private func folder(_ name: String) -> URL {
+        keybumpsFolder.appendingPathComponent(name, isDirectory: true)
+    }
 
     /// Set once at launch in UI test mode so every store reads and writes a disposable directory.
     nonisolated(unsafe) static var sandboxRoot: URL?
@@ -17,14 +44,17 @@ struct ProductPaths: Equatable {
     /// Keybumps's folders. In UI test mode they're in `sandboxRoot`. Under the unit-test host, the
     /// owner's real folders become folders in `UnitTestHost.dataDirectory`, this run's own
     /// temporary root, so a default Dictation History, Clipboard History, Shortcut Coach history,
-    /// model folder, translated audio, or Screencast capture never reaches the installed app's data.
+    /// model folder, translated audio, recording, or the old Documents folder never reaches the
+    /// installed app's data.
     static func keybumps(fileManager: FileManager = .default) -> ProductPaths {
-        make(
+        var paths = make(
             productDirectoryName: "Keybumps",
             fileManager: fileManager,
             sandboxRoot: sandboxRoot,
             unitTestRoot: UnitTestHost.isActive ? UnitTestHost.dataDirectory : nil
         )
+        paths.leftInOldPlace = KeybumpsFolderMove.leftInOldPlace
+        return paths
     }
 
     /// Resolves each root folder: the sandbox's when there is one; otherwise the file manager's.
@@ -59,20 +89,11 @@ struct ProductPaths: Equatable {
         let documentsRoot = root("Documents") { $0.urls(for: .documentDirectory, in: .userDomainMask)[0] }
         let temporaryRoot = root("tmp") { $0.temporaryDirectory }
         let cachesRoot = root("Caches") { $0.urls(for: .cachesDirectory, in: .userDomainMask)[0] }
+        let keybumpsFolder = applicationSupportRoot.appendingPathComponent(productDirectoryName, isDirectory: true)
         return ProductPaths(
-            applicationSupport: applicationSupportRoot.appendingPathComponent(
-                productDirectoryName,
-                isDirectory: true
-            ),
-            recordings: documentsRoot
-                .appendingPathComponent(productDirectoryName, isDirectory: true)
-                .appendingPathComponent("recordings", isDirectory: true),
-            captures: documentsRoot
-                .appendingPathComponent(productDirectoryName, isDirectory: true)
-                .appendingPathComponent("captures", isDirectory: true),
-            dictationModels: applicationSupportRoot
-                .appendingPathComponent(productDirectoryName, isDirectory: true)
-                .appendingPathComponent("DictationModels", isDirectory: true),
+            keybumpsFolder: keybumpsFolder,
+            oldDocumentsFolder: documentsRoot.appendingPathComponent(productDirectoryName, isDirectory: true),
+            dictationModels: keybumpsFolder.appendingPathComponent("DictationModels", isDirectory: true),
             translatedSpeechTemporary: temporaryRoot
                 .appendingPathComponent(productDirectoryName, isDirectory: true)
                 .appendingPathComponent("TranslatedAudio", isDirectory: true),
