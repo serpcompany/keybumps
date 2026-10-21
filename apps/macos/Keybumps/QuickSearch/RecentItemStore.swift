@@ -32,12 +32,13 @@ final class RecentItemStore {
         load()
     }
 
-    /// The app's Application Support folder, or under the unit-test host that run's own folder.
+    nonisolated static let fileName = "recent-items.json"
+
+    /// The Keybumps folder's `quick_search/` (ADR 0013), or under the unit-test host that run’s own folder.
     nonisolated static func defaultStorageURL(fileManager: FileManager = .default) -> URL {
-        let folder = UnitTestHost.isActive
-            ? UnitTestHost.dataDirectory
-            : ProductPaths.keybumps(fileManager: fileManager).applicationSupport
-        return folder.appendingPathComponent("recent-items.json", isDirectory: false)
+        UnitTestHost.isActive
+            ? UnitTestHost.dataDirectory.appendingPathComponent(fileName, isDirectory: false)
+            : ProductPaths.keybumps(fileManager: fileManager).inUse(.recentItems)
     }
 
     func record(_ result: QuickSearchResult) {

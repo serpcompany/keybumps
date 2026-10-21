@@ -47,7 +47,7 @@ struct TimerFinish: Equatable {
 @MainActor
 @Observable
 final class TimerStore {
-    static let fileName = "timers.json"
+    nonisolated static let fileName = "timers.json"
 
     private(set) var items: [TimerItem] = []
     /// Called with the timers that just ended, oldest end first.
@@ -82,7 +82,7 @@ final class TimerStore {
 
     static func makeDefault() -> TimerStore {
         TimerStore(
-            storageURL: ProductPaths.keybumps().applicationSupport.appendingPathComponent(fileName),
+            storageURL: ProductPaths.keybumps().inUse(.timers),
             // Unit tests never hear the Mac wake.
             notifications: UnitTestHost.isActive ? NotificationCenter() : nil
         )

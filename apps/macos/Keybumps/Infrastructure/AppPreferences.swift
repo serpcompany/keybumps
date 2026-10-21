@@ -235,6 +235,19 @@ final class AppPreferences {
     /// macOS's screenshot folder (`screengrabFolders`).
     private(set) var chosenScreengrabFolders: [ScreengrabFolders.Kind: URL]
 
+    /// The paths of the folders chosen in Settings › ScreenGrabs, read straight from `defaults` before
+    /// any preferences load: the launch's move into the Keybumps folder never moves one (ADR 0013).
+    nonisolated static func chosenScreengrabFolderPaths(in defaults: UserDefaults) -> [String] {
+        ScreengrabFolders.Kind.allCases.compactMap { defaults.string(forKey: Key.chosenFolder($0)) }.filter { $0.hasPrefix("/") }
+    }
+
+    /// Whether an earlier build ran on this Mac, read straight from `defaults` before any preferences
+    /// load (ADR 0013). Every release sets `didCompleteOnboarding` once setup is done, and no plugin
+    /// that keeps files runs before it; every release since #226 sets `lastLaunchedVersion` at launch.
+    nonisolated static func ranBefore(in defaults: UserDefaults) -> Bool {
+        defaults.bool(forKey: Key.didCompleteOnboarding) || defaults.string(forKey: Key.lastLaunchedVersion) != nil
+    }
+
     /// ScreenGrabs' Screenshots and Recordings folders as they are now.
     var screengrabFolders: ScreengrabFolders {
         ScreengrabFolders(location: screenshotLocation, chosen: chosenScreengrabFolders)

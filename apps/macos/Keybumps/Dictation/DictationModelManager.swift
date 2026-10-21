@@ -112,6 +112,12 @@ final class DictationModelManager {
     }
 
     private func locationFile(for engine: DictationTranscriptionEngine) -> URL {
-        root(for: engine).appendingPathComponent("model-location.txt")
+        Self.locationFile(for: engine, in: modelsRoot)
+    }
+
+    /// The file naming an installed model's folder by its absolute path, written only once the model
+    /// has downloaded. The Keybumps folder's move rewrites it when the models move (ADR 0013).
+    nonisolated static func locationFile(for engine: DictationTranscriptionEngine, in modelsRoot: URL) -> URL {
+        modelsRoot.appendingPathComponent(engine.rawValue, isDirectory: true).appendingPathComponent("model-location.txt")
     }
 }

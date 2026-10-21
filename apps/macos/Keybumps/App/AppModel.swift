@@ -243,7 +243,7 @@ final class AppModel {
         )
         self.dictationHistory = dictationHistory
         let dictationModelManager = injectedDictationModelManager ?? DictationModelManager(
-            modelsRoot: ProductPaths.keybumps().dictationModels,
+            modelsRoot: ProductPaths.keybumps().inUse(.dictationModels),
             downloader: DictationModelDownloadRouter(
                 whisperKit: WhisperKitModelDownloader(),
                 whisperCpp: WhisperCppModelDownloader()

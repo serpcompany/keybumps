@@ -102,12 +102,14 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
 @MainActor
 @Observable
 class ClipboardHistoryService {
+    /// In the Keybumps folder's `clipboard_history/`, with each image's copy in `media/` (ADR 0013).
+    nonisolated static let fileName = "clipboard-history.json"
     /// How many items that aren't screenshots are kept, and the most the Clipboard tab lists.
     nonisolated static let capacity = 50
     /// How many screenshot items are kept, apart from `capacity`: a copy never pushes out a
     /// screenshot, and a screenshot never pushes out a copy. An older build loads only the newest
     /// `capacity` items, whatever their kind, and drops the rest on its next save, leaving their
-    /// media in `clipboard-media`.
+    /// media in `media/`.
     nonisolated static let screenshotCapacity = 50
     nonisolated static let maximumImageBytes = 50 * 1_024 * 1_024
 
@@ -132,11 +134,11 @@ class ClipboardHistoryService {
         mediaDirectoryURL: URL? = nil,
         sourceApps: ClipboardSourceAppReader = .system
     ) {
-        let directory = ProductPaths.keybumps(fileManager: fileManager).applicationSupport
+        let paths = ProductPaths.keybumps(fileManager: fileManager)
         self.fileManager = fileManager
         sourceTracker = ClipboardSourceTracker(reader: sourceApps)
-        self.storageURL = storageURL ?? directory.appendingPathComponent("clipboard-history.json")
-        self.mediaDirectoryURL = mediaDirectoryURL ?? directory.appendingPathComponent("clipboard-media", isDirectory: true)
+        self.storageURL = storageURL ?? paths.inUse(.clipboardHistory)
+        self.mediaDirectoryURL = mediaDirectoryURL ?? paths.inUse(.clipboardMedia)
         self.pasteboard = pasteboard
         lastChangeCount = pasteboard.changeCount
         // Only the folders this history uses, so injected locations never create the default one.

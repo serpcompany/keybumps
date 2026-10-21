@@ -91,12 +91,12 @@ struct ScreencastRepositoryGuess: Equatable {
 
 /// Which repository each website's and app's captures go to, as the person corrected the review
 /// panel's guess, so the next capture there guesses it. A website wins over the app showing it: a
-/// browser shows many sites. Kept on this Mac only, in `screencast-repositories.json` in
-/// Application Support, through `ProductPaths` so unit tests keep theirs in their own folder. User
-/// content, never logged.
+/// browser shows many sites. Kept on this Mac only, in `screencast-repositories.json` in the
+/// Keybumps folder's `screengrabs/`, through `ProductPaths` so unit tests keep theirs in their own
+/// folder. User content, never logged.
 @MainActor
 final class ScreencastRepositoryMemory {
-    static let fileName = "screencast-repositories.json"
+    nonisolated static let fileName = "screencast-repositories.json"
 
     struct Stored: Codable, Equatable {
         /// By domain, or by local development host (`localhost:3000`).
@@ -117,7 +117,7 @@ final class ScreencastRepositoryMemory {
     }
 
     static var defaultStorageURL: URL {
-        ProductPaths.keybumps().applicationSupport.appendingPathComponent(fileName)
+        ProductPaths.keybumps().inUse(.screencastRepositories)
     }
 
     static func makeDefault() -> ScreencastRepositoryMemory {

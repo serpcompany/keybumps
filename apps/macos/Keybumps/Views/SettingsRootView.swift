@@ -1013,6 +1013,10 @@ private struct GeneralView: View {
                 .accessibilityIdentifier("settings.general.sendsCrashReports")
                 SettingsNote(CrashReportingCopy.settingsNote)
             }
+            SettingsGroup("Files") {
+                KeybumpsFolderRow()
+                SettingsNote("Each plugin keeps its files in its own folder here.")
+            }
             SettingsGroup("Problems") {
                 LabeledContent {
                     Button("Report a Problem…") { model.showProblemReport() }
