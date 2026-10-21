@@ -71,7 +71,9 @@ struct ScreenshotCaptureTests {
         harness.pressHotKey(DefaultShortcut.screenshotScreen)
         let files = ScreenshotCapturePlan.files(in: root, at: Self.date, displayCount: 3, mode: .screens)
         let listed = ScreenshotPaletteContent.resolve(entries: harness.model.clipboard.entries, query: "", isEnabled: true)
-        #expect(listed.entries.compactMap(\.sourceURL) == files)
+        // This capturer saves outside ScreenGrabs' history, so each is copied there, keeping its name (#605).
+        let history = harness.model.clipboard.screenshotsFolder
+        #expect(listed.entries.compactMap(\.sourceURL) == files.map { history.appendingPathComponent($0.lastPathComponent) })
         #expect(harness.pasteboard.data(forType: .png) == (try Data(contentsOf: files[0])), "⌘V pastes the main display's")
     }
 

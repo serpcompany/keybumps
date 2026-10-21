@@ -107,6 +107,7 @@ struct UnitTestDataIsolationTests {
         let clipboard = ClipboardHistoryService(pasteboard: pasteboard, sourceApps: .inert)
         expectInRunFolder(clipboard.storageURL, "Clipboard History")
         expectInRunFolder(clipboard.mediaDirectoryURL, "Clipboard History media")
+        expectInRunFolder(clipboard.screenshotsFolder, "ScreenGrabs' history of screenshots")
 
         expectInRunFolder(JSONEventPersistence().url, "Shortcut Coach history")
         expectInRunFolder(DictationService(language: "en-US", allowsSystemAccess: false).recoveryURL, "The Dictation recovery file")
@@ -115,7 +116,6 @@ struct UnitTestDataIsolationTests {
         let recordingDefaults = InMemoryDefaults()
         let recordings = RecordingLibrary.makeDefault(
             importMemory: RecordingImportMemory(defaults: recordingDefaults),
-            folderMemory: RecordingFolderMemory(defaults: recordingDefaults),
             screenshots: nil
         )
         expectInRunFolder(recordings.storageURL, "The recordings index")
@@ -133,8 +133,9 @@ struct UnitTestDataIsolationTests {
         expectInRunFolder(model.clipboard.mediaDirectoryURL, "AppModel's Clipboard History media")
         expectInRunFolder(model.dictation.recoveryURL, "AppModel's Dictation recovery file")
         expectInRunFolder(model.dictationModels.modelsRoot, "AppModel's Dictation models")
-        expectInRunFolder(model.preferences.screencast.capturesFolder, "AppModel's Recordings folder")
-        expectInRunFolder(model.preferences.screengrabFolders.folder(for: .screenshots), "AppModel's Screenshots folder")
+        expectInRunFolder(model.preferences.screencast.capturesFolder, "AppModel's history of recordings")
+        expectInRunFolder(model.clipboard.screenshotsFolder, "AppModel's history of screenshots")
+        expectInRunFolder(model.preferences.screenshotLocation.resolve(), "AppModel's screenshot folder, for each screengrab's copy")
         let recordings = try #require(model.recording?.recordings)
         expectInRunFolder(recordings.storageURL, "AppModel's recordings index")
         expectInRunFolder(recordings.posterFrames.folder, "AppModel's poster frames")

@@ -2,15 +2,20 @@ import Foundation
 
 /// Where Save writes the edited copy. Originals are never overwritten.
 enum ScreenshotEditorOutput {
+    /// Beside the source, named after it, where that folder can be written to, else in
+    /// `fallbackFolder`. `besideSource: false` always writes in `fallbackFolder`, still named after
+    /// the source: a screenshot's file is in ScreenGrabs' history, which holds only screenshots
+    /// (#605), so its edited copy goes where macOS saves screenshots, beside the screenshot's copy.
     static func destination(
         sourceURL: URL?,
         fallbackFolder: URL,
+        besideSource: Bool = true,
         now: Date = Date(),
         isWritableDirectory: (URL) -> Bool = { FileManager.default.isWritableFile(atPath: $0.path) },
         exists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) }
     ) -> URL {
         let base = sourceURL?.deletingPathExtension().lastPathComponent ?? "Image \(timestamp(now))"
-        let sourceFolder = sourceURL?.deletingLastPathComponent()
+        let sourceFolder = besideSource ? sourceURL?.deletingLastPathComponent() : nil
         let folder = sourceFolder.flatMap { isWritableDirectory($0) ? $0 : nil } ?? fallbackFolder
         var attempt = 1
         while true {

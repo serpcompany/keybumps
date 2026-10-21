@@ -3,7 +3,7 @@ import Foundation
 /// Settings › ScreenGrabs' Recordings group, as one value for what starts and records a recording:
 /// read it as each recording starts, so a change applies to the next one. Its parts are ScreenGrabs'
 /// recording preferences, still stored as Screencast's were (`plugin.screencast.<key>`, ADR 0010),
-/// and the Recordings folder.
+/// and where recordings are saved.
 struct ScreencastPreferences: Equatable {
     /// Whether a video records the microphone, while Keybumps has Microphone access. On by default.
     var recordsMicrophone: Bool
@@ -16,14 +16,11 @@ struct ScreencastPreferences: Equatable {
     var showsShortcuts: Bool
     /// Whether a ring shows where the pointer clicks while recording. Off by default.
     var highlightsClicks: Bool
-    /// The Recordings folder, where each recording is saved in a `<timestamp>/` folder of its own
-    /// (#504): the one chosen in Settings › ScreenGrabs while Keybumps can save there, else the folder
-    /// macOS saves screenshots to (`ScreengrabFolders`), or their stand-ins in the UI-test sandbox and
-    /// the unit-test host.
+    /// Where each recording is saved, in a `<timestamp>/` folder of its own: the history, the Keybumps
+    /// folder's `screengrabs/recordings/` (#605, ADR 0013), where the launch's move left it
+    /// (`ProductPaths.inUse`), or its stand-in in the UI-test sandbox and the unit-test host. A copy
+    /// goes where macOS saves screenshots once the recording window keeps it (`ScreengrabCopies`).
     var capturesFolder: URL
-    /// Where the recording goes if `capturesFolder` won't take it after all: the default, while a
-    /// chosen folder is in use (`ScreengrabFolders.fallback(for:)`).
-    var fallbackFolder: URL? = nil
 
     /// The picker's switches, which are these settings too.
     var switches: ScreencastSwitches {
@@ -48,15 +45,13 @@ struct ScreencastSwitches: Equatable, Sendable {
 extension AppPreferences {
     /// ScreenGrabs' recording settings as they are now.
     var screencast: ScreencastPreferences {
-        let folders = screengrabFolders
-        return ScreencastPreferences(
+        ScreencastPreferences(
             recordsMicrophone: bool(.screencastRecordsMicrophone, for: .screenshotTools),
             recordsSystemAudio: bool(.screencastRecordsSystemAudio, for: .screenshotTools),
             countdownSeconds: Int(choice(.screencastCountdown, for: .screenshotTools)) ?? 0,
             showsShortcuts: bool(.screencastShowsShortcuts, for: .screenshotTools),
             highlightsClicks: bool(.screencastHighlightsClicks, for: .screenshotTools),
-            capturesFolder: folders.folder(for: .recordings),
-            fallbackFolder: folders.fallback(for: .recordings)
+            capturesFolder: ProductPaths.keybumps().inUse(.recordings)
         )
     }
 

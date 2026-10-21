@@ -144,16 +144,18 @@ struct ScreengrabsPaletteContentTests {
         #expect(resolved.secondary.map(\.description) == ["Paste ⌘V", "Edit ⌘E", "Quick Look Space", "Delete ⌫"], "Space's before Delete's")
     }
 
-    @Test("Delete removes the screenshot from the tab and leaves its file")
+    @Test("Delete removes the screenshot from the tab and its file from ScreenGrabs' history, and leaves the file where macOS saved it (#605)")
     func delete() throws {
         let fixture = ScreengrabsTabFixture()
         defer { fixture.tearDown() }
         try fixture.addScreenshots(["First", "Second"])
-        let file = try #require(fixture.clipboard.entries.first?.sourceURL)
+        let inHistory = try #require(fixture.clipboard.entries.first?.sourceURL)
+        let saved = fixture.folder.url.appendingPathComponent("Second.png")
 
         #expect(fixture.content.delete(row: 0, query: ""))
         #expect(fixture.rowCount() == 1)
-        #expect(FileManager.default.fileExists(atPath: file.path))
+        #expect(!FileManager.default.fileExists(atPath: inHistory.path), "moved to the Trash")
+        #expect(FileManager.default.fileExists(atPath: saved.path))
     }
 
     // MARK: Through the palette
@@ -319,12 +321,13 @@ struct ScreengrabsPaletteContentTests {
         editor.unmarkText()
     }
 
-    @Test("Delete on a highlighted screenshot removes it from the tab, leaves its file, and keeps the highlight on one that's still there")
+    @Test("Delete on a highlighted screenshot removes it from the tab, leaves the file where macOS saved it, and keeps the highlight on one that's still there")
     func deleteThroughThePalette() throws {
         let fixture = ScreengrabsTabFixture()
         defer { fixture.tearDown() }
         let ids = try fixture.addScreenshots(["First", "Second"])
-        let file = try #require(fixture.clipboard.entries.first { $0.id == ids[1] }?.sourceURL)
+        let inHistory = try #require(fixture.clipboard.entries.first { $0.id == ids[1] }?.sourceURL)
+        let file = fixture.folder.url.appendingPathComponent("First.png")
         let palette = fixture.palette
         palette.selectOnOpening(.screenshots)
 
@@ -335,6 +338,7 @@ struct ScreengrabsPaletteContentTests {
         #expect(fixture.clipboard.entries.count == 1)
         #expect(fixture.clipboard.entries.map(\.id) == [ids[0]])
         #expect(FileManager.default.fileExists(atPath: file.path))
+        #expect(!FileManager.default.fileExists(atPath: inHistory.path), "its file in ScreenGrabs' history is moved to the Trash")
         #expect(palette.state.selection == 0)
     }
 

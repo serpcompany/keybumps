@@ -213,7 +213,6 @@ final class PaletteMetricsFixture {
             capturesFolder: root.appendingPathComponent("captures", isDirectory: true),
             posterFrames: RecordingPosterFrames(folder: root.appendingPathComponent("posters", isDirectory: true)),
             importMemory: RecordingImportMemory(defaults: defaults),
-            folderMemory: RecordingFolderMemory(defaults: defaults),
             screenshots: clipboard
         )
         for offset in [60.0, 120] {

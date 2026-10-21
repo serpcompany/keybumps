@@ -29,10 +29,13 @@ final class ScreenshotEditorPresenter {
 
         let previousApp = NSWorkspace.shared.frontmostApplication
             .flatMap { $0.processIdentifier == ProcessInfo.processInfo.processIdentifier ? nil : $0 }
+        // A screenshot's edited copy goes where macOS saves screenshots, never into ScreenGrabs'
+        // history (#605); an image copied from a file's goes beside that file.
         let controller = ScreenshotEditorWindowController(
             source: source,
             sourceURL: entry.sourceURL,
-            fallbackFolder: fallbackFolder()
+            fallbackFolder: fallbackFolder(),
+            savesBesideSource: !entry.isScreenshot
         )
         controller.onFinish = { [weak self] result in
             self?.controller = nil

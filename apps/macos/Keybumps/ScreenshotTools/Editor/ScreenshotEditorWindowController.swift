@@ -29,6 +29,8 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
     private let source: ScreenshotRenderSource
     private let sourceURL: URL?
     private let fallbackFolder: URL
+    /// Whether the edited copy is saved beside the source (`ScreenshotEditorOutput.destination`).
+    private let savesBesideSource: Bool
     private let pasteboard: NSPasteboard
     private let model = ScreenshotEditorModel()
     private let renderer = ScreenshotAnnotationRenderer()
@@ -37,10 +39,17 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
     private var didFinish = false
     var onFinish: ((Result?) -> Void)?
 
-    init(source: ScreenshotRenderSource, sourceURL: URL?, fallbackFolder: URL, pasteboard: NSPasteboard = .keybumps) {
+    init(
+        source: ScreenshotRenderSource,
+        sourceURL: URL?,
+        fallbackFolder: URL,
+        savesBesideSource: Bool = true,
+        pasteboard: NSPasteboard = .keybumps
+    ) {
         self.source = source
         self.sourceURL = sourceURL
         self.fallbackFolder = fallbackFolder
+        self.savesBesideSource = savesBesideSource
         self.pasteboard = pasteboard
         canvas = ScreenshotEditorCanvasView(source: source, model: model, renderer: renderer)
 
@@ -93,7 +102,7 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
         pasteboard.clearContents()
         let copied = pasteboard.setData(png, forType: .png)
         if copied { pasteboard.markCopiedByKeybumps() }
-        let destination = ScreenshotEditorOutput.destination(sourceURL: sourceURL, fallbackFolder: fallbackFolder)
+        let destination = ScreenshotEditorOutput.destination(sourceURL: sourceURL, fallbackFolder: fallbackFolder, besideSource: savesBesideSource)
         let savedURL: URL? = (try? png.write(to: destination, options: .withoutOverwriting)) == nil ? nil : destination
         if savedURL == nil {
             let alert = NSAlert()

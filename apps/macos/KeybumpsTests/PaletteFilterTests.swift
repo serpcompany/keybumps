@@ -172,7 +172,7 @@ struct PaletteFilterTests {
         let fixture = PaletteFilterFixture()
         defer { fixture.tearDown() }
         fixture.clipboard.ingestForTesting("made-up older copy")
-        for index in 0..<ClipboardHistoryService.screenshotCapacity {
+        for index in 0..<ClipboardHistoryService.capacity {
             let file = fixture.folder.url.appendingPathComponent("Screenshot \(index).png")
             try Data("made-up pixels \(index)".utf8).write(to: file)
             #expect(fixture.clipboard.ingestImageFile(at: file))

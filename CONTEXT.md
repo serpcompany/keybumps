@@ -51,7 +51,7 @@ The Keybumps window where capabilities are turned on and configured. Quick Searc
 _Avoid_: Preferences, Settings panel
 
 **Keybumps folder**:
-Where Keybumps keeps what it saves on this Mac, `~/Library/Application Support/Keybumps`, a folder that never syncs (ADR 0013). Each plugin that saves files has its own folder in it, and nothing else is at its top level: `clipboard_history/`, `dictation/`, `emoji_picker/`, `quick_search/`, `screengrabs/`, `shortcut_coach/`, `snippets/`, `timers/`, and `translations/`. Settings › General shows it with Show in Finder; plugins' pages don't. Caches and temporary files are elsewhere, and ScreenGrabs' Screenshots and Recordings folders are the person's own.
+Where Keybumps keeps what it saves on this Mac, `~/Library/Application Support/Keybumps`, a folder that never syncs (ADR 0013). Each plugin that saves files has its own folder in it, and nothing else is at its top level: `clipboard_history/`, `dictation/`, `emoji_picker/`, `quick_search/`, `screengrabs/`, `shortcut_coach/`, `snippets/`, `timers/`, and `translations/`. Settings › General shows it with Show in Finder; plugins' pages don't. Caches and temporary files are elsewhere, and so is each screengrab's convenience copy, which is the person's own.
 _Avoid_: Data folder, library folder, `~/Documents/Keybumps` (where Dictation History was kept before #602); Application Support (macOS's folder that holds it)
 
 **What's New**:
@@ -97,7 +97,7 @@ How often and how recently the user picked each app or Quick Search command from
 _Avoid_: Search history, frecency
 
 **Clipboard History**:
-The recent text and image items the user copied, kept locally: the newest 50 that aren't screenshots, and apart from them the newest 50 screenshot items, so copying never pushes out a screenshot and a screenshot never pushes out a copy. The Clipboard tab lists the newest 50 that match its filter and search, leaving out screenshots cleared or deleted there. Kept in the Keybumps folder's `clipboard_history/`: `clipboard-history.json`, and each image's copy in `media/`.
+The recent text and image items the user copied, kept locally: the newest 50 that aren't screenshots, and apart from them every screenshot item (#605), so copying never pushes out a screenshot. The Clipboard tab lists the newest 50 that match its filter and search, leaving out screenshots cleared or deleted there. Kept in the Keybumps folder's `clipboard_history/`: `clipboard-history.json`, and each copied image's copy in `media/`. A screenshot item has no copy there: it names its file in ScreenGrabs' history.
 _Avoid_: Permanent clipboard archive, Dictation History duplicate
 
 **Source app**:
@@ -140,14 +140,19 @@ One screenshot or one recording that ScreenGrabs took.
 _Avoid_: Capture, clip, grab
 
 **Screenshot**:
-A PNG of the screens or an area, taken with ScreenGrabs' hotkeys, in the Screenshots folder, or with macOS's own, in the folder macOS saves screenshots to.
+A PNG of the screens or an area, taken with ScreenGrabs' hotkeys or with macOS's own, kept in ScreenGrabs' history, with a convenience copy where macOS saves screenshots.
 _Avoid_: Snap
 
-**Screenshots folder**:
-Where ScreenGrabs' hotkeys and the Screenshot Editor save screenshots: the folder chosen in Settings › ScreenGrabs, or, until one is, the folder macOS saves screenshots to (else the Desktop), following macOS's setting. A chosen folder that's gone or can't be written to stays chosen, and screenshots go to the default until it's back.
+**ScreenGrabs' history**:
+Where ScreenGrabs keeps every screengrab, in the Keybumps folder's `screengrabs/`: every screenshot in `screenshots/`, and every recording, in a folder of its own, in `recordings/` (ADR 0013, decision 4). The hotkeys and the recorder save there, and a screenshot macOS saves is copied in. The ScreenGrabs tab, the recordings index, and Clipboard History's screenshot items name these files. There's no folder to choose: one chosen in Settings › ScreenGrabs before #605 is no longer used.
+_Avoid_: Screenshots folder, Recordings folder, captures folder (former names), library
+
+**Convenience copy**:
+The copy of a screengrab where macOS saves screenshots (`com.apple.screencapture` `location`, else the Desktop): a hotkey screenshot's as it's taken, and a recording's whole folder once the recording window keeps it; a screenshot macOS saved itself is its own copy. An APFS clone where it can be, so it takes no more space (`ScreengrabCopies`). It's the person's: nothing Keybumps keeps names it, so moving or deleting it, such as by clearing the Desktop, never touches the history, and a screengrab is never "Moved or deleted" because of it.
+_Avoid_: Desktop copy (the Desktop is only macOS's default), backup, export, duplicate
 
 **ScreenGrabs tab**:
-Quick Search's tab showing Clipboard History's newest 50 screenshot items and every recording in the recordings index, newest first (#494). Recordings show with Clipboard History off, and the header says why screenshots don't; on macOS 14 it shows screenshots only. Its grid has two columns, with the highlighted screengrab in full beside it, as in the Dictation tab (#552): its picture, a button for each of its actions with the keys that do the same, its name, and its information (Dimensions, Taken, and Size, or a recording's Length, Displays, Taken, and Size); until Down or a click highlights one, it says how to show one there. A click highlights a screengrab; a double-click or Return copies it, and a ⌘-click edits it. Clearing or deleting a screenshot in the Clipboard tab keeps it here; only this tab's Clear All or Delete, or 50 newer screenshots, remove it. Delete on a recording asks, then moves its folder to the Trash; Clear All leaves recordings. A recording moved or deleted outside Keybumps stays, marked "Moved or deleted", until it's removed.
+Quick Search's tab showing every screenshot item in Clipboard History and every recording in the recordings index, newest first (#494, #605): everything in ScreenGrabs' history. Recordings show with Clipboard History off, and the header says why screenshots don't; on macOS 14 it shows screenshots only. Its grid has two columns, with the highlighted screengrab in full beside it, as in the Dictation tab (#552): its picture, a button for each of its actions with the keys that do the same, its name, and its information (Dimensions, Taken, and Size, or a recording's Length, Displays, Taken, and Size); until Down or a click highlights one, it says how to show one there. A click highlights a screengrab; a double-click or Return copies it, and a ⌘-click edits it. Clearing or deleting a screenshot in the Clipboard tab keeps it here; only this tab's Clear All or Delete removes it, moving its file in ScreenGrabs' history to the Trash and leaving its convenience copy. Delete on a recording asks, then moves its folder to the Trash; Clear All leaves recordings. A recording moved or deleted outside Keybumps stays, marked "Moved or deleted", until it's removed.
 _Avoid_: Screenshots tab (its former name), screenshot library, gallery
 
 **Screenshot Editor**:
@@ -227,15 +232,11 @@ The keys on screen that the Keystrokes plugin and a recording share. Only one sh
 _Avoid_: Keycast, overlay, HUD, bezel (one of its two styles)
 
 **Recording**:
-A video ScreenGrabs made of an area, a window, or the screens, with the microphone and the Mac's sound (ADR 0009), kept on this Mac in a folder of its own in the recordings folder until the person deletes it, or sends it to a destination and has the copy deleted; a recording of every screen holds one video per display. Record Screen (⇧⌘5, or Quick Search) starts one. A screenshot isn't one.
+A video ScreenGrabs made of an area, a window, or the screens, with the microphone and the Mac's sound (ADR 0009), kept on this Mac in a folder of its own in ScreenGrabs' history, with a convenience copy, until the person deletes it, or sends it to a destination and has the copy deleted; a recording of every screen holds one video per display. Record Screen (⇧⌘5, or Quick Search) starts one. A screenshot isn't one.
 _Avoid_: Capture (Screencast's word, which also meant screenshots), screencast, video (one display's file), screen recording (macOS's permission; only a ScreenGrabs tab tile's name says "Screen Recording <date>", as macOS names its own recordings), Dictation's audio
 
-**Recordings folder**:
-Where recordings are saved, each in a folder of its own: the folder chosen in Settings › ScreenGrabs, apart from the Screenshots folder, or, until one is, the folder macOS saves screenshots to (else the Desktop). A chosen folder that's gone or can't be written to falls back the same way. Recordings saved before #504 are in the Keybumps folder's `screengrabs/recordings/` (`ProductPaths.screengrabsRecordings`, moved from `~/Documents/Keybumps/captures` by ADR 0013), still listed.
-_Avoid_: Captures folder; Dictation's folder (`ProductPaths.dictation`)
-
 **Recordings index**:
-ScreenGrabs' list of every recording it keeps, wherever it's saved, for the ScreenGrabs tab (`RecordingLibrary`): each recording's folder, start, length, and displays, never what the person wrote about it. A recording moved or deleted outside Keybumps stays listed, marked as moved or deleted.
+ScreenGrabs' list of every recording in its history, for the ScreenGrabs tab (`RecordingLibrary`): each recording's folder, start, length, and displays, never what the person wrote about it. A recording moved or deleted outside Keybumps stays listed, marked as moved or deleted.
 _Avoid_: Captures index
 
 **Recording picker**:
@@ -251,7 +252,7 @@ Marking up the screen while recording, in the video: a pen, an arrow, a highligh
 _Avoid_: Annotation (the Screenshot Editor's marks), ink, markup, telestrator
 
 **Recording window**:
-What opens after each recording, asking what to do with it: a window that all but fills the screen with the recording's player (play, pause, and scrubbing), and Trim, Crop, Blur, Discard, Copy, and Save in its editor bar, with nothing to type. Trim opens a timeline under the player: its handles trim the ends, and a part selected on it is cut out with Cut Section; trimmed and cut parts stay on it, dimmed, to bring back. Crop puts one rectangle over the video for the whole recording, Free, 16:9, or 1:1. Blur draws mosaic blurs over the video, each with a bar on the timeline for when it shows. A trim applies to every display; a crop and blurs to the display picked. With edits, Save and Copy first export the edited recording, keeping the original until that's complete, and closing asks "Save your edits?" (Keep Original or Save Edited); the next recording starting, or quitting, keeps the original. Save keeps the recording; Copy keeps it and puts it on the clipboard, kept out of Clipboard History; Discard asks, then deletes it. Return saves and ⌘C copies; Escape, closing it, or starting the next recording saves too. Opened again from the ScreenGrabs tab on a saved recording, Discard is Move to Trash, which moves it to the Trash as Delete there does, and Save is Done, which only closes (or saves edits). The window closes then, and a notice in the notch says which folder it was saved to, that it was copied, or why it couldn't be saved; starting the next recording shows a notice only if it couldn't. The review it writes, the type, the guessed repository, and the app the recording was made in, is user content, kept in the recording's `meta.json` on this Mac.
+What opens after each recording, asking what to do with it: a window that all but fills the screen with the recording's player (play, pause, and scrubbing), and Trim, Crop, Blur, Discard, Copy, and Save in its editor bar, with nothing to type. Trim opens a timeline under the player: its handles trim the ends, and a part selected on it is cut out with Cut Section; trimmed and cut parts stay on it, dimmed, to bring back. Crop puts one rectangle over the video for the whole recording, Free, 16:9, or 1:1. Blur draws mosaic blurs over the video, each with a bar on the timeline for when it shows. A trim applies to every display; a crop and blurs to the display picked. With edits, Save and Copy first export the edited recording, keeping the original until that's complete, and closing asks "Save your edits?" (Keep Original or Save Edited); the next recording starting, or quitting, keeps the original. Save keeps the recording; Copy keeps it and puts it on the clipboard, kept out of Clipboard History; Discard asks, then deletes it. Return saves and ⌘C copies; Escape, closing it, or starting the next recording saves too. Opened again from the ScreenGrabs tab on a saved recording, Discard is Move to Trash, which moves it to the Trash as Delete there does, and Save is Done, which only closes (or saves edits). The window closes then, and a notice in the notch says which folder its convenience copy went to ("Recording saved to Desktop"), that it was copied, or why it couldn't be saved; starting the next recording shows a notice only if it couldn't. The review it writes, the type, the guessed repository, and the app the recording was made in, is user content, kept in the recording's `meta.json` on this Mac.
 _Avoid_: Review panel (its former name), quick access card, post-capture window, editor
 
 **Editor bar**:

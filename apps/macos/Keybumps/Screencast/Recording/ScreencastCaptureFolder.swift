@@ -1,6 +1,6 @@
 import Foundation
 
-/// A recording's own folder, `<Recordings folder>/<timestamp>/`, named like Dictation's recordings:
+/// A recording's own folder, `screengrabs/recordings/<timestamp>/`, named like Dictation's recordings:
 /// the start time in Unix seconds, with `-2`, `-3`, … when two start in the same second.
 enum ScreencastCaptureFolder {
     /// 2001-09-09, the first Unix second with 10 digits. A clock that reads earlier isn't a real
@@ -9,8 +9,8 @@ enum ScreencastCaptureFolder {
 
     /// Whether `name` is one `create` makes: Unix seconds (10 digits or more) or `0`, alone or with
     /// `-2`, `-3`, …. The recordings index and export recovery open only folders named so, since a
-    /// Recordings folder such as the Desktop holds the person's own folders too, years like `2024`
-    /// among them (#504).
+    /// folder recordings were saved in from #504 until #605, such as the Desktop, holds the person's
+    /// own folders too, years like `2024` among them.
     static func isFolderName(_ name: String) -> Bool {
         let parts = name.split(separator: "-", omittingEmptySubsequences: false)
         guard (1...2).contains(parts.count),

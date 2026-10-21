@@ -170,12 +170,16 @@ final class ScreenshotSmokeRunner {
         for folder in folders { try? fileManager.removeItem(at: folder) }
         try? fileManager.createDirectory(at: environment.screenshotsFolder, withIntermediateDirectories: true)
         let pasteboard = NSPasteboard.withUniqueName()
+        // Its screenshots folder is its ScreenGrabs history, as the hotkeys save in the app's
+        // (#605), and what it deletes is its own, so it never reaches the Trash.
         let clipboard = ClipboardHistoryService(
             fileManager: fileManager,
             storageURL: environment.clipboardFolder.appendingPathComponent("clipboard-history.json"),
             pasteboard: pasteboard,
             mediaDirectoryURL: environment.clipboardFolder.appendingPathComponent("media", isDirectory: true),
-            sourceApps: .inert
+            screenshotsFolder: environment.screenshotsFolder,
+            sourceApps: .inert,
+            trash: { try fileManager.removeItem(at: $0) }
         )
         // As the app hands a new screenshot to Clipboard History, never copying it.
         let delivery = ScreenshotClipboardDelivery(clipboard: clipboard, copiesToClipboard: { false })

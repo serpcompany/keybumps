@@ -3,7 +3,7 @@ import Foundation
 /// Moves a recording's own folder to the Trash, as Delete in the ⌘3 tab and the recording window's
 /// Move to Trash do (#494), so it can be put back from there. It moves only a folder the recorder
 /// named (`ScreencastCaptureFolder.isFolderName`) that holds every one of the recording's files, so
-/// an index that names another folder, such as a Recordings folder itself, never trashes it.
+/// an index that names another folder, such as the folder recordings are saved in, never trashes it.
 ///
 /// The app's (`app`) moves it to the Finder's Trash. In UI test mode it moves it into the sandbox's
 /// own `Trash` folder instead, and under the unit-test host it refuses, so no test reaches the real

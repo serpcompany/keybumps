@@ -183,6 +183,7 @@ final class AppModel {
         allowsDictationSystemAccess: Bool = !UnitTestHost.isActive,
         screenshotEditorFallbackFolder: (() -> URL)? = nil,
         screenshotCapturer: ScreenshotCapturer? = nil,
+        screengrabCopies injectedScreengrabCopies: ScreengrabCopies? = nil,
         symbolicHotKeyPreferences: (any SymbolicHotKeyPreferences)? = nil,
         screencast injectedScreencast: ScreencastSeams = ScreencastSeams(),
         permissionPollInterval: Duration = .seconds(1)
@@ -232,9 +233,13 @@ final class AppModel {
         let textPaster = injectedTextPaster
             ?? Self.makeTextPaster(clipboard: clipboard, allowsSystemAccess: allowsDictationSystemAccess)
         self.windows = injectedWindows ?? WindowManagementService()
+        // Each screenshot and recording ScreenGrabs keeps is copied where macOS saves screenshots,
+        // read as each is copied; under the unit-test host, its stand-in (#605).
+        let screengrabCopies = injectedScreengrabCopies ?? ScreengrabCopies(folder: { preferences.screenshotLocation.resolve() })
         let screenshotDelivery = ScreenshotClipboardDelivery(
             clipboard: clipboard,
-            copiesToClipboard: { preferences.copiesScreenshotsToClipboard }
+            copiesToClipboard: { preferences.copiesScreenshotsToClipboard },
+            copies: screengrabCopies
         )
         // Only the production composition reads the real screenshot folder; injected models stay inert.
         screenshotTools = injectedScreenshotTools ?? ScreenshotToolsService(
@@ -324,9 +329,9 @@ final class AppModel {
                 clipboard: clipboard,
                 recordings: .makeDefault(
                     importMemory: preferences.recordingImportMemory,
-                    folderMemory: preferences.recordingFolderMemory,
                     screenshots: clipboard
-                )
+                ),
+                copies: screengrabCopies
             )
         )
         let screenshotModule = ScreenshotToolsModule(
@@ -335,8 +340,8 @@ final class AppModel {
             clipboard: clipboard,
             preferences: preferences,
             delivery: screenshotDelivery,
-            // The hotkeys save in the Screenshots folder, read as each one captures (#504).
-            capturer: screenshotCapturer ?? ScreenshotCapturer(folder: { preferences.screengrabFolders.folder(for: .screenshots) }),
+            // The hotkeys save in ScreenGrabs' history, the one Clipboard History keeps (#605).
+            capturer: screenshotCapturer ?? ScreenshotCapturer(folder: { [clipboard] in clipboard.screenshotsFolder }),
             systemShortcuts: SystemScreenshotShortcutTakeover(
                 preferences: symbolicHotKeys,
                 takenOver: { preferences.takenOverSystemShortcuts },
@@ -344,7 +349,8 @@ final class AppModel {
             ),
             permissions: permissions,
             recording: recording,
-            editorFallbackFolder: screenshotEditorFallbackFolder ?? { preferences.screengrabFolders.folder(for: .screenshots) },
+            // An edited screenshot is saved where macOS saves screenshots, beside its copy (#605).
+            editorFallbackFolder: screenshotEditorFallbackFolder ?? { preferences.screenshotLocation.resolve() },
             updateSafety: CapabilityUpdateSafety(policy: updateSafetyPolicy, updater: updater, descriptor: .screenshotTools)
         )
         let dictationModule = DictationModule(

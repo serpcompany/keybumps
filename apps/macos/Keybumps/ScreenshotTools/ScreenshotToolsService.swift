@@ -112,40 +112,40 @@ enum ScreenshotFileFilter {
     }
 }
 
-/// Adds new screenshot files to Clipboard History and, while "Copy new screenshots to the
-/// clipboard" is on, puts each one on the pasteboard too. Restoring the item marks that
-/// pasteboard write as seen, so Clipboard History doesn't add it a second time.
+/// Adds new screenshots to Clipboard History, which keeps each one's file in ScreenGrabs' history
+/// (`ClipboardHistoryService.addScreenshot(at:)`, #605), and, while "Copy new screenshots to the
+/// clipboard" is on, puts each one on the pasteboard too. Restoring the item marks that pasteboard
+/// write as seen, so Clipboard History doesn't add it a second time.
 @MainActor
 struct ScreenshotClipboardDelivery {
     let clipboard: ClipboardHistoryService
     let copiesToClipboard: () -> Bool
+    /// Where a hotkey's screenshot gets its copy, apart from the history: where macOS saves
+    /// screenshots (`ScreengrabCopies`). Nil where nothing is copied, such as the QA smoke test.
+    var copies: ScreengrabCopies?
 
     /// True when the file became a new Clipboard History item. A file already in Clipboard History
-    /// (or matching the newest item) is neither added nor copied again, so the watcher never adds
-    /// a hotkey's file a second time. `copying: false` never copies.
+    /// is neither added nor copied again. `copying: false` never copies.
     @discardableResult
     func add(_ url: URL, copying: Bool = true) -> Bool {
-        guard !clipboard.entries.contains(where: { $0.sourcePath == url.path }) else { return false }
         // The watcher sees a file up to a second after it lands, so never replace something
         // copied since the file was created; it stays on the clipboard, ready to paste.
         let takenAt = (try? url.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? .distantPast
         let copies = copying && copiesToClipboard() && !clipboard.pasteboardChanged(since: takenAt)
-        guard clipboard.ingestImageFile(at: url, isScreenCapture: true) else { return false }
-        if copies, let entry = clipboard.entries.first(where: { $0.sourcePath == url.path }) {
-            clipboard.restore(entry, countsAsCopy: false)
-        }
+        guard let entry = clipboard.addScreenshot(at: url) else { return false }
+        if copies { clipboard.restore(entry, countsAsCopy: false) }
         return true
     }
 
-    /// Takes a hotkey's screenshots and adds them here once `screencapture` has exited and they're
-    /// marked; the watcher leaves them alone meanwhile, as it can't see the mark land. Screenshot
-    /// Screen adds only while ScreenGrabs runs with Clipboard History
-    /// (`ScreenshotToolsStatus.addsScreenshots`), whichever folder it's saved in and whether or
-    /// not the watcher can read macOS's (#504); one the watcher also sees isn't added again
-    /// (`add`). Screen and Edit and Area and Edit (`forEditing`) always add, since the editor opens
-    /// the item. The QA
-    /// smoke test takes its screenshots through this too. Calls `completion` with the files
-    /// written, main first.
+    /// Takes a hotkey's screenshots into ScreenGrabs' history (the capturer's folder) and, once
+    /// `screencapture` has exited and they're marked, copies each to where macOS saves screenshots
+    /// (`copies`), which the watcher leaves alone (`skip`), then adds them here. Screenshot Screen
+    /// adds only while ScreenGrabs runs with Clipboard History
+    /// (`ScreenshotToolsStatus.addsScreenshots`); one taken otherwise stays in the history, and is
+    /// listed at the next launch (`ClipboardHistoryService.adoptScreenshots()`). Screen and Edit and
+    /// Area and Edit (`forEditing`) always add, since the editor opens the item. The QA smoke test
+    /// takes its screenshots through this too. Calls `completion` with the files written, main
+    /// first.
     func capture(
         _ mode: ScreenshotCaptureMode,
         with capturer: ScreenshotCapturer,
@@ -155,6 +155,11 @@ struct ScreenshotClipboardDelivery {
     ) {
         var planned: [URL] = []
         capturer.capture(mode, willWrite: { planned = $0; watcher.skip($0) }) { files in
+            // Each copy is made and skipped in this one turn of the main thread, before the
+            // watcher's next look at its folder, so the watcher never adds a copy as a new screenshot.
+            for file in files {
+                if let copy = copies?.put(file) { watcher.skip([copy]) }
+            }
             if forEditing {
                 _ = addForEditing(files)
             } else if watcher.status.addsScreenshots {
@@ -256,8 +261,8 @@ class ScreenshotToolsService {
     /// Otherwise the watcher could add the main display's file before the others are written, and
     /// copy it. Each stays left alone until the watcher has seen it, or `stopSkipping` gives it
     /// back, matched by resolved path, so one is never added twice however either spells the
-    /// folder (a Screenshots folder chosen through a link to macOS's, #504). Files the hotkey saves
-    /// in another folder are never the watcher's, so nothing is kept for them.
+    /// folder. A hotkey saves in ScreenGrabs' history and skips its copy here (#605). Files in
+    /// another folder are never the watcher's, so nothing is kept for them.
     func skip(_ files: [URL]) {
         guard let folder else { return }
         let watched = ProductPaths.canonicalPath(folder)

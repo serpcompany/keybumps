@@ -72,7 +72,8 @@ struct KeybumpsFolderMoveTests {
         library.add(capture)
         await library.launchCheck?.value
         try #require(library.recordings.count == 1)
-        try #require(defaults.stringArray(forKey: RecordingFolderMemory.key)?.contains(paths.oldPlace(of: .recordings).path) == true)
+        // A build before #605 remembered the folder it recorded into.
+        defaults.set([paths.oldPlace(of: .recordings).path], forKey: RecordingFolderMemory.key)
         try write("made-up unreadable index", to: paths.oldPlace(of: .recordingsIndexUnreadable))
         let repository = try #require(ScreencastRepository("made-up/repo"))
         try write(
@@ -414,15 +415,14 @@ struct KeybumpsFolderMoveTests {
         }
     }
 
-    @Test("A folder chosen in Settings › ScreenGrabs stays where it is, and so does a chosen Documents/Keybumps")
+    @Test("A folder chosen in Settings › ScreenGrabs before #605 stays where it is, and so does a chosen Documents/Keybumps")
     func chosenFoldersStay() throws {
         defer { tearDown() }
         let paths = self.paths
         try FileManager.default.createDirectory(at: paths.keybumpsFolder, withIntermediateDirectories: true)
         let meta = paths.oldPlace(of: .recordings).appendingPathComponent("1791000100/meta.json")
         try write("made-up meta", to: meta)
-        let preferences = AppPreferences(defaults: defaults)
-        preferences.chooseScreengrabFolder(paths.oldPlace(of: .recordings), for: .recordings)
+        defaults.set(paths.oldPlace(of: .recordings).standardizedFileURL.path, forKey: Self.chosenRecordingsFolderKey)
 
         let report = KeybumpsFolderMove(paths: paths, defaults: defaults).run()
 
@@ -433,7 +433,7 @@ struct KeybumpsFolderMoveTests {
         #expect(!documentsMoved(defaults), "looked at again each launch")
 
         // Chose Documents/Keybumps itself instead: the old recordings move, and the folder stays.
-        preferences.chooseScreengrabFolder(paths.oldDocumentsFolder, for: .recordings)
+        defaults.set(paths.oldDocumentsFolder.standardizedFileURL.path, forKey: Self.chosenRecordingsFolderKey)
         let next = KeybumpsFolderMove(paths: paths, defaults: defaults).run()
         #expect(next.leftInOldPlace.isEmpty)
         #expect(text(at: paths.place(of: .recordings).appendingPathComponent("1791000100/meta.json")) == "made-up meta")
@@ -674,13 +674,15 @@ struct KeybumpsFolderMoveTests {
         try history.completeRecording(pending, text: "made-up dictation", language: "en-US", duration: 1)
     }
 
+    /// Where a build before #605 stored the Recordings folder chosen in Settings › ScreenGrabs.
+    private static let chosenRecordingsFolderKey = "screengrabs.recordingsFolder"
+
     private func recordingLibrary(at index: URL, capturesFolder: URL) -> RecordingLibrary {
         RecordingLibrary(
             storageURL: index,
             capturesFolder: capturesFolder,
             posterFrames: RecordingPosterFrames(folder: root.appendingPathComponent("Caches/posters", isDirectory: true)),
             importMemory: RecordingImportMemory(defaults: defaults),
-            folderMemory: RecordingFolderMemory(defaults: defaults),
             screenshots: nil
         )
     }

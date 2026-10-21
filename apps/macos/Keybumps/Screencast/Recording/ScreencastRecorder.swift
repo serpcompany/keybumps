@@ -124,8 +124,8 @@ final class ScreencastRecorder {
     // MARK: Starting
 
     /// Starts recording `target` with `audio` into a new `<timestamp>` folder in `capturesFolder`
-    /// (the Keybumps folder's `screengrabs/recordings/` by default; the app passes the Recordings folder), or in
-    /// `fallbackFolder` when that folder can't be made there, once every stream is running. Throws a
+    /// (the Keybumps folder's `screengrabs/recordings/`, ScreenGrabs' history), or in
+    /// `fallbackFolder`, which the app doesn't pass, when that folder can't be made there, once every stream is running. Throws a
     /// `ScreencastFailure` (and the state becomes `.failed`), `ScreencastRecorderError.alreadyRecording`,
     /// or `CancellationError` when `discard()` cancelled it.
     func start(
@@ -347,7 +347,7 @@ final class ScreencastRecorder {
     /// `switchedOffAt`, before any sample reaches them.
     private func openFiles(for session: Session, switchedOffAt host: Double?) throws {
         let startedAt = now()
-        // A chosen Recordings folder that won't take it, after all, falls back to the default.
+        // A folder that won't take it, after all, falls back to `fallbackFolder`, when there is one.
         let folder: URL
         if let created = try? ScreencastCaptureFolder.create(in: session.capturesFolder, startedAt: startedAt, fileManager: fileManager) {
             folder = created

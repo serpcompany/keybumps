@@ -144,8 +144,10 @@ final class ScreenshotToolsTests: XCTestCase {
         XCTAssertTrue(entry.isScreenshot)
         XCTAssertEqual(entry.kindLabel, "Screenshot")
         XCTAssertEqual(entry.displayText, "Screenshot 2026-09-28 at 9.41.00 AM")
-        XCTAssertEqual(entry.sourceURL, shot)
-        XCTAssertNotEqual(entry.imageURL, shot, "Clipboard History keeps its own media copy")
+        let inHistory = service.screenshotsFolder.appendingPathComponent(shot.lastPathComponent)
+        XCTAssertEqual(entry.sourceURL, inHistory, "the screenshot is copied into ScreenGrabs' history (#605)")
+        XCTAssertEqual(entry.imageURL, inHistory, "Clipboard History points to the history file, with no copy of its own")
+        XCTAssertTrue(FileManager.default.contentsEqual(atPath: inHistory.path, andPath: shot.path))
 
         let reloaded = ClipboardHistoryService(storageURL: storageURL, pasteboard: pasteboard, mediaDirectoryURL: mediaURL, sourceApps: .inert)
         XCTAssertEqual(reloaded.entries.first, entry)
@@ -154,7 +156,8 @@ final class ScreenshotToolsTests: XCTestCase {
         XCTAssertEqual(pasteboard.data(forType: .png), png)
 
         service.delete(entry)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: shot.path), "deleting history never deletes the original screenshot")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: shot.path), "deleting history never deletes the copy where macOS saved it")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: inHistory.path), "deleting it moves its history file to the Trash")
     }
 
     func testClipboardRejectsNonImageAndEmptyFiles() throws {
