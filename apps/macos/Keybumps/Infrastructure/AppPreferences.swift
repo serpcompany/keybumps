@@ -36,6 +36,8 @@ final class AppPreferences {
         /// Quick Search off before #553 (owner's decision on #553).
         static let takesCommandSpaceFromSpotlightOnLaunch = "takesCommandSpaceFromSpotlightOnLaunch"
         static let foldsSettingsSidebarPlugins = "foldsSettingsSidebarPlugins"
+        /// The Settings page last chosen, by `SettingsSection.launchToken` (#559).
+        static let lastSettingsPage = "lastSettingsPage"
         static let didRequestScreenRecording = "didRequestScreenRecording"
         static let copiesScreenshotsToClipboard = "copiesScreenshotsToClipboard"
         static let expandsSnippetKeywords = "expandsSnippetKeywords"
@@ -223,6 +225,19 @@ final class AppPreferences {
     /// Whether the Settings sidebar's Plugins section is folded (#559). Unfolded by default.
     var foldsSettingsSidebarPlugins: Bool {
         didSet { defaults.set(foldsSettingsSidebarPlugins, forKey: Key.foldsSettingsSidebarPlugins) }
+    }
+
+    /// The Settings page last chosen, which Settings reopens on (#559); see
+    /// `SettingsNavigationHistory.chosenPage`. A page this version doesn't have reads as none.
+    var lastSettingsPage: SettingsSection? {
+        didSet {
+            guard lastSettingsPage != oldValue else { return }
+            if let lastSettingsPage {
+                defaults.set(lastSettingsPage.launchToken, forKey: Key.lastSettingsPage)
+            } else {
+                defaults.removeObject(forKey: Key.lastSettingsPage)
+            }
+        }
     }
 
     /// Whether a screenshot hotkey has already shown macOS's Screen Recording request, which
@@ -458,6 +473,7 @@ final class AppPreferences {
         didFillSettingsWindow = defaults.bool(forKey: Key.didFillSettingsWindow)
         takenOverSystemShortcuts = Set(defaults.stringArray(forKey: Key.takenOverSystemShortcuts) ?? [])
         foldsSettingsSidebarPlugins = defaults.bool(forKey: Key.foldsSettingsSidebarPlugins)
+        lastSettingsPage = defaults.string(forKey: Key.lastSettingsPage).flatMap(SettingsSection.init(launchToken:))
         didRequestScreenRecording = defaults.bool(forKey: Key.didRequestScreenRecording)
         copiesScreenshotsToClipboard = defaults.object(forKey: Key.copiesScreenshotsToClipboard) == nil
             || defaults.bool(forKey: Key.copiesScreenshotsToClipboard)

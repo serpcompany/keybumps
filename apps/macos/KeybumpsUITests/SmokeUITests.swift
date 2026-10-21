@@ -16,14 +16,23 @@ final class SmokeUITests: XCTestCase {
     }
 
     func testLaunchReflectsFakedPermissions() {
+        // Settings opens on Permissions only while a permission is missing; with nothing missing and
+        // no page left open before, it opens on General (#559).
         launch(permissions: "granted")
-        XCTAssertTrue(element("settings.detail.permissions").waitForExistence(timeout: 20))
+        XCTAssertTrue(element("settings.detail.general").waitForExistence(timeout: 20))
         XCTAssertFalse(attentionIndicator.exists, "Granted fakes should leave nothing needing attention")
+        element("settings.sidebar.permissions").click()
+        XCTAssertTrue(element("settings.detail.permissions").waitForExistence(timeout: 5))
+        XCTAssertTrue(element("permission.status.accessibility").exists)
+        XCTAssertFalse(element("permission.button.accessibility").exists, "A granted row shows only Granted (#559)")
         app.terminate()
 
         launch(permissions: "denied")
         XCTAssertTrue(element("settings.detail.permissions").waitForExistence(timeout: 20))
         XCTAssertTrue(attentionIndicator.waitForExistence(timeout: 5), "Denied fakes should surface permission attention")
+        let allow = element("permission.button.accessibility")
+        XCTAssertTrue(allow.exists, "A missing permission's row offers Allow…")
+        XCTAssertEqual(allow.label, "Allow Accessibility", "VoiceOver hears the full name (#559)")
     }
 
     func testEverySettingsPageOpens() {
@@ -1046,7 +1055,8 @@ final class SmokeUITests: XCTestCase {
         launch(permissions: "granted", ["-KBOpenPalette", "clipboard", "-KBCloseSettings", "YES"])
         let field = paletteField("Search clipboard history")
         XCTAssertTrue(field.waitForExistence(timeout: 20))
-        let settings = element("settings.detail.permissions")
+        // It reopens on the page it closed on, General, as nothing is missing (#559).
+        let settings = element("settings.detail.general")
         XCTAssertTrue(waitForNonExistence(of: settings), "Settings starts closed")
 
         let settingsButton = app.buttons["palette.settings"]
@@ -1061,7 +1071,8 @@ final class SmokeUITests: XCTestCase {
         launch(permissions: "granted", ["-KBOpenPalette", "search", "-KBCloseSettings", "YES"])
         let field = paletteField("Search apps, files, and folders")
         XCTAssertTrue(field.waitForExistence(timeout: 20))
-        let settings = element("settings.detail.permissions")
+        // It reopens on the page it closed on, General, as nothing is missing (#559).
+        let settings = element("settings.detail.general")
         XCTAssertTrue(waitForNonExistence(of: settings), "Settings starts closed")
 
         app.typeText("settings")
@@ -1141,7 +1152,8 @@ final class SmokeUITests: XCTestCase {
         ])
         let field = paletteField("Search apps, files, and folders")
         XCTAssertTrue(field.waitForExistence(timeout: 20))
-        let settings = element("settings.detail.permissions")
+        // It reopens on the page it closed on, General, as nothing is missing (#559).
+        let settings = element("settings.detail.general")
         XCTAssertTrue(waitForNonExistence(of: settings), "Settings starts closed")
         // macOS static texts carry their string as the value, so match the identifier or the text.
         let emptyText = "Start typing to search your Mac"

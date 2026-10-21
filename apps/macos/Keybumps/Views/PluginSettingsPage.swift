@@ -74,9 +74,9 @@ extension PluginSettingsPage where AbovePreferences == EmptyView, GroupRows == E
 
 /// A plugin page's Permissions group: a `PermissionRow` for each permission its manifest declares,
 /// the ones it needs and then the ones it can use, marked Optional with why. Every plugin page shows
-/// its optional permissions here (#379). A required permission's row stays after it's granted, and
-/// offers Open System Settings…, then Restart Keybumps once macOS needs a restart to apply it. The
-/// rows follow System Settings while the page is open, as the Permissions page's do.
+/// its optional permissions here (#379). A missing permission's row offers Allow…; once granted it
+/// shows only Granted, or Restart while macOS needs a restart to apply it. The rows follow System
+/// Settings while the page is open, as the Permissions page's do.
 struct PluginPermissionsGroup: View {
     @Environment(AppModel.self) private var model
     let capability: Capability

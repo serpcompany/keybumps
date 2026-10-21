@@ -8,6 +8,10 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     case windows = "Window Manager", keyboardShortcutter = "Shortcut Coach", snippets = "Snippets", timer = "Timer"
     case emojiPicker = "Emoji Picker", translation = "Translation", keystrokes = "Keystrokes"
     case plugins = "Plugins", permissions = "Permissions", general = "General", changelog = "Changelog", account = "Account"
+    /// The sidebar row under the account row while an update is waiting (#559). It's selected as
+    /// itself, so it highlights and the arrow keys stop on it, but it isn't a page of its own: it
+    /// shows Changelog (`page`), so it's left out of `allCases`.
+    case updateAvailable = "Update Available"
     var id: String { rawValue }
 
     /// Capability pages in registry order, then the fixed shell destinations. Each capability page
@@ -28,6 +32,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .account: return "person.crop.circle"
         case .plugins: return "puzzlepiece.extension"
         case .changelog: return "clock.arrow.circlepath"
+        case .updateAvailable: return "arrow.down.circle"
         default: return "gearshape"
         }
     }
@@ -37,21 +42,41 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     /// Its row's name in the sidebar. The Plugins page's row sits under the Plugins header, so it
     /// reads All Plugins there (#559); its page keeps the name Plugins.
     var sidebarTitle: String { self == .plugins ? "All Plugins" : rawValue }
+
+    /// The page this row opens: Changelog for the Update Available row, else its own.
+    var page: SettingsSection { self == .updateAvailable ? .changelog : self }
 }
 
 struct SettingsNavigationHistory: Equatable {
     private(set) var selection: SettingsSection
     private(set) var backStack: [SettingsSection] = []
     private(set) var forwardStack: [SettingsSection] = []
+    /// The page last chosen in this window, which Settings stores to reopen on (#559): set by
+    /// choosing a row, Back and Forward, and a page request, never by the page Settings opened on,
+    /// so opening on Permissions while something is missing doesn't replace the stored page. The
+    /// Update Available row stores Changelog.
+    private(set) var chosenPage: SettingsSection?
 
-    init(selection: SettingsSection = .permissions) {
+    /// `isChosen` stores the opening page as chosen, as a UI test's `-KBOpenSettings` page is.
+    init(selection: SettingsSection = .general, isChosen: Bool = false) {
         self.selection = selection
+        chosenPage = isChosen ? selection.page : nil
+    }
+
+    /// The page Settings opens on (#559): Permissions while a permission is missing, else the page
+    /// last chosen (`chosenPage`), else General. Permissions chosen last opens General when nothing
+    /// is missing, so Settings opens on Permissions only while something there needs doing.
+    static func openingPage(missingPermissionCount: Int, lastPage: SettingsSection?) -> SettingsSection {
+        if missingPermissionCount > 0 { return .permissions }
+        guard let lastPage = lastPage?.page, lastPage != .permissions else { return .general }
+        return lastPage
     }
 
     var canGoBack: Bool { !backStack.isEmpty }
     var canGoForward: Bool { !forwardStack.isEmpty }
 
     mutating func navigate(to section: SettingsSection) {
+        defer { chosenPage = selection.page }
         guard section != selection else { return }
         backStack.append(selection)
         forwardStack = []
@@ -62,21 +87,41 @@ struct SettingsNavigationHistory: Equatable {
         guard let previous = backStack.popLast() else { return }
         forwardStack.append(selection)
         selection = previous
+        chosenPage = selection.page
     }
 
     mutating func goForward() {
         guard let next = forwardStack.popLast() else { return }
         backStack.append(selection)
         selection = next
+        chosenPage = selection.page
+    }
+
+    /// The Update Available row went (no update waiting): Changelog takes its place, as the
+    /// selection and in Back and Forward, where a page now next to itself is kept once.
+    mutating func updateRowDidHide() {
+        // Every visit in order, oldest first; the selection's place is `current`.
+        let visits = backStack + [selection] + forwardStack.reversed()
+        guard visits.contains(.updateAvailable) else { return }
+        var pages: [SettingsSection] = []
+        var current = 0
+        for (index, visit) in visits.enumerated() {
+            if pages.last != visit.page { pages.append(visit.page) }
+            if index == backStack.count { current = pages.count - 1 }
+        }
+        backStack = Array(pages[..<current])
+        selection = pages[current]
+        forwardStack = Array(pages[(current + 1)...].reversed())
     }
 }
 
-/// The Settings sidebar: the account row on top (outside these groups); General, Permissions, and
-/// Changelog; then, under a Plugins header, All Plugins (the Plugins page) and a row per plugin,
-/// Quick Search first, then by name (#559); filtered by search, which finds a page by its title and
-/// a plugin's page also by its search keywords, as Settings › Plugins and Quick Search do. It's a stock sidebar
-/// list (#559), so its text and row height follow System Settings › Appearance › Sidebar icon size,
-/// as System Settings' own sidebar does.
+/// The Settings sidebar: the account row on top, with Update Available under it while an update
+/// waits (outside these groups); General, Permissions, and Changelog; then, under a Plugins header,
+/// All Plugins (the Plugins page) and a row per plugin, Quick Search first, then by name (#559);
+/// filtered by search, which finds a page by its title and a plugin's page also by its search
+/// keywords, as Settings › Plugins and Quick Search do. It's a stock sidebar list (#559), so its
+/// text and row height follow System Settings › Appearance › Sidebar icon size, as System Settings'
+/// own sidebar does.
 enum SettingsSidebar {
     static func isSearching(_ query: String) -> Bool {
         !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -84,7 +129,18 @@ enum SettingsSidebar {
 
     /// What VoiceOver says for a row's attention badge.
     static func attentionLabel(_ count: Int, for section: SettingsSection) -> String {
-        section == .permissions ? "\(count) permission items need attention" : "Needs attention"
+        switch section {
+        case .permissions: "\(count) permission items need attention"
+        case .updateAvailable: count == 1 ? "1 update" : "\(count) updates"
+        default: "Needs attention"
+        }
+    }
+
+    /// Whether the Update Available row shows: exactly while the menu bar icon shows its update dot,
+    /// so the two never disagree.
+    @MainActor
+    static func showsUpdateRow(_ snapshot: UpdateSnapshot) -> Bool {
+        MenuBarAttention.updateIsWaiting(snapshot)
     }
 
     /// A row's icon tile, which the list doesn't size itself because it isn't a symbol.
@@ -127,15 +183,17 @@ enum SettingsSidebar {
 
 struct SettingsRootView: View {
     @Environment(AppModel.self) private var model
-    @State private var navigation = SettingsNavigationHistory(
-        selection: UITestLaunchConfiguration.current.openSettings ?? .permissions
-    )
+    /// Set to its opening page when the window appears (`showOpeningPage`).
+    @State private var navigation = SettingsNavigationHistory()
+    @State private var didShowOpeningPage = false
     @State private var query = ""
     @Environment(\.openURL) private var openURL
 
     /// Locked (no entitled license after onboarding): only the Account page, with the License group, is available.
     private var isLocked: Bool { model.preferences.didCompleteOnboarding && !model.isLicensed }
     private var visibleSelection: SettingsSection { isLocked ? .account : navigation.selection }
+    /// The page the selected row shows: Changelog for the Update Available row.
+    private var visiblePage: SettingsSection { visibleSelection.page }
 
     /// The list's selection, kept in the navigation history so Back and Forward follow it.
     private var sidebarSelection: Binding<SettingsSection?> {
@@ -157,6 +215,10 @@ struct SettingsRootView: View {
                         SettingsAccountRow()
                             .tag(SettingsSection.account)
                             .accessibilityIdentifier("settings.sidebar.account")
+                        // Shown with the menu bar icon's update dot; it shows Changelog (#559).
+                        if SettingsSidebar.showsUpdateRow(model.updateSnapshot) {
+                            row(.updateAvailable)
+                        }
                     }
                 }
                 ForEach(groups, id: \.self) { group in
@@ -190,15 +252,15 @@ struct SettingsRootView: View {
             .navigationSplitViewColumnWidth(min: 220, ideal: 230, max: 280)
         } detail: {
             Group {
-                if let page = visibleSelection.capability?.descriptor.settingsPage {
+                if let page = visiblePage.capability?.descriptor.settingsPage {
                     page.content()
-                } else if visibleSelection == .plugins {
+                } else if visiblePage == .plugins {
                     PluginsSettingsView { navigation.navigate(to: $0) }
-                } else if visibleSelection == .permissions {
+                } else if visiblePage == .permissions {
                     PermissionsView()
-                } else if visibleSelection == .account {
+                } else if visiblePage == .account {
                     AccountView()
-                } else if visibleSelection == .changelog {
+                } else if visiblePage == .changelog {
                     ChangelogSettingsView()
                 } else {
                     GeneralView()
@@ -211,15 +273,15 @@ struct SettingsRootView: View {
                 }
                 ToolbarItem(placement: .primaryAction) {
                     // Quick Search is always on, so its page has no switch (#553).
-                    if let capability = visibleSelection.capability, !capability.descriptor.isAlwaysOn {
+                    if let capability = visiblePage.capability, !capability.descriptor.isAlwaysOn {
                         CapabilityToggle(capability: capability)
                     }
                 }
             }
             .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("settings.detail.\(visibleSelection.launchToken)")
+            .accessibilityIdentifier("settings.detail.\(visiblePage.launchToken)")
             // The page's name beside Back and Forward, as System Settings shows it.
-            .navigationTitle(visibleSelection.rawValue)
+            .navigationTitle(visiblePage.rawValue)
         }
         .searchable(text: $query, placement: .sidebar, prompt: "Search")
         .modifier(SettingsSearchShortcut())
@@ -249,9 +311,22 @@ struct SettingsRootView: View {
         .sheet(isPresented: Binding(get: { !model.preferences.didCompleteOnboarding }, set: { _ in })) { OnboardingView().environment(model).interactiveDismissDisabled() }
         .onReceive(NotificationCenter.default.publisher(for: .openPermissions)) { _ in navigation.navigate(to: .permissions) }
         // A Quick Search command can ask for a capability's page, whether or not this window exists yet.
-        .onAppear(perform: showRequestedSection)
-        .onReceive(NotificationCenter.default.publisher(for: .settingsSectionRequested, object: MainWindowRouter.shared)) { _ in
+        .onAppear {
+            showOpeningPage()
             showRequestedSection()
+        }
+        // Closing the window may keep this view, so the next opening picks its page again.
+        .onDisappear { didShowOpeningPage = false }
+        // Only a page chosen here is stored, not the one Settings opened on (#559).
+        .onChange(of: navigation.chosenPage) { _, page in
+            if let page { model.preferences.lastSettingsPage = page }
+        }
+        .onChange(of: SettingsSidebar.showsUpdateRow(model.updateSnapshot)) { _, shows in
+            if !shows { navigation.updateRowDidHide() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .settingsSectionRequested, object: MainWindowRouter.shared)) { _ in
+            // A window that isn't showing takes the page when it appears, after its opening page.
+            if didShowOpeningPage { showRequestedSection() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .openDictationHistory)) { _ in model.showDictationHistory() }
     }
@@ -282,6 +357,21 @@ struct SettingsRootView: View {
         }
     }
 
+    /// Opens on the page `SettingsNavigationHistory.openingPage` picks, once each time the window
+    /// opens, without storing it; a UI test's `-KBOpenSettings` page comes first, and is stored.
+    private func showOpeningPage() {
+        guard !didShowOpeningPage else { return }
+        didShowOpeningPage = true
+        if let requested = UITestLaunchConfiguration.current.openSettings {
+            navigation = SettingsNavigationHistory(selection: requested, isChosen: true)
+        } else {
+            navigation = SettingsNavigationHistory(selection: SettingsNavigationHistory.openingPage(
+                missingPermissionCount: model.missingPermissionCount,
+                lastPage: model.preferences.lastSettingsPage
+            ))
+        }
+    }
+
     private func showRequestedSection() {
         guard let section = MainWindowRouter.shared.consumeRequestedSection() else { return }
         navigation.navigate(to: section)
@@ -291,6 +381,7 @@ struct SettingsRootView: View {
 extension AppModel {
     func settingsAttentionCount(for section: SettingsSection) -> Int {
         if section == .permissions { return missingPermissionCount }
+        if section == .updateAvailable { return SettingsSidebar.showsUpdateRow(updateSnapshot) ? 1 : 0 }
         guard let capability = section.capability else { return 0 }
         return capabilities.attentionCount(for: capability, context: capabilityContext)
     }
@@ -1445,21 +1536,25 @@ struct PermissionRow: View {
             Text(Self.status(state, requiresRelaunch: model.requiresPermissionRelaunch(permission), isOptional: optionalReason != nil))
                 .font(.caption.weight(.medium))
                 .foregroundStyle(state.isGranted ? .green : (optionalReason == nil ? .orange : .secondary))
-            switch action {
-            case .restartKeybumps:
-                Button("Restart Keybumps") { model.restartForPermissionRelaunch() }
-            case .requestAccess:
-                Button("Request Access…") { Task { await model.recoverPermission(permission) } }
-                    .disabled(model.permissions.activeRequest != nil)
-                    .accessibilityLabel("Request access for \(permission.title)")
-            case .recoverInSystemSettings:
-                Button("Open System Settings…") { Task { await model.recoverPermission(permission) } }
-                    .disabled(model.permissions.activeRequest != nil)
-                    .accessibilityLabel("Open System Settings for \(permission.title)")
-            case .openSystemSettings:
-                Button("Open System Settings…") { model.openPermissionSettings(permission) }
-                    .accessibilityLabel("Open System Settings for \(permission.title)")
+                .accessibilityIdentifier("permission.status.\(permission.rawValue)")
+            // A granted row shows only its status. The visible title stays short; VoiceOver and
+            // Voice Control get the full name (#559).
+            if let button = action.button(for: permission) {
+                Button(button.title) { perform(action) }
+                    .disabled(action != .restartKeybumps && model.permissions.activeRequest != nil)
+                    .accessibilityLabel(button.accessibilityLabel)
+                    .accessibilityHint(button.accessibilityHint ?? "")
+                    .accessibilityInputLabels([button.accessibilityLabel, button.title.replacingOccurrences(of: "…", with: "")])
+                    .accessibilityIdentifier("permission.button.\(permission.rawValue)")
             }
+        }
+    }
+
+    private func perform(_ action: PermissionSettingsRowAction) {
+        switch action {
+        case .restartKeybumps: model.restartForPermissionRelaunch()
+        case .requestAccess, .recoverInSystemSettings: Task { await model.recoverPermission(permission) }
+        case .granted: break
         }
     }
 }

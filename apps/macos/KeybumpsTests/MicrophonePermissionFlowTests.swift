@@ -107,7 +107,7 @@ final class MicrophonePermissionFlowTests: XCTestCase {
         XCTAssertEqual(coordinator.recoveryAction(for: .microphone), .none)
         XCTAssertEqual(
             PermissionSettingsRowAction.resolve(permission: .microphone, state: coordinator.state(for: .microphone), requiresRelaunch: false),
-            .openSystemSettings
+            .granted
         )
     }
 

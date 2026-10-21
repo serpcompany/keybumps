@@ -225,7 +225,7 @@ struct DictationPastePermissionTests {
         try await Task.sleep(for: .milliseconds(100))
         #expect(harness.model.permissionsRequiringRelaunch.isEmpty)
         #expect(harness.model.relaunchPromptPermission == nil)
-        #expect(!harness.model.requiresPermissionRelaunch(.accessibility), "the Permissions row keeps Open System Settings…")
+        #expect(!harness.model.requiresPermissionRelaunch(.accessibility), "the Permissions row keeps Allow…")
 
         harness.pressDictationShortcut()
         #expect(harness.model.permissionAssistantPresentation == .systemSettingsFollowUp(.accessibility),
@@ -260,7 +260,7 @@ struct DictationPastePermissionTests {
             permission: .accessibility,
             state: harness.model.permissionReadiness.state(for: .accessibility),
             requiresRelaunch: harness.model.requiresPermissionRelaunch(.accessibility)
-        ) == .recoverInSystemSettings, "the Permissions row still offers Open System Settings…")
+        ) == .recoverInSystemSettings, "the Permissions row still offers Allow…")
 
         harness.pressDictationShortcut()
         #expect(harness.model.permissionAssistantPresentation == .systemSettingsFollowUp(.accessibility),
@@ -316,7 +316,7 @@ struct DictationPastePermissionTests {
             permission: .accessibility,
             state: harness.model.permissionReadiness.state(for: .accessibility),
             requiresRelaunch: harness.model.requiresPermissionRelaunch(.accessibility)
-        ) == .recoverInSystemSettings, "the Permissions row still offers Open System Settings…")
+        ) == .recoverInSystemSettings, "the Permissions row still offers Allow…")
     }
 
     @Test("Snippets' setup card stays while Accessibility is missing and goes once it's granted")
@@ -338,7 +338,7 @@ struct DictationPastePermissionTests {
         let harness = try PromptHarness()
         defer { harness.tearDown() }
 
-        // The Permissions page's Open System Settings…: this flow is unchanged.
+        // The Permissions page's Allow…: this flow is unchanged.
         await harness.model.recoverPermission(.accessibility)
         #expect(harness.prompts.calls == [.openSettings(.accessibility)])
         // Keybumps comes back, and macOS still reports no grant.

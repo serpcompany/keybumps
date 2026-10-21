@@ -12,12 +12,16 @@ import Speech
 ///   Accessibility. `SystemTextPaster.postSystemCommandV` checks first, so this never happens.
 ///
 /// Only `PermissionCoordinator` calls these, and only from explicit request paths:
-/// - Microphone and Speech Recognition, while macOS hasn't asked yet: Request Access… on the
-///   Permissions page or in onboarding, and the setup walkthrough.
-/// - Screen Recording: Open System Settings… on ScreenGrabs' page, the Permissions page, or
-///   in onboarding (`performRecovery` asks once so macOS lists Keybumps), and the first screenshot
-///   hotkey without access.
-/// - System Settings: permission recovery, Keyboard Shortcuts, and Files & Folders.
+/// - Microphone and Speech Recognition, while macOS hasn't asked yet: Allow… on the Permissions
+///   page, a plugin's page, or in onboarding, and the setup walkthrough.
+/// - Screen Recording: Allow… on ScreenGrabs' page, the Permissions page, or in onboarding
+///   (`performRecovery` asks once so macOS lists Keybumps), and the first screenshot hotkey
+///   without access.
+/// - System Settings: permission recovery (Allow… on a missing permission's row), Keyboard
+///   Shortcuts, and Files & Folders.
+///
+/// A row's other button, Restart, shows while macOS needs Keybumps to restart to apply a
+/// permission, and asks macOS for nothing.
 ///
 /// macOS shows each native prompt at most once for an app identity.
 ///
