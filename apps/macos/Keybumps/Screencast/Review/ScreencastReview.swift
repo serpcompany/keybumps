@@ -4,8 +4,8 @@ import Foundation
 // user content: it stays in the capture's `meta.json` on this Mac until the person sends the
 // capture (#451), and is never logged.
 
-/// A finished recording for the review panel, in its own folder in the Recordings folder,
-/// `<Recordings folder>/<timestamp>/`, beside its `meta.json`, with a video per display.
+/// A finished recording for the review panel, in its own folder in ScreenGrabs' history,
+/// `screengrabs/recordings/<timestamp>/`, beside its `meta.json`, with a video per display.
 enum ScreencastReviewInput: Equatable {
     case video(ScreencastCapture)
 

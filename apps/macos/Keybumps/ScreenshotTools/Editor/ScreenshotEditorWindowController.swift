@@ -29,6 +29,8 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
     private let source: ScreenshotRenderSource
     private let sourceURL: URL?
     private let fallbackFolder: URL
+    /// Whether the edited copy is saved beside the source (`ScreenshotEditorOutput.destination`).
+    private let savesBesideSource: Bool
     private let pasteboard: NSPasteboard
     private let model = ScreenshotEditorModel()
     private let renderer = ScreenshotAnnotationRenderer()
@@ -36,11 +38,22 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
     private var keyMonitor: Any?
     private var didFinish = false
     var onFinish: ((Result?) -> Void)?
+    /// Called with the edited copy as soon as Save has written it, before `onFinish`, in the same
+    /// turn of the main thread as its pasteboard write: a screenshot's is kept in ScreenGrabs'
+    /// history as a screenshot of its own (`ScreenshotEditorPresenter`, #605).
+    var onSaved: ((URL) -> Void)?
 
-    init(source: ScreenshotRenderSource, sourceURL: URL?, fallbackFolder: URL, pasteboard: NSPasteboard = .keybumps) {
+    init(
+        source: ScreenshotRenderSource,
+        sourceURL: URL?,
+        fallbackFolder: URL,
+        savesBesideSource: Bool = true,
+        pasteboard: NSPasteboard = .keybumps
+    ) {
         self.source = source
         self.sourceURL = sourceURL
         self.fallbackFolder = fallbackFolder
+        self.savesBesideSource = savesBesideSource
         self.pasteboard = pasteboard
         canvas = ScreenshotEditorCanvasView(source: source, model: model, renderer: renderer)
 
@@ -93,8 +106,9 @@ final class ScreenshotEditorWindowController: NSWindowController, NSWindowDelega
         pasteboard.clearContents()
         let copied = pasteboard.setData(png, forType: .png)
         if copied { pasteboard.markCopiedByKeybumps() }
-        let destination = ScreenshotEditorOutput.destination(sourceURL: sourceURL, fallbackFolder: fallbackFolder)
+        let destination = ScreenshotEditorOutput.destination(sourceURL: sourceURL, fallbackFolder: fallbackFolder, besideSource: savesBesideSource)
         let savedURL: URL? = (try? png.write(to: destination, options: .withoutOverwriting)) == nil ? nil : destination
+        if let savedURL { onSaved?(savedURL) }
         if savedURL == nil {
             let alert = NSAlert()
             alert.messageText = "Couldn’t save the edited copy"

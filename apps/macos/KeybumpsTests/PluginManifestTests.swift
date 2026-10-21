@@ -353,13 +353,13 @@ struct PluginSettingsPageTests {
         }
     }
 
-    @Test("ScreenGrabs' page shows the watcher's status and what fixes it, in each of its states, then the Screenshots folder and Copy new screenshots, then the Recordings folder at the end of Recordings (#490, #504)")
+    @Test("ScreenGrabs' page shows the watcher's status and what fixes it, in each of its states, then Copy new screenshots and where screenshots are kept, then where recordings are kept at the end of Recordings, and no folder rows (#490, #605)")
     func screenshotToolsRows() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("KeybumpsScreenshotToolsRows-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let everything = Set(Capability.allCases)
-        let copy: [ScreenshotsSettings.Row] = [.screenshotsFolder, .copiesScreenshotsToClipboard, .about, .recordingsFolder]
+        let copy: [ScreenshotsSettings.Row] = [.copiesScreenshotsToClipboard, .about, .recordingsAbout]
         let readable = FakeScreenshotDirectoryReader(granted: true)
         let states: [(status: String, enabled: Set<Capability>, missing: MacPermission?, reader: any ScreenshotDirectoryReading, rows: [ScreenshotsSettings.Row])] = [
             ("watching", everything, nil, readable, [.watching] + copy),
@@ -382,7 +382,7 @@ struct PluginSettingsPageTests {
         }
     }
 
-    @Test("On macOS 14, ScreenGrabs' Recordings group says recording needs macOS 15, in place of the folder, and its preferences can't change; screenshots are as on macOS 15 (#490)")
+    @Test("On macOS 14, ScreenGrabs' Recordings group says recording needs macOS 15, in place of where recordings are kept, and its preferences can't change; screenshots are as on macOS 15 (#490)")
     func recordingsOnMacOS14() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("KeybumpsScreengrabs14-\(UUID().uuidString)", isDirectory: true)
@@ -393,14 +393,14 @@ struct PluginSettingsPageTests {
         let old = WiringHarness(enabled: Set(Capability.allCases), missing: nil, root: root, compatibility: PluginCompatibility(macOSMajorVersion: 14))
         old.model.start()
         let oldRows = RowsOnPage.read(page.content(), model: old.model)
-        #expect(oldRows.screenshots == [.watching, .screenshotsFolder, .copiesScreenshotsToClipboard, .about, .recordingRequirement])
+        #expect(oldRows.screenshots == [.watching, .copiesScreenshotsToClipboard, .about, .recordingRequirement])
         #expect(oldRows.preferences == recording)
         #expect(oldRows.disabled == recording)
 
         let current = WiringHarness(enabled: Set(Capability.allCases), missing: nil, root: root, compatibility: PluginCompatibility(macOSMajorVersion: 15))
         current.model.start()
         let currentRows = RowsOnPage.read(page.content(), model: current.model)
-        #expect(currentRows.screenshots == [.watching, .screenshotsFolder, .copiesScreenshotsToClipboard, .about, .recordingsFolder])
+        #expect(currentRows.screenshots == [.watching, .copiesScreenshotsToClipboard, .about, .recordingsAbout])
         #expect(currentRows.disabled.isEmpty)
     }
 

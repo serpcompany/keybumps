@@ -74,7 +74,7 @@ struct ScreencastSeams {
 /// Record Screen opens the picker (`ScreencastController`), once Keybumps has Screen Recording;
 /// until then it opens ScreenGrabs' page, so the picker never makes macOS ask. Turning ScreenGrabs
 /// off, or Keybumps becoming Locked, cancels a recording that hasn't started and keeps one under
-/// way in the Recordings folder. While it records, `ScreencastRecordingControls` shows the control
+/// way in ScreenGrabs' history. While it records, `ScreencastRecordingControls` shows the control
 /// bar and the time in the menu bar, and registers the recording shortcuts, and
 /// `ScreencastOverlaysWiring` puts the drawing and, with Show shortcuts on, the key display on the
 /// recorded screens and into the video. Each saved recording opens the recording window (`review`,
@@ -148,16 +148,16 @@ final class ScreencastModule {
         }
         recordingControls.apply(context)
         overlays.apply(context)
-        // Wherever recordings are: the folders the index looks in, or, with no index, the Recordings folder.
+        // Wherever recordings are saved: the history (`ScreencastPreferences.capturesFolder`).
         if isOn {
             review.recoverInterruptedExports(in: recordings?.recordingsFolders ?? [context.preferences.screencast.capturesFolder])
         }
     }
 
     /// ScreenGrabs turned off, or Keybumps Locked: the picker closes and a countdown is cancelled,
-    /// but a recording stops and is kept. It opens nothing; it stays in the Recordings folder it was
-    /// made in, which the index already remembers, so the next launch lists it
-    /// (`ScreencastController.shutDown`, `RecordingLibrary.recordingStarted(in:)`).
+    /// but a recording stops and is kept. It opens nothing; it stays in the history it was made in,
+    /// is listed, and gets its copy where macOS saves screenshots, as Save in the recording window
+    /// would give it (`ScreencastController.shutDown`, `ScreencastReviewFlow.captureKept`).
     func deactivate(_ context: CapabilityContext) {
         isOn = false
         recordingControls.deactivate()
@@ -219,9 +219,6 @@ final class ScreencastModule {
                 return MainActor.assumeIsolated { permissions.microphoneGranted }
             }
         )
-        // As each recording's folder is made, before it's kept: one kept as ScreenGrabs turns off
-        // never reaches the recording window or `add`, and the index still finds it (#504).
-        recorder.onFolderMade = { [recordings] folder in recordings?.recordingStarted(in: folder) }
         let controller = Self.wiredController(
             recorder: recorder,
             captureSystem: seams.captureSystem ?? ScreenCaptureKitCaptureSystem.current,
@@ -238,6 +235,7 @@ final class ScreencastModule {
             overlays: overlays
         )
         controller.onCaptureFinished = { [review] result in review.captureFinished(result) }
+        controller.onCaptureKept = { [review] result in review.captureKept(result) }
         controller.addPhaseObserver { [review] phase in review.capturePhaseChanged(phase) }
         controllerStorage = controller
         return controller

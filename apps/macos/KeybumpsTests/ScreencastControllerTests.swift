@@ -1185,13 +1185,15 @@ struct ScreencastControllerTests {
     // MARK: Turning off
 
     @available(macOS 15, *)
-    @Test("Turned off while recording, the recording stops and is kept, and nothing opens")
+    @Test("Turned off while recording, the recording stops and is kept, nothing opens, and it goes to onCaptureKept once")
     func shutDownWhileRecording() async throws {
         defer { captures.remove() }
         remember(rightArea)
         let controller = makeController(countdown: 0)
         var finished: [ScreencastCaptureResult] = []
+        var kept: [ScreencastCaptureResult] = []
         controller.onCaptureFinished = { finished.append($0) }
+        controller.onCaptureKept = { kept.append($0) }
         try await record(controller)
         #expect(await ScreencastWait.until { controller.phase == .recording })
         clock.advance(4)
@@ -1203,12 +1205,14 @@ struct ScreencastControllerTests {
         let folder = try #require(captures.captureFolders().first)
         #expect(FileManager.default.fileExists(atPath: folder.appendingPathComponent("video-1.mov").path))
         #expect(FileManager.default.fileExists(atPath: folder.appendingPathComponent(ScreencastMetadata.fileName).path))
+        #expect(kept.map { ProductPaths.canonicalPath($0.folder) } == [ProductPaths.canonicalPath(folder)], "listed and copied from there (#605)")
 
         // Opened again, captures open as before.
         try await record(controller, .screen)
         #expect(await ScreencastWait.until { controller.phase == .recording })
         await controller.stop()
         #expect(finished.count == 1)
+        #expect(kept.count == 1)
     }
 
     @available(macOS 15, *)

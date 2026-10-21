@@ -13,7 +13,8 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
     let mediaPath: String?
     let mediaPasteboardType: String?
     let fingerprint: String?
-    /// Original file for screenshots and copied image files; nil for image data copied from apps.
+    /// A copied image file's own file; a screenshot's file in ScreenGrabs' history, which `mediaPath`
+    /// names too (#605). Nil for image data copied from apps.
     let sourcePath: String?
     /// True only for files macOS marked as screen captures (ingested by ScreenGrabs).
     let isScreenCapture: Bool
@@ -21,9 +22,10 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
     let sourceApp: ClipboardSourceApp?
     /// The website's domain (the page address's host only), when the browser said which page it was.
     let sourceDomain: String?
-    /// True for a screenshot cleared or deleted from the Clipboard tab. It stays, with its media, for
-    /// the ScreenGrabs tab and still counts toward the screenshot limit. Copying it again shows it in
-    /// the Clipboard tab again. History saved before this existed decodes it as false.
+    /// True for a screenshot cleared or deleted from the Clipboard tab, or one that was never copied
+    /// there, such as one taken while Clipboard History was off. It stays, with its file, for the
+    /// ScreenGrabs tab. Copying it again shows it in the Clipboard tab again. History saved before
+    /// this existed decodes it as false.
     var isHiddenFromClipboardTab: Bool
 
     init(
@@ -102,15 +104,17 @@ struct ClipboardEntry: Codable, Identifiable, Equatable {
 @MainActor
 @Observable
 class ClipboardHistoryService {
-    /// In the Keybumps folder's `clipboard_history/`, with each image's copy in `media/` (ADR 0013).
+    /// In the Keybumps folder's `clipboard_history/`, with each copied image's copy in `media/`
+    /// (ADR 0013). A screenshot has no copy there: its item names its file in ScreenGrabs' history,
+    /// `screengrabs/screenshots/` (`screenshotsFolder`, #605).
     nonisolated static let fileName = "clipboard-history.json"
     /// How many items that aren't screenshots are kept, and the most the Clipboard tab lists.
+    /// Screenshots aren't counted and are never dropped: the ScreenGrabs tab lists every one in
+    /// ScreenGrabs' history (#605). A build before #605 keeps only the newest 50 screenshots (one
+    /// before #493, the newest `capacity` items of any kind) and drops the rest on its next save. It
+    /// removes files only in `media/`, so theirs stay in the history, and this build lists them
+    /// again (`adoptScreenshots()`).
     nonisolated static let capacity = 50
-    /// How many screenshot items are kept, apart from `capacity`: a copy never pushes out a
-    /// screenshot, and a screenshot never pushes out a copy. An older build loads only the newest
-    /// `capacity` items, whatever their kind, and drops the rest on its next save, leaving their
-    /// media in `media/`.
-    nonisolated static let screenshotCapacity = 50
     nonisolated static let maximumImageBytes = 50 * 1_024 * 1_024
 
     /// Every item, newest first, including screenshots hidden from the Clipboard tab.
@@ -124,21 +128,37 @@ class ClipboardHistoryService {
     let storageURL: URL
     private let pasteboard: NSPasteboard
     let mediaDirectoryURL: URL
+    /// ScreenGrabs' history of screenshots, the Keybumps folder's `screengrabs/screenshots/` (#605):
+    /// every screenshot's file, which its item names. The ScreenGrabs hotkeys save there, and a
+    /// screenshot macOS saves is copied there.
+    let screenshotsFolder: URL
     private let fileManager: FileManager
     private let sourceTracker: ClipboardSourceTracker
+    private let trash: (URL) throws -> Void
 
+    /// - Parameter screenshotsFolder: ScreenGrabs' history of screenshots: the Keybumps folder's by
+    ///   default, or, for a history given its own `storageURL`, a `screenshots` folder beside it, so
+    ///   a test's history keeps its screenshots to itself.
+    /// - Parameter trash: Moves a screenshot's file to the Trash when it's deleted from the
+    ///   ScreenGrabs tab (`moveToTrash`).
     init(
         fileManager: FileManager = .default,
         storageURL: URL? = nil,
         pasteboard: NSPasteboard = .keybumps,
         mediaDirectoryURL: URL? = nil,
-        sourceApps: ClipboardSourceAppReader = .system
+        screenshotsFolder: URL? = nil,
+        sourceApps: ClipboardSourceAppReader = .system,
+        trash: @escaping (URL) throws -> Void = ClipboardHistoryService.moveToTrash
     ) {
         let paths = ProductPaths.keybumps(fileManager: fileManager)
         self.fileManager = fileManager
         sourceTracker = ClipboardSourceTracker(reader: sourceApps)
         self.storageURL = storageURL ?? paths.inUse(.clipboardHistory)
         self.mediaDirectoryURL = mediaDirectoryURL ?? paths.inUse(.clipboardMedia)
+        self.screenshotsFolder = screenshotsFolder
+            ?? storageURL.map { $0.deletingLastPathComponent().appendingPathComponent("screenshots", isDirectory: true) }
+            ?? paths.screengrabsScreenshots
+        self.trash = trash
         self.pasteboard = pasteboard
         lastChangeCount = pasteboard.changeCount
         // Only the folders this history uses, so injected locations never create the default one.
@@ -146,7 +166,7 @@ class ClipboardHistoryService {
         try? fileManager.createDirectory(at: self.mediaDirectoryURL, withIntermediateDirectories: true)
         if let data = try? Data(contentsOf: self.storageURL),
            let decoded = try? JSONDecoder().decode([ClipboardEntry].self, from: data) {
-            // History saved under one shared limit is within both, so it loads unchanged.
+            // History saved under a limit is within it, so it loads unchanged.
             entries = Self.splitAtCapacity(decoded).kept
         }
     }
@@ -174,11 +194,15 @@ class ClipboardHistoryService {
         Array(entries.filter { !$0.isHiddenFromClipboardTab && matches($0) }.prefix(Self.capacity))
     }
 
-    /// Removes an item from both tabs, with its media copy.
-    func delete(_ entry: ClipboardEntry) {
-        removeMedia(for: entry)
+    /// Removes an item from both tabs, with its media copy. A screenshot's file in ScreenGrabs'
+    /// history goes to the Trash; if it can't, the item stays and this returns false. Its copy where
+    /// macOS saves screenshots is the person's, and stays.
+    @discardableResult
+    func delete(_ entry: ClipboardEntry) -> Bool {
+        guard removeFiles(of: entry) else { return false }
         entries.removeAll { $0.id == entry.id }
         persist()
+        return true
     }
 
     /// The Clipboard tab's Delete: hides a screenshot there, keeping it for the Screenshots tab,
@@ -194,19 +218,20 @@ class ClipboardHistoryService {
     }
 
     /// The Clipboard tab's Clear All: deletes every item that isn't a screenshot, with its media
-    /// copy, and hides screenshots there, keeping them and their media for the Screenshots tab.
+    /// copy, and hides screenshots there, keeping them and their files for the Screenshots tab.
     func clearClipboardTab() {
-        entries.filter { !$0.isScreenshot }.forEach(removeMedia)
+        entries.filter { !$0.isScreenshot }.forEach { removeFiles(of: $0) }
         entries.removeAll { !$0.isScreenshot }
         for index in entries.indices { entries[index].isHiddenFromClipboardTab = true }
         persist()
     }
 
-    /// The Screenshots tab's Clear All: removes screen-capture items from both tabs, with their
-    /// media copies. Original files are never touched.
+    /// The Screenshots tab's Clear All: removes screen-capture items from both tabs, moving their
+    /// files in ScreenGrabs' history to the Trash (`delete`). One whose file can't be moved stays.
+    /// Their copies where macOS saves screenshots stay.
     func clearScreenshots() {
-        entries.filter(\.isScreenshot).forEach(removeMedia)
-        entries.removeAll(where: \.isScreenshot)
+        let removed = Set(entries.filter { $0.isScreenshot && removeFiles(of: $0) }.map(\.id))
+        entries.removeAll { removed.contains($0.id) }
         persist()
     }
 
@@ -240,7 +265,8 @@ class ClipboardHistoryService {
         return true
     }
 
-    /// Adds a screenshot file as an image item without touching the pasteboard.
+    /// Adds an image file as an image item without touching the pasteboard: a screen capture as a
+    /// screenshot (`addScreenshot(at:)`), any other as a copied image file.
     @discardableResult
     func ingestImageFile(
         at url: URL,
@@ -248,52 +274,108 @@ class ClipboardHistoryService {
         sourceApp: ClipboardSourceApp? = nil,
         sourceDomain: String? = nil
     ) -> Bool {
+        if isScreenCapture { return addScreenshot(at: url) != nil }
         guard let payload = ClipboardImagePayload.read(fileAt: url) else { return false }
-        return ingestImage(
-            payload,
-            sourcePath: url.path,
-            isScreenCapture: isScreenCapture,
-            sourceApp: sourceApp,
-            sourceDomain: sourceDomain
+        return ingestImage(payload, sourcePath: url.path, sourceApp: sourceApp, sourceDomain: sourceDomain)
+    }
+
+    /// Adds a screenshot, newest, without touching the pasteboard, and returns its item (#605). Its
+    /// file is kept in ScreenGrabs' history (`screenshotsFolder`): a ScreenGrabs hotkey's is there
+    /// already, and one saved anywhere else, such as by macOS's own screenshot shortcuts on the
+    /// Desktop, is copied there (`ScreengrabFiles`), so deleting or moving that one never touches
+    /// the history. The item names the history's file; nothing goes in `media/`. Every screenshot
+    /// is its own item, even one that looks the same as another. Nil when it adds nothing: the file
+    /// isn't an image Clipboard History keeps, can't be copied, or is listed already.
+    @discardableResult
+    func addScreenshot(at url: URL) -> ClipboardEntry? {
+        guard let payload = ClipboardImagePayload.read(fileAt: url), !lists(url),
+              let kept = keepInHistory(url), !lists(kept) else { return nil }
+        let entry = ClipboardEntry(
+            id: UUID(),
+            text: "",
+            capturedAt: Date(),
+            kind: .image,
+            mediaPath: kept.path,
+            mediaPasteboardType: payload.type.rawValue,
+            fingerprint: Self.fingerprint(of: payload.data),
+            sourcePath: kept.path,
+            isScreenCapture: true
         )
+        entries.insert(entry, at: 0)
+        persist()
+        return entry
     }
 
     /// Adds a screenshot an earlier build kept elsewhere, for the recordings index's one-time import
-    /// of a QA build's Screencast screenshots (#492). Unlike `ingestImageFile(at:)`, it skips content
-    /// already kept anywhere in the history, keeps `capturedAt` and places the item by it rather than
-    /// first, keeps it out of the Clipboard tab, records no source app, and counts only toward
-    /// `screenshotCapacity`, so it never pushes out a clipboard item. False when it adds nothing.
+    /// of a QA build's Screencast screenshots (#492). Its file is copied into ScreenGrabs' history,
+    /// as `addScreenshot(at:)` does. Unlike that, it skips content already kept anywhere in the
+    /// history, keeps `capturedAt` and places the item by it rather than first, keeps it out of the
+    /// Clipboard tab, and records no source app. False when it adds nothing.
     @discardableResult
     func importScreenshot(at url: URL, capturedAt: Date) -> Bool {
         guard let payload = ClipboardImagePayload.read(fileAt: url) else { return false }
         let fingerprint = Self.fingerprint(of: payload.data)
-        guard !entries.contains(where: { $0.contentKey == fingerprint }) else { return false }
-        let id = UUID()
-        let mediaURL = mediaDirectoryURL.appendingPathComponent("\(id.uuidString).\(payload.fileExtension)")
-        do {
-            try payload.data.write(to: mediaURL, options: .atomic)
-        } catch {
-            try? fileManager.removeItem(at: mediaURL)
-            return false
-        }
-        let entry = ClipboardEntry(
-            id: id,
+        guard !entries.contains(where: { $0.contentKey == fingerprint }),
+              let kept = keepInHistory(url), !lists(kept) else { return false }
+        insertByDate(ClipboardEntry(
+            id: UUID(),
             text: "",
             capturedAt: capturedAt,
             kind: .image,
-            mediaPath: mediaURL.path,
+            mediaPath: kept.path,
             mediaPasteboardType: payload.type.rawValue,
             fingerprint: fingerprint,
-            sourcePath: url.path,
+            sourcePath: kept.path,
             isScreenCapture: true,
             isHiddenFromClipboardTab: true
-        )
-        entries.insert(entry, at: entries.firstIndex { $0.capturedAt < capturedAt } ?? entries.endIndex)
-        let (kept, dropped) = Self.splitAtCapacity(entries)
-        dropped.forEach(removeMedia)
-        entries = kept
+        ))
         persist()
-        return kept.contains { $0.id == id }
+        return true
+    }
+
+    /// Lists every screenshot in ScreenGrabs' history that no item names yet, by when its file was
+    /// made, kept out of the Clipboard tab (#605): one a hotkey took while Clipboard History was off
+    /// or not running, or one an older build dropped past its limit. A file that looks the same as
+    /// a screenshot whose file is still outside the history is left for the one-time move
+    /// (`ScreengrabsHistoryMove`), which gives that item this file. Hidden files, such as a copy
+    /// being written, and files that aren't images Clipboard History keeps are left alone. Returns
+    /// how many it adds.
+    @discardableResult
+    func adoptScreenshots() -> Int {
+        let keys: Set<URLResourceKey> = [.isRegularFileKey, .creationDateKey, .contentModificationDateKey]
+        guard let files = try? fileManager.contentsOfDirectory(
+            at: screenshotsFolder,
+            includingPropertiesForKeys: Array(keys),
+            options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
+        ) else { return 0 }
+        // The names in the history that items name, however their paths are spelled.
+        let listed = Set(entries.flatMap { [$0.imageURL, $0.sourceURL] }.compactMap { $0 }.filter { isInHistory($0) }.map(\.lastPathComponent))
+        let waiting = Set(entries.filter { $0.isScreenshot && !isInHistory($0.imageURL) }.compactMap(\.fingerprint))
+        var added = 0
+        for file in files.sorted(by: { $0.lastPathComponent < $1.lastPathComponent })
+        where !listed.contains(file.lastPathComponent) && ClipboardImagePayload.isSupportedImageFile(file) {
+            guard let values = try? file.resourceValues(forKeys: keys), values.isRegularFile == true,
+                  let payload = ClipboardImagePayload.read(fileAt: file) else { continue }
+            let fingerprint = Self.fingerprint(of: payload.data)
+            guard !waiting.contains(fingerprint) else { continue }
+            // Spelled as the history's folder is, as every other item names it.
+            let named = screenshotsFolder.appendingPathComponent(file.lastPathComponent)
+            insertByDate(ClipboardEntry(
+                id: UUID(),
+                text: "",
+                capturedAt: values.creationDate ?? values.contentModificationDate ?? Date(),
+                kind: .image,
+                mediaPath: named.path,
+                mediaPasteboardType: payload.type.rawValue,
+                fingerprint: fingerprint,
+                sourcePath: named.path,
+                isScreenCapture: true,
+                isHiddenFromClipboardTab: true
+            ))
+            added += 1
+        }
+        if added > 0 { persist() }
+        return added
     }
 
     /// Whether the pasteboard changed at or after `date`, counting a copy the next poll would
@@ -351,11 +433,12 @@ class ClipboardHistoryService {
         ))
     }
 
+    /// Adds an image copied from an app, or a copied image file (`sourcePath`). Screenshots come
+    /// through `addScreenshot(at:)`.
     @discardableResult
     private func ingestImage(
         _ payload: ClipboardImagePayload,
         sourcePath: String? = nil,
-        isScreenCapture: Bool = false,
         sourceApp: ClipboardSourceApp? = nil,
         sourceDomain: String? = nil
     ) -> Bool {
@@ -364,7 +447,7 @@ class ClipboardHistoryService {
         guard !repeatsNewest(fingerprint) else { return false }
         // A copy of a screenshot's bytes, such as its file copied in Finder, moves the screenshot
         // up instead of replacing it with an image item the ScreenGrabs tab leaves out.
-        if !isScreenCapture, let screenshot = entries.first(where: { $0.isScreenshot && $0.fingerprint == fingerprint }) {
+        if let screenshot = entries.first(where: { $0.isScreenshot && $0.fingerprint == fingerprint }) {
             moveToTop(screenshot.id)
             return true
         }
@@ -382,7 +465,6 @@ class ClipboardHistoryService {
                 mediaPasteboardType: payload.type.rawValue,
                 fingerprint: fingerprint,
                 sourcePath: sourcePath,
-                isScreenCapture: isScreenCapture,
                 sourceApp: sourceApp,
                 sourceDomain: sourceDomain
             ))
@@ -397,37 +479,73 @@ class ClipboardHistoryService {
         "image:" + SHA256.hash(data: imageData).map { String(format: "%02x", $0) }.joined()
     }
 
+    /// Adds a copy that isn't a screenshot, newest, in place of any item with the same content, and
+    /// drops the oldest past `capacity`.
     private func insert(_ entry: ClipboardEntry) {
         guard !repeatsNewest(entry.contentKey) else { return }
-        let duplicates = entries.filter { $0.contentKey == entry.contentKey }
-        duplicates.forEach(removeMedia)
-        entries.removeAll { $0.contentKey == entry.contentKey }
+        let duplicates = entries.filter { !$0.isScreenshot && $0.contentKey == entry.contentKey }
+        duplicates.forEach { removeFiles(of: $0) }
+        entries.removeAll { !$0.isScreenshot && $0.contentKey == entry.contentKey }
         entries.insert(entry, at: 0)
         let (kept, dropped) = Self.splitAtCapacity(entries)
-        dropped.forEach(removeMedia)
+        dropped.forEach { removeFiles(of: $0) }
         entries = kept
         persist()
     }
 
-    /// Splits items, newest first, into the newest within each limit and the older ones past it,
-    /// keeping their order. Screenshots count only toward `screenshotCapacity`, the rest toward `capacity`.
+    /// Places an item by `capturedAt`, after any taken at the same time.
+    private func insertByDate(_ entry: ClipboardEntry) {
+        entries.insert(entry, at: entries.firstIndex { $0.capturedAt < entry.capturedAt } ?? entries.endIndex)
+    }
+
+    /// Splits items, newest first, into those kept and the older ones past `capacity`, keeping
+    /// their order. Only items that aren't screenshots count toward it; every screenshot is kept.
     private static func splitAtCapacity(_ items: [ClipboardEntry]) -> (kept: [ClipboardEntry], dropped: [ClipboardEntry]) {
-        var screenshots = 0
         var others = 0
         var kept: [ClipboardEntry] = []
         var dropped: [ClipboardEntry] = []
         for item in items {
-            let fits: Bool
             if item.isScreenshot {
-                screenshots += 1
-                fits = screenshots <= screenshotCapacity
-            } else {
-                others += 1
-                fits = others <= capacity
+                kept.append(item)
+                continue
             }
-            if fits { kept.append(item) } else { dropped.append(item) }
+            others += 1
+            if others <= capacity { kept.append(item) } else { dropped.append(item) }
         }
         return (kept, dropped)
+    }
+
+    /// Whether an item names this file already.
+    private func lists(_ file: URL) -> Bool {
+        let path = Self.standardizedPath(file.path)
+        return entries.contains { entry in
+            [entry.mediaPath, entry.sourcePath].contains { $0.map(Self.standardizedPath) == path }
+        }
+    }
+
+    /// Where `file` is in ScreenGrabs' history: `file` itself when it's there already, else a copy
+    /// under its own name, or the first free name after it (`ScreengrabFiles`). A file of that name
+    /// with the same contents, such as the history's own file this one was copied from, is the
+    /// one. Nil when it can't be copied.
+    private func keepInHistory(_ file: URL) -> URL? {
+        // Spelled as the history's folder is, so `lists(_:)` finds it however the caller spelled it.
+        if isInHistory(file) { return screenshotsFolder.appendingPathComponent(file.lastPathComponent) }
+        return ScreengrabFiles.copy(
+            file,
+            into: screenshotsFolder,
+            naming: ScreengrabFiles.fileNames(like: file),
+            reusingIdentical: true,
+            fileManager: fileManager
+        )
+    }
+
+    /// Whether `file` is directly in ScreenGrabs' history.
+    private func isInHistory(_ file: URL?) -> Bool {
+        file.map { ScreengrabFiles.isDirectly($0, in: screenshotsFolder) } ?? false
+    }
+
+    private static func standardizedPath(_ path: String) -> String {
+        URL(fileURLWithPath: path).standardizedFileURL.path
     }
 
     /// Whether this content repeats the newest item. That adds nothing, but a screenshot hidden
@@ -453,12 +571,40 @@ class ClipboardHistoryService {
         persist()
     }
 
-    private func removeMedia(for entry: ClipboardEntry) {
-        guard let imageURL = entry.imageURL else { return }
+    /// Removes what an item keeps: its copy in `media/`, or a screenshot's file in ScreenGrabs'
+    /// history, which goes to the Trash. Nothing else is touched, such as a copied image's own file.
+    /// False when a screenshot's file is still there.
+    @discardableResult
+    private func removeFiles(of entry: ClipboardEntry) -> Bool {
+        guard let imageURL = entry.imageURL else { return true }
+        if entry.isScreenshot, isInHistory(imageURL) {
+            guard fileManager.fileExists(atPath: imageURL.path) else { return true }
+            do {
+                try trash(imageURL)
+                return true
+            } catch {
+                return false
+            }
+        }
         let mediaRoot = mediaDirectoryURL.resolvingSymlinksInPath().standardizedFileURL.path
         let candidate = imageURL.resolvingSymlinksInPath().standardizedFileURL.path
-        guard candidate.hasPrefix(mediaRoot + "/") else { return }
+        guard candidate.hasPrefix(mediaRoot + "/") else { return true }
         try? fileManager.removeItem(at: imageURL)
+        return true
+    }
+
+    /// The app's Trash for a screenshot's file: the Finder's; the sandbox's `Trash` folder in UI test
+    /// mode; and under the unit-test host this run's own (`UnitTestHost.dataDirectory`), so no test
+    /// reaches the real Trash.
+    nonisolated static func moveToTrash(_ file: URL) throws {
+        let ownTrash = ProductPaths.sandboxRoot ?? (UnitTestHost.isActive ? UnitTestHost.dataDirectory : nil)
+        guard let ownTrash else {
+            try FileManager.default.trashItem(at: file, resultingItemURL: nil)
+            return
+        }
+        let trash = ownTrash.appendingPathComponent("Trash", isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: file, to: trash.appendingPathComponent(file.lastPathComponent))
     }
 
     private func persist() {

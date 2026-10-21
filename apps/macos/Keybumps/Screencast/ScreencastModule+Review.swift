@@ -9,8 +9,8 @@ struct ScreencastReviewServices {
     /// Where Copy writes: the app's `.keybumps`, or a test's named pasteboard. There's no default,
     /// so a test never reaches the real clipboard by leaving it out.
     var pasteboard: NSPasteboard
-    /// The notch, where "Recording saved to Desktop" (the Recordings folder's name) and "Recording
-    /// copied" show; nil shows nothing, as under the unit-test host.
+    /// The notch, where "Recording saved to Desktop" (the name of the folder its copy went to) and
+    /// "Recording copied" show; nil shows nothing, as under the unit-test host.
     var notices: (any PaletteNoticePresenting)?
     /// Where corrected repositories are remembered: the Keybumps folder's `screengrabs/`, through `ProductPaths`.
     var repositories: @MainActor () -> ScreencastRepositoryMemory = { .makeDefault() }
@@ -24,15 +24,19 @@ struct ScreencastReviewServices {
     /// Where the recording window's Move to Trash and the ⌘3 tab's Delete move a saved recording
     /// (#494): the Trash, or a test's own.
     var trash: RecordingTrash = .app
+    /// Where each new recording's copy goes once the window keeps it (#605): where macOS saves
+    /// screenshots, or a test's stand-in. Nil makes none, as in a test that doesn't ask.
+    var copies: ScreengrabCopies?
 
-    /// The app's: its Clipboard History and recordings index.
+    /// The app's: its Clipboard History, recordings index, and copies.
     @MainActor
-    static func app(clipboard: ClipboardHistoryService, recordings: RecordingLibrary?) -> ScreencastReviewServices {
+    static func app(clipboard: ClipboardHistoryService, recordings: RecordingLibrary?, copies: ScreengrabCopies?) -> ScreencastReviewServices {
         ScreencastReviewServices(
             clipboard: clipboard,
             pasteboard: .keybumps,
             notices: UnitTestHost.isActive ? nil : PaletteHUD.shared,
-            recordings: recordings
+            recordings: recordings,
+            copies: copies
         )
     }
 }
@@ -56,6 +60,9 @@ final class ScreencastReviewFlow {
     private var terminationObserver: NSObjectProtocol?
     /// This launch's clean-up after exports a quit or a crash cut short, once it has started.
     private(set) var recovery: Task<ScreencastEditExporter.Recovery, Never>?
+    /// The recordings just made whose review hasn't ended, by folder: each gets its copy where macOS
+    /// saves screenshots as the window keeps it (`putCopy(after:)`).
+    private var awaitingCopy: Set<String> = []
 
     init(services: ScreencastReviewServices?, contextReader: ScreencastCaptureContextReader) {
         self.services = services
@@ -94,6 +101,7 @@ final class ScreencastReviewFlow {
     /// the start to follow.
     func captureFinished(_ result: ScreencastCaptureResult) {
         if case .video(let capture) = result { services?.recordings?.add(capture) }
+        awaitingCopy.insert(result.folder.standardizedFileURL.path)
         let read = contextRead
         contextRead = nil
         guard let panel = panelForReview() else { return }
@@ -166,8 +174,9 @@ final class ScreencastReviewFlow {
         )
         panel.onFinish = { [weak self, weak panel] outcome in
             services.recordings?.reviewEnded(outcome)
+            let copy = self?.putCopy(after: outcome)
             // The next capture closed it: only a failure needs saying.
-            if let notice = Self.notice(for: outcome), notice.isWarning || panel?.isMakingWay != true {
+            if let notice = Self.notice(for: outcome, copy: copy), notice.isWarning || panel?.isMakingWay != true {
                 services.notices?.showNotice(notice.message, isWarning: notice.isWarning)
             }
             self?.onFinish?(outcome)
@@ -177,19 +186,45 @@ final class ScreencastReviewFlow {
         return panel
     }
 
+    /// A recording kept without the window, as ScreenGrabs turned off or Keybumps Locked mid-recording
+    /// (`ScreencastController.onCaptureKept`): listed now, and copied where macOS saves screenshots,
+    /// as Save would (#605). The copy, or nil.
+    @discardableResult
+    func captureKept(_ result: ScreencastCaptureResult) -> URL? {
+        if case .video(let capture) = result { services?.recordings?.add(capture) }
+        return services?.copies?.put(result.folder)
+    }
+
+    /// A recording just made, as the window keeps it (Save, Copy, or a review that couldn't be
+    /// written, edits exported first), is copied where macOS saves screenshots (`ScreengrabCopies`,
+    /// #605): its whole `<timestamp>/` folder, an APFS clone where it can be. The recording stays in
+    /// the history, which the index and the ⌘3 tab point to. Discard leaves no copy, and a recording
+    /// opened from ⌘3 already had its copy, which its edits don't change. The copy, or nil.
+    private func putCopy(after outcome: ScreencastReviewOutcome) -> URL? {
+        switch outcome {
+        case .saved(let input), .copied(let input), .saveFailed(let input, _):
+            guard awaitingCopy.remove(input.folder.standardizedFileURL.path) != nil else { return nil }
+            return services?.copies?.put(input.folder)
+        case .discarded(let input), .closed(let input), .movedToTrash(let input):
+            awaitingCopy.remove(input.folder.standardizedFileURL.path)
+            return nil
+        }
+    }
+
     /// What the notch says as a review ends. The window closes on Save, Return, Escape, or Copy, so
     /// the notice is what says where the recording was kept, or, as a warning, why it couldn't be.
     /// Discard says nothing, nor does a recording opened from ⌘3 that closed or went to the Trash.
     ///
-    /// Where is the folder the capture's own folder is in, the Recordings folder it was recorded in
-    /// (owner QA of 4030.475.4, #504): "Recording saved to Desktop", by the name Finder shows
-    /// (`folderName`).
+    /// Where is the folder its `copy` went to, where macOS saves screenshots (#504, #605):
+    /// "Recording saved to Desktop", by the name Finder shows (`folderName`). With no copy, such as
+    /// for edits to a recording opened from ⌘3, it's "Recording saved": it's in the history.
     static func notice(
         for outcome: ScreencastReviewOutcome,
+        copy: URL? = nil,
         folderName: (URL) -> String = { FileManager.default.displayName(atPath: $0.path) }
     ) -> (message: String, isWarning: Bool)? {
         switch outcome {
-        case .saved(let input): ("Recording saved to \(folderName(input.folder.deletingLastPathComponent()))", false)
+        case .saved: (copy.map { "Recording saved to \(folderName($0.deletingLastPathComponent()))" } ?? "Recording saved", false)
         case .copied: ("Recording copied", false)
         case .saveFailed(_, let failure): (failure.message, true)
         case .discarded, .closed, .movedToTrash: nil

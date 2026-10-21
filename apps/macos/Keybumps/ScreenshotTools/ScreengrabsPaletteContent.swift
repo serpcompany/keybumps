@@ -68,8 +68,9 @@ enum Screengrab: Equatable, Identifiable {
     /// A recording whose folder, or a display's video in it, was moved or deleted outside Keybumps.
     var isMissing: Bool { recording?.isMissing == true }
 
-    /// What Space shows in Quick Look: a screenshot's file where it was saved, else Clipboard
-    /// History's copy of it; a recording's video for each display, as Copy copies them.
+    /// What Space shows in Quick Look: a screenshot's file in ScreenGrabs' history (#605), which its
+    /// item names twice (`sourcePath` and `mediaPath`); a recording's video for each display, as Copy
+    /// copies them.
     var previewFiles: [URL] {
         switch self {
         case .screenshot(let entry): [entry.existingSourceURL ?? entry.imageURL].compactMap { $0 }
@@ -88,7 +89,7 @@ enum Screengrab: Equatable, Identifiable {
     }
 
     /// Whether Show in Finder may have something to select (`finderFiles`), without looking at the
-    /// disk: a screenshot saved to a file, which may have moved since, or a recording's videos.
+    /// disk: a screenshot's file, or a recording's videos.
     var mayShowInFinder: Bool {
         switch self {
         case .screenshot(let entry): entry.sourceURL != nil
@@ -96,8 +97,8 @@ enum Screengrab: Equatable, Identifiable {
         }
     }
 
-    /// What Show in Finder selects: a screenshot's file where it was saved, if it's still there;
-    /// a recording's videos.
+    /// What Show in Finder selects: a screenshot's file in ScreenGrabs' history, if it's still there;
+    /// a recording's videos, also in the history. Never the copy where macOS saves screenshots.
     var finderFiles: [URL] {
         switch self {
         case .screenshot(let entry): [entry.existingSourceURL].compactMap { $0 }
@@ -127,7 +128,7 @@ enum Screengrab: Equatable, Identifiable {
 }
 
 extension ClipboardEntry {
-    /// The screenshot's own file, while it's still where it was saved.
+    /// The screenshot's own file, in ScreenGrabs' history (#605), while it's still there.
     var existingSourceURL: URL? {
         sourceURL.flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil }
     }
@@ -282,8 +283,10 @@ enum ScreengrabsTabContent: Equatable {
 ///   recording in the recording window, where it's trimmed, cropped, and blurred, with Move to Trash
 ///   and Done (`ScreencastReviewMode.saved`).
 /// - **Space** opens it in Quick Look (`ScreengrabsQuickLooking`).
-/// - **Delete** removes a screenshot from the tab and leaves its file. On a recording it asks, then
-///   moves its folder to the Trash (`RecordingTrash`). Clear All clears screenshots only.
+/// - **Delete** removes a screenshot from the tab and moves its file in ScreenGrabs' history to the
+///   Trash (#605). On a recording it asks, then moves its folder to the Trash (`RecordingTrash`).
+///   Clear All clears screenshots only, the same way. A screengrab's copy where macOS saves
+///   screenshots is the person's, and stays.
 /// - The footer, the detail's buttons, and the context menu name these keys in that order, Delete's
 ///   last (#552), and each button does what its key does (`run(_:on:query:palette:)`), on the
 ///   screengrab it shows, found by its id when it runs.
@@ -318,6 +321,7 @@ final class ScreengrabsPaletteContent: CapabilityPaletteContent {
     static let missingMessage = "Couldn’t open the recording: it was moved or deleted."
     static let trashFailedMessage = ScreencastReviewFailure.trashFailed.message
     static let openFailedMessage = "Couldn’t open the recording."
+    static let screenshotTrashFailedMessage = "Couldn’t move the screenshot to the Trash."
 
     init(
         clipboard: ClipboardHistoryService,
@@ -421,13 +425,17 @@ final class ScreengrabsPaletteContent: CapabilityPaletteContent {
         return PalettePlayback(title: "Quick Look") { [weak self] in self?.preview(item) }
     }
 
-    /// A screenshot leaves the tab, and its file stays where it was saved. A moved or deleted
-    /// recording leaves the index at once. Any other recording asks first
-    /// (`deletionConfirmation(row:query:)`), so it's never deleted here.
+    /// A screenshot leaves the tab, and its file in ScreenGrabs' history goes to the Trash; if it
+    /// can't, it stays listed and the palette says so (`ClipboardHistoryService.delete`). A moved or deleted recording leaves
+    /// the index at once. Any other recording asks first (`deletionConfirmation(row:query:)`), so
+    /// it's never deleted here.
     func delete(row: Int, query: String) -> Bool {
         switch item(at: row, query: query) {
         case .screenshot(let entry):
-            clipboard.delete(entry)
+            guard clipboard.delete(entry) else {
+                palette?.warn(Self.screenshotTrashFailedMessage)
+                return false
+            }
             return true
         case .recording(let recording) where recording.isMissing:
             recordings?.remove(folder: recording.folder)
@@ -815,8 +823,8 @@ private struct ScreengrabGrid: View {
                         ClearAllButton(
                             confirmationTitle: "Clear screenshots?",
                             confirmationMessage: listsRecordings
-                                ? "This removes screenshots from Keybumps history. Their files stay where they were saved, and recordings stay in \(Capability.screenshotTools.title)."
-                                : "This removes screenshots from Keybumps history. Their files stay where they were saved.",
+                                ? "This moves the screenshots in \(Capability.screenshotTools.title) to the Trash. Their copies where macOS saves screenshots stay, and recordings stay in \(Capability.screenshotTools.title)."
+                                : "This moves the screenshots in \(Capability.screenshotTools.title) to the Trash. Their copies where macOS saves screenshots stay.",
                             disabled: !items.contains { $0.recording == nil },
                             confirmationPresentationChanged: confirmationPresentationChanged,
                             clear: clear

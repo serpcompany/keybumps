@@ -20,11 +20,11 @@ struct RecordingImportMemory {
     }
 }
 
-/// Every folder ScreenGrabs recorded into (`screencast.recordingsFolders`, #504): the Recordings
-/// folder of the time, chosen or the default, and any fallback, remembered as each recording's own
-/// folder is made there, so the launch check and a rebuild find recordings saved in a Recordings
-/// folder since changed, and ones kept without reaching `RecordingLibrary.add`. In the defaults,
-/// not the index, so it outlives a missing or corrupt index. Never logged.
+/// Every folder ScreenGrabs recorded into from #504 until #605 (`screencast.recordingsFolders`): the
+/// Recordings folder of the time, chosen or the default, and any fallback. Since #605 every
+/// recording is saved in the Keybumps folder's `screengrabs/recordings/`, so nothing is added:
+/// `ScreengrabsHistoryMove` reads it until it has brought the recordings in those folders that the
+/// index lacks into the history, and `KeybumpsFolderMove` rewrites its paths. Never logged.
 struct RecordingFolderMemory {
     static let key = "screencast.recordingsFolders"
 
@@ -40,19 +40,6 @@ struct RecordingFolderMemory {
             .filter { $0.hasPrefix("/") }
             .map { URL(fileURLWithPath: $0, isDirectory: true) }
     }
-
-    /// Adds `folder` once, however it or one remembered is spelled, such as through a link
-    /// (`ProductPaths.canonicalPath`).
-    func remember(_ folder: URL) {
-        let path = folder.standardizedFileURL.path
-        var paths = defaults.stringArray(forKey: Self.key) ?? []
-        // The same spelling, as for each recording after the first, needs no look at the disk.
-        guard !paths.contains(path) else { return }
-        let resolved = ProductPaths.canonicalPath(folder)
-        guard !paths.contains(where: { ProductPaths.canonicalPath(URL(fileURLWithPath: $0, isDirectory: true)) == resolved }) else { return }
-        paths.append(path)
-        defaults.set(paths, forKey: Self.key)
-    }
 }
 
 /// ScreenGrabs' recordings index (#492, ADR 0010 decision 6): every recording Keybumps keeps,
@@ -65,28 +52,27 @@ struct RecordingFolderMemory {
 /// - **Added** when the recorder finishes writing (`add`), so a crash before Save still leaves the
 ///   recording listed. **Read again** when the recording window saves, copies, or can't save it,
 ///   and **removed** when it discards it (`reviewEnded`).
-/// - **Where it looks** (`recordingsFolders`): the old recordings folder (`ProductPaths.screengrabsRecordings`,
-///   moved out of Documents by ADR 0013), where recordings before #504 stay, and each folder a recording was made in since, remembered
-///   as the recorder makes the recording's own folder there (`recordingStarted(in:)`,
-///   `RecordingFolderMemory`). So a recording kept without reaching `add`, as one is when
-///   ScreenGrabs turns off or Keybumps locks while it records, is found at the next launch. A
-///   recording stays indexed wherever it is when the Recordings folder changes (#504), and a rebuild
-///   finds it in the folder remembered. A folder no recording was made in is never read, and in one
-///   that is, only the folders the recorder names (`ScreencastCaptureFolder.isFolderName`) are
-///   opened: a Recordings folder such as the Desktop holds the person's own folders too.
+/// - **Where it looks** (`recordingsFolders`): only the history, the Keybumps folder's
+///   `screengrabs/recordings/` (`ProductPaths.screengrabsRecordings`, #605), where every recording is
+///   saved. So a recording kept without reaching `add`, as one is when ScreenGrabs turns off or
+///   Keybumps locks while it records, is found at the next launch. The copy of each recording put
+///   where macOS saves screenshots (`ScreengrabCopies`) is the person's, and never read or listed:
+///   deleting or moving it leaves the recording listed. In the history, only the folders the
+///   recorder names (`ScreencastCaptureFolder.isFolderName`) are opened. Recordings saved elsewhere
+///   from #504 until #605 were brought into the history once (`ScreengrabsHistoryMove`).
 /// - **Moved or deleted:** a recording whose folder, or a display's full video in it, is gone is
 ///   marked `isMissing` each time the index looks (`load`, `refresh`, `recordingsNewestFirst`),
 ///   and stays listed until it's removed; it's unmarked if it comes back.
 /// - **The import** runs once (`RecordingImportMemory`), the first time the index loads without
-///   having run it: each recording in the old recordings folder (`ProductPaths.screengrabsRecordings`) is indexed
+///   having run it: each recording in the history (`ProductPaths.screengrabsRecordings`) is indexed
 ///   where it is, and each screenshot a QA build's Screencast saved there before #487 goes to the
 ///   ⌘3 tab through `ClipboardHistoryService.importScreenshot(at:capturedAt:)`. Files are never
 ///   moved or changed.
 /// - **Each launch,** once the index has loaded, the folders it looks in are read again off the main
-///   actor (`launchCheck`): a recording there that the index lacks, such as one an older build
-///   saved in its old recordings folder after a rollback and the next launch moved, is added, matched by resolved path so none
-///   is listed twice. Then, if the file was read and is this build's, poster frames no entry names
-///   are deleted.
+///   actor (`launchCheck`): a recording there that the index lacks, such as one kept without
+///   reaching `add`, or one an older build saved in its old recordings folder after a rollback and
+///   the next launch moved, is added, matched by resolved path so none is listed twice. Then, if
+///   the file was read and is this build's, poster frames no entry names are deleted.
 /// - **A missing or corrupt file** after the import is rebuilt from the recordings in the folders it
 ///   looks in, without importing screenshots again; entries that can't be decoded are skipped
 ///   and the rest kept. A corrupt or partly read file is replaced only once its replacement is
@@ -115,12 +101,11 @@ final class RecordingLibrary {
     private(set) var state: State = .notLoaded
 
     @ObservationIgnored let storageURL: URL
-    /// The old recordings folder, `ProductPaths.screengrabsRecordings`: where the import looks, and
-    /// always one of `recordingsFolders`.
+    /// The history, `ProductPaths.screengrabsRecordings`: where every recording is saved, the import
+    /// looks, and the index looks (`recordingsFolders`).
     @ObservationIgnored let capturesFolder: URL
     @ObservationIgnored let posterFrames: RecordingPosterFrames
     @ObservationIgnored private let importMemory: RecordingImportMemory
-    @ObservationIgnored private let folderMemory: RecordingFolderMemory
     @ObservationIgnored private weak var screenshots: ClipboardHistoryService?
     @ObservationIgnored private let fileManager: FileManager
     @ObservationIgnored private let now: () -> Date
@@ -139,7 +124,6 @@ final class RecordingLibrary {
         capturesFolder: URL,
         posterFrames: RecordingPosterFrames,
         importMemory: RecordingImportMemory,
-        folderMemory: RecordingFolderMemory,
         screenshots: ClipboardHistoryService?,
         fileManager: FileManager = .default,
         now: @escaping () -> Date = Date.init
@@ -148,37 +132,30 @@ final class RecordingLibrary {
         self.capturesFolder = capturesFolder
         self.posterFrames = posterFrames
         self.importMemory = importMemory
-        self.folderMemory = folderMemory
         self.screenshots = screenshots
         self.fileManager = fileManager
         self.now = now
     }
 
     /// The app's: in the Keybumps folder's `screengrabs/` and Caches, through `ProductPaths`, so the
-    /// UI-test sandbox and the unit-test host keep theirs in their own folders. Each is where the
-    /// launch's move left it (`ProductPaths.inUse`, ADR 0013).
+    /// UI-test sandbox and the unit-test host keep theirs in their own folders. The index is where the
+    /// launch's move left it (`ProductPaths.inUse`, ADR 0013); recordings are always in the history.
     static func makeDefault(
         importMemory: RecordingImportMemory,
-        folderMemory: RecordingFolderMemory,
         screenshots: ClipboardHistoryService?
     ) -> RecordingLibrary {
         let paths = ProductPaths.keybumps()
         return RecordingLibrary(
             storageURL: paths.inUse(.recordingsIndex),
-            capturesFolder: paths.inUse(.recordings),
+            capturesFolder: paths.screengrabsRecordings,
             posterFrames: RecordingPosterFrames(folder: RecordingPosterFrames.defaultFolder),
             importMemory: importMemory,
-            folderMemory: folderMemory,
             screenshots: screenshots
         )
     }
 
-    /// The folders the index looks in for recordings: the old recordings folder, then each folder a
-    /// recording was saved in, once each however it's spelled (`ProductPaths.canonicalPath`).
-    var recordingsFolders: [URL] {
-        var seen: Set<String> = []
-        return ([capturesFolder] + folderMemory.folders).filter { seen.insert(ProductPaths.canonicalPath($0)).inserted }
-    }
+    /// The folders the index looks in for recordings: the history alone (#605).
+    var recordingsFolders: [URL] { [capturesFolder] }
 
     nonisolated static let unreadableCopyName = "recordings.unreadable.json"
 
@@ -277,18 +254,10 @@ final class RecordingLibrary {
 
     // MARK: Changes
 
-    /// The recorder made a recording's own folder in `folder` (`ScreencastRecorder.onFolderMade`):
-    /// `folder` is remembered at once, before the recording is kept, so the launch check and a
-    /// rebuild look there even if the recording never reaches `add`.
-    func recordingStarted(in folder: URL) {
-        folderMemory.remember(folder)
-    }
-
     /// The recorder finished writing: the recording is indexed from its `meta.json` at once, or from
-    /// what the recorder reported if that couldn't be read, and the folder it's in is remembered.
+    /// what the recorder reported if that couldn't be read.
     func add(_ capture: ScreencastCapture) {
         load()
-        folderMemory.remember(capture.folder.deletingLastPathComponent())
         upsert(capture.folder, RecordingStructure.read(in: capture.folder) ?? RecordingStructure(capture, startedAt: now()))
     }
 
